@@ -18,6 +18,10 @@ services:
       context: .
       dockerfile: docker/agent.Dockerfile
     networks: [agentnet]
+    # outbound internet (for the model API) works on agentnet, but there is no
+    # route to oraclenet. ANTHROPIC_API_KEY is injected only at run time.
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
     volumes:
       - artifact:/artifact        # rw: the agent deploys here
       - ./container:/code:ro
