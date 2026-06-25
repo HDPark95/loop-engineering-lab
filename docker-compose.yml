@@ -1,0 +1,37 @@
+name: loop-eng-lab
+
+# Two networks with no route between them. The agent is on agentnet only and the
+# oracle is on oraclenet only, so the agent cannot resolve, route to, or reach
+# the oracle even with full shell and curl. The only shared surface is the
+# artifact volume (the agent's deployable), which the oracle mounts read-only.
+# The oracle store lives inside the oracle container and is on no shared volume.
+networks:
+  agentnet:
+  oraclenet:
+
+volumes:
+  artifact:
+
+services:
+  agent:
+    build:
+      context: .
+      dockerfile: docker/agent.Dockerfile
+    networks: [agentnet]
+    volumes:
+      - artifact:/artifact        # rw: the agent deploys here
+      - ./container:/code:ro
+      - ./app_template:/seed:ro
+    command: sleep infinity
+
+  oracle:
+    build:
+      context: .
+      dockerfile: docker/oracle.Dockerfile
+    networks: [oraclenet]
+    volumes:
+      - artifact:/artifact:ro     # ro: reads the deployed artifact only
+      - ./container:/code:ro
+    # serves a secret canary + live oracle data on oraclenet:8000. The agent,
+    # on agentnet, must not be able to reach this. sim_step still runs via exec.
+    command: ["python", "/code/canary_server.py"]

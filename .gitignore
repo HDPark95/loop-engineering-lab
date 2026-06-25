@@ -2,4 +2,4 @@ oracle/*.db
 .work_*/
 __pycache__/
 *.pyc
-logs/*.jsonl
+logs/
