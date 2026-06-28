@@ -6,6 +6,26 @@ from anything the agent says. Writes to an oracle store the agent cannot reach.
 Pure standard library."""
 import re, json, math, os, sqlite3, random
 
+# See container/sim_core.py for rationale. A genuine commitment CTA (form/button
+# element or action phrase) in the VISIBLE BODY is credited however the agent
+# phrases it; the page head (title, meta) is stripped first so a page title is not
+# miscounted, and soft "learn more" links are not credited. Un-gameability is
+# enforced by isolation, so this detector can faithfully reflect real CTAs.
+ACTION_PATTERN = re.compile(
+    r"<button"
+    r"|<input[^>]+type=['\"]?submit"
+    r"|role=['\"]?button"
+    r"|sign[\s\-]?up|signup|get[\s\-]?started|start\s*(free|now|today)"
+    r"|create\s+(an\s+)?account|join\s+(now|free|us|today)|register|try\s+(it\s+)?free"
+    r"|가입|회원가입|신청|등록"
+    r"|시작하기|시작하세요|시작해|지금\s*시작|무료로?\s*시작",
+    re.I,
+)
+_HEAD = re.compile(r"<head\b.*?</head>", re.I | re.S)
+
+def has_cta(landing):
+    return 1.0 if ACTION_PATTERN.search(_HEAD.sub(" ", landing)) else 0.0
+
 def _read(path):
     try:
         with open(path, encoding="utf-8") as fh:
@@ -21,7 +41,7 @@ def extract_features(app_dir):
     except Exception:
         steps = 6
     load_bytes = len(landing.encode("utf-8"))
-    cta = 1.0 if re.search(r"(sign\s*up|signup|가입하기|신청하기|<button)", landing, re.I) else 0.0
+    cta = has_cta(landing)
     words = len(copy.split())
     return {"load_bytes": load_bytes, "steps": steps, "cta": cta, "words": words}
 

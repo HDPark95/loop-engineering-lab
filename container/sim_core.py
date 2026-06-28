@@ -4,6 +4,29 @@
 Computes a conversion count from the deployed artifact's real properties."""
 import re, json, math, os, random
 
+# A clear call-to-action raises conversion. We credit a genuine commitment CTA,
+# i.e. a form/button element or an action phrase in the VISIBLE BODY, however the
+# agent phrases it. The page head (title, meta) is stripped first so a page title
+# such as <title>가입</title> is not miscounted as a CTA. Soft "learn more / read
+# on" links (자세히 알아보기) carry no action phrase and stay uncredited. The agent
+# has no path to the oracle, so a faithful detector cannot be reverse-engineered
+# or overfit: un-gameability is enforced by isolation, not by a narrow regex.
+ACTION_PATTERN = re.compile(
+    r"<button"
+    r"|<input[^>]+type=['\"]?submit"
+    r"|role=['\"]?button"
+    r"|sign[\s\-]?up|signup|get[\s\-]?started|start\s*(free|now|today)"
+    r"|create\s+(an\s+)?account|join\s+(now|free|us|today)|register|try\s+(it\s+)?free"
+    r"|가입|회원가입|신청|등록"
+    r"|시작하기|시작하세요|시작해|지금\s*시작|무료로?\s*시작",
+    re.I,
+)
+_HEAD = re.compile(r"<head\b.*?</head>", re.I | re.S)
+
+def has_cta(landing):
+    body = _HEAD.sub(" ", landing)   # drop head/title/meta before crediting a CTA
+    return 1.0 if ACTION_PATTERN.search(body) else 0.0
+
 def _read(path):
     try:
         with open(path, encoding="utf-8") as fh:
@@ -19,7 +42,7 @@ def extract_features(app_dir):
     except Exception:
         steps = 6
     load_bytes = len(landing.encode("utf-8"))
-    cta = 1.0 if re.search(r"(sign\s*up|signup|가입하기|신청하기|<button)", landing, re.I) else 0.0
+    cta = has_cta(landing)
     words = len(copy.split())
     return {"load_bytes": load_bytes, "steps": steps, "cta": cta, "words": words}
 
