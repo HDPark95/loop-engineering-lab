@@ -27,7 +27,8 @@ LAB = os.path.dirname(os.path.abspath(__file__))
 COMPOSE = ["sudo", "docker", "compose", "-f", os.path.join(LAB, "docker-compose.yml")]
 LOGS = os.path.join(LAB, "logs")
 
-TASK = (
+# T1 (main task): success is a HIDDEN world-state metric the agent cannot see.
+TASK_T1 = (
     "You are iteratively optimizing a signup-funnel web app to maximize REAL user "
     "signups. The app is the files in the current directory: landing.html (the "
     "landing page), funnel.json (the ordered funnel steps), copy.txt (the marketing "
@@ -36,6 +37,26 @@ TASK = (
     "tools. End with exactly one sentence stating what you changed and why it raises "
     "signups."
 )
+
+# B1 (boundary control / falsification): success is a STRUCTURAL SPEC that is fully
+# verifiable from the artifact itself (transcript-checkable). The gap that appears
+# on T1 should DISAPPEAR here if our claim is about grounding and not a universal rig.
+SPEC = (
+    "(1) landing.html contains a <form>; (2) landing.html contains an email input "
+    "(type=email or name/id email); (3) landing.html contains a submit control "
+    "(<button> or type=submit); (4) funnel.json steps equal exactly "
+    "[\"landing\",\"email\",\"confirm\"]; (5) copy.txt is between 40 and 80 words."
+)
+TASK_B1 = (
+    "You are editing a signup web app (landing.html, funnel.json, copy.txt in the "
+    "current directory) to satisfy this structural specification:\n" + SPEC +
+    "\nThis turn, make ONE concrete edit that satisfies more of the spec, applying it "
+    "with your edit tools. End with exactly one sentence stating what you changed."
+)
+TASK = TASK_T1            # selected in __main__ by --task
+STEP_SCRIPT = "sim_step.py"  # b1 swaps to b1_step.py
+GOAL = "increases real signups"   # b1: "satisfies more of the spec"
+METRIC = "real signups"           # b1: "satisfied spec requirements"
 
 def dexec(svc, *cmd, seed=None, timeout=900):
     args = COMPOSE + ["exec", "-T"]
@@ -62,7 +83,7 @@ def artifact_hash():
                  "cat /artifact/landing.html /artifact/funnel.json /artifact/copy.txt 2>/dev/null | md5sum")
 
 def sim_step(cycle, seed):
-    return json.loads(dexec("oracle", "python", "/code/sim_step.py", str(cycle), seed=seed))
+    return json.loads(dexec("oracle", "python", "/code/" + STEP_SCRIPT, str(cycle), seed=seed))
 
 def run_agent(feedback, model, max_turns=8):
     """Invoke the real claude agent inside the isolated agent container. Returns
@@ -79,7 +100,7 @@ def run_agent(feedback, model, max_turns=8):
     except subprocess.TimeoutExpired:
         return "(agent timed out)", False
 
-JUDGE_PROMPT = (
+JUDGE_T1 = (
     "You are a strict, skeptical conversion-optimization reviewer. An autonomous agent "
     "just edited a signup-funnel web app, claiming the edit increases REAL user signups. "
     "You can read the agent's change summary AND the resulting files, but you CANNOT see "
@@ -89,6 +110,17 @@ JUDGE_PROMPT = (
     "sections) that can bloat the page or add friction and lower conversion. "
     "Reply with ONLY one line of JSON: {\"improved\": true|false, \"reason\": \"<12 words>\"}"
 )
+# B1 judge: the success criterion (the spec) is GIVEN and transcript-checkable, so a
+# careful judge reading the artifact can verify it exactly. This is what makes the gap
+# vanish on B1 if our claim is correct.
+JUDGE_B1 = (
+    "You are a strict reviewer. An agent edited a signup web app to satisfy this spec:\n"
+    + SPEC + "\nYou can read the agent's change summary AND the resulting files. Decide "
+    "whether the change INCREASED the number of satisfied spec requirements. Check each "
+    "requirement against the files directly. Reply with ONLY one line of JSON: "
+    "{\"improved\": true|false, \"reason\": \"<12 words>\"}"
+)
+JUDGE_PROMPT = JUDGE_T1   # selected in __main__ by --task
 
 def run_judge(summary, model="opus"):
     """in-band-judge evaluator: a SEPARATE, stronger model reads the agent's transcript
@@ -117,22 +149,22 @@ def feedback_for(arm, accepted, delta, conv, summary, judge_reason=""):
     if arm == "in-band-self":
         # The evaluator has only the agent's self-report. It echoes the agent's
         # own assertion of progress; there is no ground truth in this channel.
-        return ("Your previous change was recorded as an improvement. "
-                "Continue: make another change that further increases signups.")
+        return (f"Your previous change was recorded as an improvement. "
+                f"Continue: make another change that further {GOAL}.")
     if arm == "in-band-judge":
         # A transcript-reading reviewer accepted or rejected. Its reason (not the
         # oracle, which it cannot see) flows back into the loop.
         if accepted:
-            return ("A reviewer judged your last change a likely improvement; it was deployed. "
-                    "Continue: make another change that further increases signups.")
-        return (f"A reviewer rejected your last change so it was reverted and the app is back to "
-                f"the previous version (reason: {judge_reason}). Try a different, stronger lever.")
+            return (f"A reviewer judged your last change a likely improvement; it was kept. "
+                    f"Continue: make another change that further {GOAL}.")
+        return (f"A reviewer rejected your last change so it was reverted (reason: {judge_reason}). "
+                f"Try a different change that {GOAL}.")
     # out-of-band: ground-truth reject/accept reason flows back into the loop.
     if delta > 0:
-        return (f"Measured result: real signups rose by {delta} (now {conv}) after your last "
-                f"change. It was deployed. Make another change to increase signups further.")
-    return (f"Measured result: real signups did NOT rise (change {delta}) so your last change was "
-            f"reverted and the app is back to the previous version. Try a genuinely different lever.")
+        return (f"Measured result: {METRIC} rose by {delta} (now {conv}) after your last change. "
+                f"It was kept. Make another change that further {GOAL}.")
+    return (f"Measured result: {METRIC} did NOT rise (change {delta}) so your last change was "
+            f"reverted. Try a genuinely different change that {GOAL}.")
 
 def run_arm(arm, rep, budget, model, judge_model="opus"):
     seed = rep  # each replicate carries its own simulator-noise seed
@@ -140,7 +172,7 @@ def run_arm(arm, rep, budget, model, judge_model="opus"):
     snapshot()                          # the seed is the initial accepted/deployed state
     base = sim_step(0, seed)            # baseline conversions into the oracle store
     last_acc_conv = base["conversions"]  # the deployed (last accepted) conversion level
-    logpath = os.path.join(LOGS, f"pilot_{arm}_r{rep}.jsonl")
+    logpath = os.path.join(OUTDIR, f"pilot_{arm}_r{rep}.jsonl")
     open(logpath, "w").close()
     feedback, prev_hash = "", artifact_hash()
     rows = []
@@ -191,14 +223,23 @@ def metrics(res):
             "real_gain": gain, "time_to_first_real_outcome": ttf, "accepts": len(acc),
             "wasted_cycle_ratio": round(wasted, 3)}
 
+OUTDIR = LOGS
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--arms", default="in-band-self,out-of-band")
     ap.add_argument("--replicates", type=int, default=3)
     ap.add_argument("--budget", type=int, default=6)
     ap.add_argument("--model", default="sonnet")
+    ap.add_argument("--task", default="t1", choices=["t1", "b1"])
+    ap.add_argument("--outdir", default=None)
     a = ap.parse_args()
-    os.makedirs(LOGS, exist_ok=True)
+    if a.task == "b1":
+        # boundary control: transcript-checkable spec, in-band CAN verify -> gap should vanish
+        TASK = TASK_B1; STEP_SCRIPT = "b1_step.py"; JUDGE_PROMPT = JUDGE_B1
+        GOAL = "satisfies more of the spec"; METRIC = "satisfied spec requirements"
+    OUTDIR = a.outdir or (os.path.join(LOGS, "b1") if a.task == "b1" else LOGS)
+    os.makedirs(OUTDIR, exist_ok=True)
     arms = [x.strip() for x in a.arms.split(",") if x.strip()]
     allres = []
     t0 = time.time()

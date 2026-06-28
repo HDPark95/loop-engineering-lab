@@ -6,10 +6,10 @@ per-trajectory metrics from the raw rows, aggregates per arm with bootstrap CIs,
 and emits the dependent variables and the preregistered hypothesis verdicts.
 Pure standard library (PREREGISTRATION policy). Single source of truth = the raw
 cycle logs. Run: python3 analyze.py"""
-import json, os, glob, statistics as st, random
+import json, os, glob, statistics as st, random, sys
 
 LAB = os.path.dirname(os.path.abspath(__file__))
-LOGS = os.path.join(LAB, "logs")
+LOGS = sys.argv[1] if len(sys.argv) > 1 else os.path.join(LAB, "logs")
 ARMS_ORDER = ["in-band-self", "in-band-judge", "out-of-band"]
 
 def load_trajectories():
