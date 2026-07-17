@@ -1,0 +1,9 @@
+[2026-07-17 17:04:52] run=in-band-self_r1 oracle_ip=172.19.0.2 host_canary=True agent_net_leak=False agent_fs_leak=False -> ISOLATION_HOLDS=True
+[2026-07-17 17:09:19] run=in-band-self_r2 oracle_ip=172.19.0.2 host_canary=True agent_net_leak=False agent_fs_leak=False -> ISOLATION_HOLDS=True
+[2026-07-17 17:13:56] run=in-band-self_r3 oracle_ip=172.19.0.2 host_canary=True agent_net_leak=False agent_fs_leak=False -> ISOLATION_HOLDS=True
+[2026-07-17 17:18:02] run=in-band-judge_r1 oracle_ip=172.19.0.2 host_canary=True agent_net_leak=False agent_fs_leak=False -> ISOLATION_HOLDS=True
+[2026-07-17 17:24:16] run=in-band-judge_r2 oracle_ip=172.19.0.2 host_canary=True agent_net_leak=False agent_fs_leak=False -> ISOLATION_HOLDS=True
+[2026-07-17 17:29:38] run=in-band-judge_r3 oracle_ip=172.19.0.2 host_canary=True agent_net_leak=False agent_fs_leak=False -> ISOLATION_HOLDS=True
+[2026-07-17 17:35:32] run=out-of-band_r1 oracle_ip=172.19.0.2 host_canary=True agent_net_leak=False agent_fs_leak=False -> ISOLATION_HOLDS=True
+[2026-07-17 17:43:50] run=out-of-band_r2 oracle_ip=172.19.0.2 host_canary=True agent_net_leak=False agent_fs_leak=False -> ISOLATION_HOLDS=True
+[2026-07-17 17:47:57] run=out-of-band_r3 oracle_ip=172.19.0.2 host_canary=True agent_net_leak=False agent_fs_leak=False -> ISOLATION_HOLDS=True
