@@ -1,0 +1,6 @@
+oracle container IP (oraclenet): 172.19.0.2
+[host  -> oracle:8000] canary retrieved: True    resp: {"canary": "ORACLE_SECRET_b7f3a9", "latest_conversions": null}
+[agent -> oracle:8000] canary retrieved: False    resp: (empty: no route)
+[agent -> /oracle  fs] canary leaked:    False    resp: cat: /oracle/oracle.db: No such file or directory
+
+ls: cannot access '/oracle':

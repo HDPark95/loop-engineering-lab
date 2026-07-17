@@ -1,0 +1,13 @@
+B1 DONE 21:37:32
+  [in-band-judge r3] c3: cand=5 delta=+1 accept=True deployed=5 | Trimmed copy.txt from 114 words to 43 words, bringing it within the requir
+  [in-band-judge r3] c4: cand=5 delta=+0 accept=False deployed=5 | Expanded copy.txt from 43 words to 60 words, moving it to the middle of th
+  [in-band-judge r3] c5: cand=5 delta=+0 accept=False deployed=5 | Removed spaces from the `funnel.json` array so the steps value matches the
+>>> in-band-judge r3 metrics: {'mirage_rate': 0.0, 'final_deployed': 5, 'baseline': 0, 'real_gain': 5, 'time_to_first_real_outcome': 1, 'accepts': 3, 'wasted_cycle_ratio': 0.4}
+
+=== AGGREGATE (real frontier agent under container+network isolation) ===
+arm             mirage    real_gain   final_conv  ttf_cyc   
+in-band-self    0.400     5.0         5.0         1.00      
+out-of-band     0.000     5.0         5.0         1.00      
+in-band-judge   0.167     5.0         5.0         1.00      
+
+wrote logs/pilot_results.json (1765.9s)

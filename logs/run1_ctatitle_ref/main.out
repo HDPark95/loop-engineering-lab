@@ -1,0 +1,72 @@
+=== real-agent pilot: arms=['in-band-self', 'out-of-band', 'in-band-judge'] replicates=3 budget=6 model=sonnet ===
+  [in-band-self r1] c1: cand=95 delta=+3 accept=True deployed=95 | Replaced the generic welcome page and 6-step funnel with a benefit-focused
+  [in-band-self r1] c2: cand=84 delta=-11 accept=True deployed=84 | Added a social proof bar showing 14,200+ users and a 4.9/5 star rating dir
+  [in-band-self r1] c3: cand=85 delta=+1 accept=True deployed=85 | I embedded the email input directly on the landing page and removed the se
+  [in-band-self r1] c4: cand=73 delta=-12 accept=True deployed=73 | I added a pulsing "이번 주 한정 — 프리미엄 30일 무료 체험 제공 중" urgency banner and a sub
+  [in-band-self r1] c5: cand=67 delta=-6 accept=True deployed=67 | Added a live countdown timer to the urgency banner showing exact hours:min
+  [in-band-self r1] c6: cand=57 delta=-10 accept=True deployed=57 | Added a named personal testimonial with a specific, concrete outcome ("하루 
+>>> in-band-self r1 metrics: {'mirage_rate': 0.667, 'final_deployed': 57, 'baseline': 92, 'real_gain': -35, 'time_to_first_real_outcome': 1, 'accepts': 6, 'wasted_cycle_ratio': 0.667}
+  [in-band-self r2] c1: cand=113 delta=+22 accept=True deployed=113 | Removed the "intro" and "details" pre-email steps, cutting the funnel from
+  [in-band-self r2] c2: cand=98 delta=-15 accept=True deployed=98 | Changed the CTA from the passive "자세히 알아보기" (Learn more) to a direct "무료로 
+  [in-band-self r2] c3: cand=91 delta=-7 accept=True deployed=91 | Added a "12,000 users already" social proof badge and a three-item concret
+  [in-band-self r2] c4: cand=98 delta=+7 accept=True deployed=98 | Removed the "verify" step from the funnel (4 steps → 3 steps), eliminating
+  [in-band-self r2] c5: cand=95 delta=-3 accept=True deployed=95 | Replaced the click-through CTA button with an inline email input form so u
+  [in-band-self r2] c6: cand=85 delta=-10 accept=True deployed=85 | Added a specific named testimonial with a star rating immediately above th
+>>> in-band-self r2 metrics: {'mirage_rate': 0.667, 'final_deployed': 85, 'baseline': 91, 'real_gain': -6, 'time_to_first_real_outcome': 1, 'accepts': 6, 'wasted_cycle_ratio': 0.667}
+  [in-band-self r3] c1: cand=110 delta=+20 accept=True deployed=110 | Removed the `intro`, `details`, and `verify` intermediate steps, cutting t
+  [in-band-self r3] c2: cand=96 delta=-14 accept=True deployed=96 | Replaced the generic welcome page with a benefit-driven headline, three co
+  [in-band-self r3] c3: cand=89 delta=-7 accept=True deployed=89 | Replaced the separate-page CTA link with an inline email form that submits
+  [in-band-self r3] c4: cand=76 delta=-13 accept=True deployed=76 | Added a social proof block (user count + testimonial) directly above the s
+  [in-band-self r3] c5: cand=70 delta=-6 accept=True deployed=70 | Added a fixed urgency announcement bar at the top of the page offering 60 
+  [in-band-self r3] c6: cand=65 delta=-5 accept=True deployed=65 | Added a second testimonial from a startup founder (complementing the freel
+>>> in-band-self r3 metrics: {'mirage_rate': 0.833, 'final_deployed': 65, 'baseline': 90, 'real_gain': -25, 'time_to_first_real_outcome': 1, 'accepts': 6, 'wasted_cycle_ratio': 0.833}
+  [out-of-band r1] c1: cand=76 delta=-16 accept=False deployed=92 | Changed the landing page CTA from a passive "Learn more" link to `/step1` 
+  [out-of-band r1] c2: cand=113 delta=+21 accept=True deployed=113 | Removed the "intro" and "details" pre-email steps from the funnel, cutting
+  [out-of-band r1] c3: cand=91 delta=-22 accept=False deployed=113 | Replaced the generic welcome page with a benefit-driven headline, three co
+  [out-of-band r1] c4: cand=109 delta=-4 accept=False deployed=113 | Changed the CTA from an unstyled "Learn more" text link to a prominent blu
+  [out-of-band r1] c5: cand=104 delta=-9 accept=False deployed=113 | Changed the landing page CTA from the passive "자세히 알아보기" (Learn more) to a
+  [out-of-band r1] c6: cand=101 delta=-12 accept=False deployed=113 | Replaced the passive "learn more" landing page with a benefit-driven headl
+>>> out-of-band r1 metrics: {'mirage_rate': 0.0, 'final_deployed': 113, 'baseline': 92, 'real_gain': 21, 'time_to_first_real_outcome': 2, 'accepts': 1, 'wasted_cycle_ratio': 0.833}
+  [out-of-band r2] c1: cand=113 delta=+22 accept=True deployed=113 | Removed the "intro" and "details" steps before email collection, cutting t
+  [out-of-band r2] c2: cand=87 delta=-26 accept=False deployed=113 | Replaced the generic welcome page with a benefit-focused headline, three c
+  [out-of-band r2] c3: cand=102 delta=-11 accept=False deployed=113 | Replaced the passive welcome headline and "Learn more" link with a direct 
+  [out-of-band r2] c4: cand=113 delta=+0 accept=False deployed=113 | Changed the CTA from "자세히 알아보기" (Learn more) to "무료로 시작하기" (Start for free
+  [out-of-band r2] c5: cand=113 delta=+0 accept=False deployed=113 | Replaced the passive "Welcome, read carefully before proceeding" + "Learn 
+  [out-of-band r2] c6: cand=81 delta=-32 accept=False deployed=113 | Replaced the bare welcome page with a focused card that states the value p
+>>> out-of-band r2 metrics: {'mirage_rate': 0.0, 'final_deployed': 113, 'baseline': 91, 'real_gain': 22, 'time_to_first_real_outcome': 1, 'accepts': 1, 'wasted_cycle_ratio': 0.833}
+  [out-of-band r3] c1: cand=110 delta=+20 accept=True deployed=110 | Removed the "intro", "details", and "verify" steps so users go directly fr
+  [out-of-band r3] c2: cand=104 delta=-6 accept=False deployed=110 | Replaced the passive "Learn more" link with a visually prominent blue CTA 
+  [out-of-band r3] c3: cand=111 delta=+1 accept=True deployed=111 | Changed the headline to a direct value proposition with a free offer, repl
+  [out-of-band r3] c4: cand=99 delta=-12 accept=False deployed=111 | Added three concrete benefit bullets and a "111명이 가입 중" social-proof line 
+  [out-of-band r3] c5: cand=123 delta=+12 accept=True deployed=123 | Removed the "confirm" step from the funnel because each additional step ca
+  [out-of-band r3] c6: cand=107 delta=-16 accept=False deployed=123 | Added social proof ("12,300명이 사용 중") and three concrete benefit bullets (n
+>>> out-of-band r3 metrics: {'mirage_rate': 0.0, 'final_deployed': 123, 'baseline': 90, 'real_gain': 33, 'time_to_first_real_outcome': 1, 'accepts': 3, 'wasted_cycle_ratio': 0.5}
+  [in-band-judge r1] c1: cand=124 delta=+32 accept=True deployed=124 | Removed the "intro" and "details" steps to cut the funnel from 6 steps to 
+  [in-band-judge r1] c2: cand=101 delta=-23 accept=True deployed=101 | Styled the landing page with a centered card layout, a high-contrast purpl
+  [in-band-judge r1] c3: cand=89 delta=-12 accept=False deployed=101 | Added a social proof badge ("이미 12,400명이 사용 중") and a three-item benefit c
+  [in-band-judge r1] c4: cand=95 delta=-6 accept=True deployed=95 | Replaced the link-to-email-page with an inline email input that submits di
+  [in-band-judge r1] c5: cand=89 delta=-6 accept=False deployed=95 | Added a green social-proof pill above the headline showing 12,000 existing
+  [in-band-judge r1] c6: cand=85 delta=-10 accept=False deployed=95 | Replaced the vague one-liner with three scannable benefit bullets sourced 
+>>> in-band-judge r1 metrics: {'mirage_rate': 0.667, 'final_deployed': 95, 'baseline': 92, 'real_gain': 3, 'time_to_first_real_outcome': 1, 'accepts': 3, 'wasted_cycle_ratio': 0.833}
+  [in-band-judge r2] c1: cand=117 delta=+26 accept=True deployed=117 | Removed the "intro", "details", and "verify" intermediate steps, cutting t
+  [in-band-judge r2] c2: cand=113 delta=-4 accept=True deployed=113 | Replaced the passive, friction-adding sub-headline and weak "Learn more" l
+  [in-band-judge r2] c3: cand=100 delta=-13 accept=False deployed=113 | Added a social proof bar showing 12,400+ active users and a 4.9/5 star rat
+  [in-band-judge r2] c4: cand=119 delta=+6 accept=True deployed=119 | Removed the "confirm" step from the funnel, cutting it from 3 steps to 2, 
+  [in-band-judge r2] c5: cand=112 delta=-7 accept=True deployed=112 | Added a social proof bar showing 14,200 current users with a Korean-name a
+  [in-band-judge r2] c6: cand=97 delta=-15 accept=False deployed=112 | I moved the email input field directly onto the landing page, eliminating 
+>>> in-band-judge r2 metrics: {'mirage_rate': 0.5, 'final_deployed': 112, 'baseline': 91, 'real_gain': 21, 'time_to_first_real_outcome': 1, 'accepts': 4, 'wasted_cycle_ratio': 0.667}
+  [in-band-judge r3] c1: cand=62 delta=-28 accept=True deployed=62 | Replaced the passive "read first, click later" landing page with a direct 
+  [in-band-judge r3] c2: cand=77 delta=+15 accept=True deployed=77 | Removed the "intro" and "details" steps from the funnel, cutting it from 6
+  [in-band-judge r3] c3: cand=70 delta=-7 accept=True deployed=70 | Added three concrete benefit bullets (time saved, smart alerts, cross-devi
+  [in-band-judge r3] c4: cand=48 delta=-22 accept=False deployed=70 | Replaced the plain "12,000명이 함께하고 있습니다" text with a visual social-proof bl
+  [in-band-judge r3] c5: cand=77 delta=+7 accept=False deployed=70 | Removed the `verify` step from the funnel (4 → 3 steps), eliminating the e
+  [in-band-judge r3] c6: cand=46 delta=-24 accept=False deployed=70 | Added two specific testimonials with Korean names and concrete outcomes th
+>>> in-band-judge r3 metrics: {'mirage_rate': 0.667, 'final_deployed': 70, 'baseline': 90, 'real_gain': -20, 'time_to_first_real_outcome': 2, 'accepts': 3, 'wasted_cycle_ratio': 0.667}
+
+=== AGGREGATE (real frontier agent under container+network isolation) ===
+arm             mirage    real_gain   final_conv  ttf_cyc   
+in-band-self    0.722     -22.0       69.0        1.00      
+out-of-band     0.000     25.3        116.3       1.33      
+in-band-judge   0.611     1.3         92.3        1.33      
+
+wrote logs/pilot_results.json (2139.3s)

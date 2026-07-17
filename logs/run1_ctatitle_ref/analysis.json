@@ -1,0 +1,69 @@
+{
+  "aggregates": {
+    "in-band-judge": {
+      "arm": "in-band-judge",
+      "n_traj": 3,
+      "mirage_mean": 0.611111111111111,
+      "mirage_ci": [
+        0.5,
+        0.6666666666666666
+      ],
+      "real_gain_mean": 1.3333333333333333,
+      "real_gain_ci": [
+        -20.0,
+        21.0
+      ],
+      "final_mean": 92.33333333333333,
+      "baseline_mean": 91,
+      "ttf_mean": 1.3333333333333333,
+      "ttf_censored": 0,
+      "wasted_mean": 0.7222222222222222,
+      "accept_rate_mean": 0.5555555555555556
+    },
+    "in-band-self": {
+      "arm": "in-band-self",
+      "n_traj": 3,
+      "mirage_mean": 0.7222222222222222,
+      "mirage_ci": [
+        0.6666666666666666,
+        0.8333333333333334
+      ],
+      "real_gain_mean": -22,
+      "real_gain_ci": [
+        -35.0,
+        -6.0
+      ],
+      "final_mean": 69,
+      "baseline_mean": 91,
+      "ttf_mean": 1,
+      "ttf_censored": 0,
+      "wasted_mean": 0.7222222222222222,
+      "accept_rate_mean": 1.0
+    },
+    "out-of-band": {
+      "arm": "out-of-band",
+      "n_traj": 3,
+      "mirage_mean": 0.0,
+      "mirage_ci": [
+        0.0,
+        0.0
+      ],
+      "real_gain_mean": 25.333333333333332,
+      "real_gain_ci": [
+        21.0,
+        33.0
+      ],
+      "final_mean": 116.33333333333333,
+      "baseline_mean": 91,
+      "ttf_mean": 1.3333333333333333,
+      "ttf_censored": 0,
+      "wasted_mean": 0.7222222222222222,
+      "accept_rate_mean": 0.2777777777777778
+    }
+  },
+  "n_trajectories": {
+    "in-band-judge": 3,
+    "in-band-self": 3,
+    "out-of-band": 3
+  }
+}

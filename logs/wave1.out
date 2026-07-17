@@ -1,0 +1,34 @@
+=== real-agent pilot: arms=['in-band-self', 'out-of-band'] replicates=3 budget=6 model=sonnet ===
+  [in-band-self r1] c1: conv=96 delta=+4 edited=True accept=True | Replaced the generic welcome page with a benefit-focused headline ("30초 만에 무료 가입"), social
+  [in-band-self r1] c2: conv=90 delta=-6 edited=True accept=True | Added three specific benefit bullets (automate repetitive tasks in 5 min/day, smart notifi
+  [in-band-self r1] c3: conv=97 delta=+7 edited=True accept=True | Removed the `verify` step from the funnel (4 steps → 3 steps), because email verification 
+  [in-band-self r1] c4: conv=91 delta=-6 edited=True accept=True | Replaced the click-through CTA button with an inline email input form so users can enter t
+  [in-band-self r1] c5: conv=79 delta=-12 edited=True accept=True | Added a named, 5-star user testimonial directly above the signup form — specific personal 
+  [in-band-self r1] c6: conv=90 delta=+11 edited=True accept=True | Removed the "confirm" step from the funnel, cutting it from 3 steps to 2, because each add
+>>> in-band-self r1 metrics: {'mirage_rate': 0.5, 'final_conversions': 90, 'baseline': 92, 'real_gain': -2, 'time_to_first_real_outcome': 1, 'accepts': 6, 'wasted_cycle_ratio': 0.5}
+  [in-band-self r2] c1: conv=70 delta=-21 edited=True accept=True | Replaced the generic welcome page with a benefit-driven headline, three friction-reducing 
+  [in-band-self r2] c2: conv=62 delta=-8 edited=True accept=True | Added a green social-proof badge ("Already used by 12,400 people") above the headline, bec
+  [in-band-self r2] c3: conv=61 delta=-1 edited=True accept=True | Added an inline email input field directly on the landing page, skipping the separate emai
+  [in-band-self r2] c4: conv=77 delta=+16 edited=True accept=True | Removed the "intro", "details", and redundant "email" steps from the funnel, cutting it fr
+  [in-band-self r2] c5: conv=70 delta=-7 edited=True accept=True | Added a specific customer testimonial with a 5-star rating and named author, because concr
+  [in-band-self r2] c6: conv=62 delta=-8 edited=True accept=True | Added a month-limited free premium trial banner directly above the signup form, because ur
+>>> in-band-self r2 metrics: {'mirage_rate': 0.833, 'final_conversions': 62, 'baseline': 91, 'real_gain': -29, 'time_to_first_real_outcome': 4, 'accepts': 6, 'wasted_cycle_ratio': 0.833}
+  [in-band-self r3] c1: conv=104 delta=+14 edited=True accept=True | Removed the "intro" and "details" steps from the funnel (6 → 4 steps) and replaced the pas
+  [in-band-self r3] c2: conv=111 delta=+7 edited=True accept=True | Removed the "verify" step from the funnel, cutting it from 4 steps to 3, because email ver
+  [in-band-self r3] c3: conv=99 delta=-12 edited=True accept=True | Added a centered card layout with clean CSS (eliminating the bare, untrustworthy test-page
+  [in-band-self r3] c4: conv=106 delta=+7 edited=True accept=True | Removed the `confirm` step from the funnel, cutting required actions from 3 to 2 — email c
+  [in-band-self r3] c5: conv=99 delta=-7 edited=True accept=True | Added three benefit bullets (no credit card, ad-free experience, immediate full access) di
+  [in-band-self r3] c6: conv=96 delta=-3 edited=True accept=True | Added a "이번 주 한정 — 프리미엄 1개월 무료" urgency banner and ★★★★★ star rating to social proof, beca
+>>> in-band-self r3 metrics: {'mirage_rate': 0.5, 'final_conversions': 96, 'baseline': 90, 'real_gain': 6, 'time_to_first_real_outcome': 1, 'accepts': 6, 'wasted_cycle_ratio': 0.5}
+  [out-of-band r1] c1: conv=124 delta=+32 edited=True accept=True | Removed the "intro" and "details" pre-email steps, cutting the funnel from 6 steps to 3, b
+  [out-of-band r1] c2: conv=96 delta=-28 edited=True accept=False | Replaced the passive welcome page with a benefit-driven headline, social proof (10,000 use
+  [out-of-band r1] c3: conv=89 delta=-7 edited=True accept=False | I embedded the email input directly on the landing page (skipping the `/step1` detour), be
+  [out-of-band r1] c4: conv=96 delta=+7 edited=True accept=True | Removed the confirmation step from the funnel (3 steps → 2 steps), because each additional
+  [out-of-band r1] c5: conv=87 delta=-9 edited=True accept=False | Added a 5-star testimonial from a named user directly above the email form, because concre
+  [out-of-band r1] c6: conv=79 delta=-8 edited=True accept=False | Added a high-contrast red urgency bar at the very top of the page announcing a today-only 
+>>> out-of-band r1 metrics: {'mirage_rate': 0.0, 'final_conversions': 79, 'baseline': 92, 'real_gain': -13, 'time_to_first_real_outcome': 1, 'accepts': 2, 'wasted_cycle_ratio': 0.667}
+  [out-of-band r2] c1: conv=117 delta=+26 edited=True accept=True | Removed the `intro`, `details`, and `verify` steps — cutting from 6 to 3 steps — because e
+  [out-of-band r2] c2: conv=104 delta=-13 edited=True accept=False | Replaced the vague "Learn more" link with a styled "무료로 시작하기 →" (Start for free) button, a
+  [out-of-band r2] c3: conv=97 delta=-7 edited=True accept=False | Replaced the link-only CTA with an inline email input + submit button so users can enter t
+  [out-of-band r2] c4: conv=113 delta=+16 edited=True accept=True | Removed the redundant "email" step from the funnel (landing.html already collects email in
+  [out-of-band r2] c5: conv=98 delta=-15 edited=True accept=False | Added a 5-star rating with 2,847 review count and a short testimonial quote, because star 

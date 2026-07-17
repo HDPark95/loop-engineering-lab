@@ -4,13 +4,13 @@
 Panel A: mean progress-mirage rate by evaluator arm (error bars = min/max over replicates).
 Panel B: deployed (last-accepted) conversion trajectory by arm, mean over replicates.
 English labels only (avoids CJK font setup). Output: results_fig.png (for the paper)."""
-import json, os, glob, statistics as st
+import json, os, glob, sys, statistics as st
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 LAB = os.path.dirname(os.path.abspath(__file__))
-LOGS = os.path.join(LAB, "logs")
+LOGS = sys.argv[1] if len(sys.argv) > 1 else os.path.join(LAB, "logs")
 ARMS = ["in-band-self", "in-band-judge", "out-of-band"]
 COLORS = {"in-band-self": "#c0392b", "in-band-judge": "#e08e0b", "out-of-band": "#1f7a3d"}
 
