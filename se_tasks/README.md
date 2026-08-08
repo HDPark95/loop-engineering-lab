@@ -31,10 +31,11 @@ Use `python3 se_experiment.py --smoke-output results/se_smoke_matrix.json` to
 exercise both oracles and all four factor cells with scripted candidates.
 
 Use `agent_adapters.py` for a disposable one-shot protocol check with either
-Codex or Claude Code. The command records only aggregate score, changed file
-names, timing, tokens, billing mode, CLI-reported API-price-equivalent cost,
-and incremental billed cost; it discards model text and source changes. Alias
-or session-default model selections are acceptable only for an
+Codex or Claude Code. The result retains run metadata, execution and isolation
+status, aggregate scores, changed file names, timing, tokens, billing mode,
+CLI-reported API-price-equivalent cost, and incremental billed cost. It
+discards model text and source contents. Alias or session-default model
+selections are acceptable only for an
 apparatus smoke. Confirmatory runs require an immutable model identifier and a
 frozen total cost ceiling in the preregistration.
 

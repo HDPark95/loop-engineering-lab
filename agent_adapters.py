@@ -38,10 +38,14 @@ class Usage:
     usd: float | None
 
 
-def cost_fields(usage: Usage, billing_mode: str) -> dict:
-    """Separate CLI-reported API-price telemetry from actual billing."""
+def validate_billing_mode(billing_mode: str) -> None:
     if billing_mode not in {"subscription", "api", "unknown"}:
         raise ValueError(f"unsupported billing mode: {billing_mode}")
+
+
+def cost_fields(usage: Usage, billing_mode: str) -> dict:
+    """Separate CLI-reported API-price telemetry from actual billing."""
+    validate_billing_mode(billing_mode)
     values = asdict(usage)
     cli_reported_usd = values.pop("usd")
     if billing_mode == "subscription":
@@ -278,6 +282,7 @@ def run_smoke(
     state_file: Path | None = None,
     billing_mode: str = "unknown",
 ) -> dict:
+    validate_billing_mode(billing_mode)
     if container_image and not auth_file and not auth_env:
         raise ValueError("--container-image requires --auth-file or --auth-env")
     if auth_file and not auth_file.is_file():
