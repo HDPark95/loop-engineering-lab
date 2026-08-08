@@ -1,0 +1,353 @@
+#!/usr/bin/env python3
+"""Run one isolated agent-repair smoke and emit aggregate telemetry only.
+
+This validates the Codex and Claude Code command adapters. It copies a task
+seed to a temporary directory, never exposes the held-out oracle path in the
+prompt, and discards model text and candidate contents after scoring. Adapter
+smokes are apparatus checks, not confirmatory observations.
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import shutil
+import subprocess
+import tempfile
+import time
+from dataclasses import asdict, dataclass
+from pathlib import Path
+
+import se_experiment
+
+
+PROMPT = """Repair the issue in ISSUE.md in the current isolated directory.
+Work only in the current directory. Inspect the implementation and public tests,
+make the smallest robust source change, and run the public tests. Do not access
+any parent or external directory. Stop after the repair and a test run.
+"""
+
+
+@dataclass(frozen=True)
+class Usage:
+    input_tokens: int | None
+    output_tokens: int | None
+    cache_tokens: int | None
+    usd: float | None
+
+
+def file_hashes(root: Path) -> dict[str, str]:
+    return {
+        path.relative_to(root).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in root.rglob("*")
+        if path.is_file() and "__pycache__" not in path.parts and path.suffix != ".pyc"
+    }
+
+
+def tree_digest(root: Path) -> str:
+    digest = hashlib.sha256()
+    for name, value in sorted(file_hashes(root).items()):
+        digest.update(name.encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(value.encode("ascii"))
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
+def changed_files(before: dict[str, str], root: Path) -> list[str]:
+    after = file_hashes(root)
+    return sorted(name for name in set(before) | set(after) if before.get(name) != after.get(name))
+
+
+def parse_codex_usage(stdout: str) -> Usage:
+    usage: dict = {}
+    for line in stdout.splitlines():
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if event.get("type") == "turn.completed":
+            usage = event.get("usage", {})
+    return Usage(
+        usage.get("input_tokens"),
+        usage.get("output_tokens"),
+        usage.get("cached_input_tokens"),
+        None,
+    )
+
+
+def parse_claude_usage(stdout: str) -> Usage:
+    try:
+        event = json.loads(stdout)
+    except json.JSONDecodeError:
+        return Usage(None, None, None, None)
+    usage = event.get("usage", {})
+    return Usage(
+        usage.get("input_tokens"),
+        usage.get("output_tokens"),
+        usage.get("cache_read_input_tokens"),
+        event.get("total_cost_usd"),
+    )
+
+
+def command_for(agent: str, workspace: Path, model: str | None, max_budget_usd: float) -> list[str]:
+    if agent == "codex":
+        command = [
+            "codex",
+            "exec",
+            "--json",
+            "--ephemeral",
+            "--ignore-rules",
+            "--skip-git-repo-check",
+            "--sandbox",
+            "workspace-write",
+            "--cd",
+            str(workspace),
+        ]
+        if model:
+            command.extend(["--model", model])
+        return [*command, PROMPT]
+    if agent == "claude":
+        command = [
+            "claude",
+            "--print",
+            "--safe-mode",
+            "--no-session-persistence",
+            "--permission-mode",
+            "acceptEdits",
+            "--allowedTools",
+            "Read,Edit,Write,Bash(python3 -m unittest*)",
+            "--max-budget-usd",
+            str(max_budget_usd),
+            "--output-format",
+            "json",
+        ]
+        if model:
+            command.extend(["--model", model])
+        return [*command, PROMPT]
+    raise ValueError(f"unsupported agent: {agent}")
+
+
+def container_command_for(
+    agent: str,
+    workspace: Path,
+    model: str | None,
+    max_budget_usd: float,
+    image: str,
+    auth_file: Path | None = None,
+    auth_env: str | None = None,
+    state_file: Path | None = None,
+) -> list[str]:
+    """Build a CLI command for a container that sees only the task and auth."""
+    common = [
+        "docker",
+        "run",
+        "--rm",
+        "--user",
+        "node",
+        "--network",
+        "bridge",
+        "--mount",
+        f"type=bind,src={workspace.resolve()},dst=/workspace",
+    ]
+    if agent == "codex":
+        inner = [
+            "codex",
+            "exec",
+            "--json",
+            "--ephemeral",
+            "--ignore-user-config",
+            "--ignore-rules",
+            "--skip-git-repo-check",
+            "--dangerously-bypass-approvals-and-sandbox",
+            "--cd",
+            "/workspace",
+        ]
+        target = "/home/node/.codex/auth.json"
+    elif agent == "claude":
+        inner = [
+            "claude",
+            "--print",
+            "--safe-mode",
+            "--no-session-persistence",
+            "--dangerously-skip-permissions",
+            "--max-budget-usd",
+            str(max_budget_usd),
+            "--output-format",
+            "json",
+        ]
+        target = "/home/node/.claude/.credentials.json"
+    else:
+        raise ValueError(f"unsupported agent: {agent}")
+    if model:
+        inner.extend(["--model", model])
+    mounts = [*common]
+    if auth_file:
+        mounts.extend(["--mount", f"type=bind,src={auth_file.resolve()},dst={target},readonly"])
+    if auth_env:
+        mounts.extend(["--env", auth_env])
+    if agent == "claude" and state_file:
+        mounts.extend(
+            ["--mount", f"type=bind,src={state_file.resolve()},dst=/home/node/.claude.json,readonly"]
+        )
+    return [
+        *mounts,
+        image,
+        *inner,
+        PROMPT,
+    ]
+
+
+def execution_status(agent: str, stdout: str, returncode: int) -> dict:
+    if agent == "claude":
+        try:
+            event = json.loads(stdout)
+        except json.JSONDecodeError:
+            event = {}
+        failed = event.get("is_error", False)
+        message = event.get("result", "")
+        if event.get("api_error_status") == 429 or "limit" in message.lower():
+            error_kind = "quota"
+        elif "not logged in" in message.lower():
+            error_kind = "authentication"
+        else:
+            error_kind = "api" if failed else None
+        return {
+            "model_completed": returncode == 0 and not failed,
+            "api_error_status": event.get("api_error_status"),
+            "error_kind": error_kind,
+        }
+    return {
+        "model_completed": returncode == 0,
+        "api_error_status": None,
+        "error_kind": None if returncode == 0 else "command",
+    }
+
+
+def run_public_tests(workspace: Path) -> dict:
+    process = subprocess.run(
+        ["python3", "-m", "unittest", "discover", "-s", ".", "-p", "test_public.py"],
+        cwd=workspace,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    return {"passed": process.returncode == 0, "returncode": process.returncode}
+
+
+def run_smoke(
+    agent: str,
+    task: str,
+    model: str | None,
+    timeout_seconds: int,
+    max_budget_usd: float,
+    container_image: str | None = None,
+    auth_file: Path | None = None,
+    auth_env: str | None = None,
+    state_file: Path | None = None,
+) -> dict:
+    if container_image and not auth_file and not auth_env:
+        raise ValueError("--container-image requires --auth-file or --auth-env")
+    if auth_file and not auth_file.is_file():
+        raise ValueError("--auth-file must be readable")
+    if auth_env and auth_env not in os.environ:
+        raise ValueError(f"authentication environment variable is unset: {auth_env}")
+    if state_file and not state_file.is_file():
+        raise ValueError("--state-file must be readable")
+    executable = "docker" if container_image else agent
+    if not shutil.which(executable):
+        raise RuntimeError(f"{agent} executable not found")
+
+    with tempfile.TemporaryDirectory(prefix=f"loop-{agent}-{task}-") as temp_root:
+        workspace = Path(temp_root) / "workspace"
+        se_experiment.copy_seed(task, workspace)
+        before_files = file_hashes(workspace)
+        before_digest = tree_digest(workspace)
+        baseline, baseline_seconds = se_experiment.run_oracle(task, workspace)
+
+        started = time.perf_counter()
+        command = (
+            container_command_for(
+                agent,
+                workspace,
+                model,
+                max_budget_usd,
+                container_image,
+                auth_file,
+                auth_env,
+                state_file,
+            )
+            if container_image
+            else command_for(agent, workspace, model, max_budget_usd)
+        )
+        process = subprocess.run(
+            command,
+            cwd=workspace,
+            capture_output=True,
+            text=True,
+            timeout=timeout_seconds,
+        )
+        agent_seconds = time.perf_counter() - started
+
+        public_tests = run_public_tests(workspace)
+        final, final_seconds = se_experiment.run_oracle(task, workspace)
+        usage = parse_codex_usage(process.stdout) if agent == "codex" else parse_claude_usage(process.stdout)
+        return {
+            "schema_version": 1,
+            "status": "adapter smoke test; not a research result",
+            "agent": agent,
+            "model_requested": model or "session-default",
+            "task": task,
+            "process_returncode": process.returncode,
+            "execution": execution_status(agent, process.stdout, process.returncode),
+            "isolation": "external Docker task-only mount" if container_image else "CLI sandbox",
+            "public_tests": public_tests,
+            "baseline_score": baseline["score"],
+            "final_score": final["score"],
+            "real_gain": round(final["score"] - baseline["score"], 6),
+            "changed_files": changed_files(before_files, workspace),
+            "candidate_changed": tree_digest(workspace) != before_digest,
+            "cost": {
+                **asdict(usage),
+                "agent_seconds": round(agent_seconds, 6),
+                "oracle_seconds": round(baseline_seconds + final_seconds, 6),
+            },
+        }
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--agent", choices=("codex", "claude"), required=True)
+    parser.add_argument("--task", choices=tuple(se_experiment.TASKS), default="s1")
+    parser.add_argument("--model")
+    parser.add_argument("--timeout-seconds", type=int, default=300)
+    parser.add_argument("--max-budget-usd", type=float, default=0.25)
+    parser.add_argument("--container-image")
+    parser.add_argument("--auth-file", type=Path)
+    parser.add_argument("--auth-env")
+    parser.add_argument("--state-file", type=Path)
+    parser.add_argument("--output", type=Path, required=True)
+    args = parser.parse_args()
+    output = run_smoke(
+        args.agent,
+        args.task,
+        args.model,
+        args.timeout_seconds,
+        args.max_budget_usd,
+        args.container_image,
+        args.auth_file,
+        args.auth_env,
+        args.state_file,
+    )
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(json.dumps(output, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    print(
+        f"{args.agent}: returncode={output['process_returncode']} "
+        f"public_tests={output['public_tests']['passed']} gain={output['real_gain']}"
+    )
+
+
+if __name__ == "__main__":
+    main()

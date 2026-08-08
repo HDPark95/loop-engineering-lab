@@ -4,6 +4,37 @@
 
 [[loop-engineering-paper]] 의 측정 하니스. 평가자의 정보 채널 타입(in-band 트랜스크립트 대 out-of-band world-state 오라클)이 자율 루프의 자기기만(progress mirage)과 실세계 산출에 미치는 인과효과를 측정한다. 설계 근거는 paper 레포의 lab-design.md 와 RESEARCH-CORE.md.
 
+공개 데이터와 재현 범위는 [DATA_AVAILABILITY.md](DATA_AVAILABILITY.md),
+SE 특별호용 개정 설계와 동결 조건은 [PREREGISTRATION.md](PREREGISTRATION.md)에 있다.
+
+## 2026-08 SE 확장
+
+- `analysis/aidev_pilot.py`: AIDev 10,000-PR 탐색적 타당성 분석. 원문이나
+  식별자를 내보내지 않고 집계만 쓴다.
+- `se_tasks/s1_defect_repair`: 공개 테스트와 held-out 회귀 테스트를 분리한
+  결함 수정 과제.
+- `se_tasks/s3_production_ops`: 오류율, p95 논리 지연, 재시작 횟수를 재는
+  운영 과제.
+- `se_experiment.py`: 게이트 접지 여부와 oracle 숫자 피드백을 분리하는 2x2
+  코어와 비용 계측.
+- `results/se_smoke_matrix.json`: 스크립트 후보로 장치만 검증한 결과. 연구
+  결과가 아니다.
+
+AIDev 예비분석 재현:
+
+    python3 -m venv .venv
+    .venv/bin/pip install -r requirements-aidev.txt
+    .venv/bin/python analysis/download_aidev.py --data-dir data/aidev
+    .venv/bin/python analysis/aidev_pilot.py --data-dir data/aidev --output-dir results/aidev_pilot --sample-size 10000
+
+SE 장치 스모크 검증:
+
+    python3 -m unittest -v test_se_experiment.py
+    python3 -m unittest -v test_agent_adapters.py
+    python3 se_experiment.py --smoke-output results/se_smoke_matrix.json
+    python3 agent_adapters.py --agent codex --task s1 --container-image loop-eng-se-lab-agent:latest --auth-file "$CODEX_AUTH_FILE" --output results/codex_adapter_smoke.json
+    python3 agent_adapters.py --agent claude --task s1 --model sonnet --container-image loop-eng-se-lab-agent:latest --auth-env ANTHROPIC_API_KEY --max-budget-usd 0.25 --output results/claude_adapter_smoke.json
+
 ## 격리 (실측으로 증명, 가정 아님)
 
 논문의 핵심 주장은 "에이전트가 오라클을 게이밍할 수 없다"이다. 이를 파일시스템 관행이 아니라 실제 컨테이너 격리로 보장한다.
@@ -46,4 +77,4 @@ run_isolated.py 가 먼저 경계 증명을 돌리고, 이어 두 arm(in-band-se
 
 ## 규칙
 
-- 분석은 표준 라이브러리만. 회사 컨텍스트 없음. 한국어 카피에 em-dash 없음.
+- 분석은 표준 라이브러리만. 한국어 카피에 em-dash 없음.

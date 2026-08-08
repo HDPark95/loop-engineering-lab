@@ -1,0 +1,31 @@
+name: loop-eng-se-lab
+
+networks:
+  agentnet:
+  oraclenet:
+    internal: true
+
+volumes:
+  se_artifact:
+
+services:
+  agent:
+    build:
+      context: .
+      dockerfile: docker/se-agent.Dockerfile
+    networks: [agentnet]
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    volumes:
+      - se_artifact:/workspace
+    command: sleep infinity
+
+  oracle:
+    build:
+      context: .
+      dockerfile: docker/se-oracle.Dockerfile
+    networks: [oraclenet]
+    volumes:
+      - se_artifact:/candidate:ro
+    command: sleep infinity

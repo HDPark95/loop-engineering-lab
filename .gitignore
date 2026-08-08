@@ -2,4 +2,6 @@ oracle/*.db
 .work_*/
 __pycache__/
 *.pyc
-
+data/
+*.parquet
+.venv/
