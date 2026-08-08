@@ -62,6 +62,21 @@ class AdapterTest(unittest.TestCase):
         self.assertEqual((usage.input_tokens, usage.output_tokens, usage.cache_tokens), (30, 8, 4))
         self.assertEqual(usage.usd, 0.012)
 
+    def test_subscription_cost_separates_cli_estimate_from_billing(self):
+        cost = agent_adapters.cost_fields(
+            agent_adapters.Usage(30, 8, 4, 0.012), "subscription"
+        )
+        self.assertEqual(cost["cli_reported_usd"], 0.012)
+        self.assertEqual(cost["incremental_billed_usd"], 0.0)
+
+    def test_api_cost_uses_cli_report_as_incremental_billing(self):
+        cost = agent_adapters.cost_fields(agent_adapters.Usage(30, 8, 4, 0.012), "api")
+        self.assertEqual(cost["incremental_billed_usd"], 0.012)
+
+    def test_unknown_cost_does_not_infer_incremental_billing(self):
+        cost = agent_adapters.cost_fields(agent_adapters.Usage(30, 8, 4, None), "unknown")
+        self.assertIsNone(cost["incremental_billed_usd"])
+
     def test_claude_api_error_is_not_completion(self):
         output = json.dumps({"is_error": True, "api_error_status": 429, "result": "rate limited"})
         self.assertEqual(

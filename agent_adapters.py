@@ -38,6 +38,26 @@ class Usage:
     usd: float | None
 
 
+def cost_fields(usage: Usage, billing_mode: str) -> dict:
+    """Separate CLI-reported API-price telemetry from actual billing."""
+    if billing_mode not in {"subscription", "api", "unknown"}:
+        raise ValueError(f"unsupported billing mode: {billing_mode}")
+    values = asdict(usage)
+    cli_reported_usd = values.pop("usd")
+    if billing_mode == "subscription":
+        incremental_billed_usd = 0.0
+    elif billing_mode == "api":
+        incremental_billed_usd = cli_reported_usd
+    else:
+        incremental_billed_usd = None
+    return {
+        **values,
+        "billing_mode": billing_mode,
+        "cli_reported_usd": cli_reported_usd,
+        "incremental_billed_usd": incremental_billed_usd,
+    }
+
+
 def file_hashes(root: Path) -> dict[str, str]:
     return {
         path.relative_to(root).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
@@ -256,6 +276,7 @@ def run_smoke(
     auth_file: Path | None = None,
     auth_env: str | None = None,
     state_file: Path | None = None,
+    billing_mode: str = "unknown",
 ) -> dict:
     if container_image and not auth_file and not auth_env:
         raise ValueError("--container-image requires --auth-file or --auth-env")
@@ -322,7 +343,7 @@ def run_smoke(
         final, final_seconds = se_experiment.run_oracle(task, workspace)
         usage = parse_codex_usage(process.stdout) if agent == "codex" else parse_claude_usage(process.stdout)
         return {
-            "schema_version": 1,
+            "schema_version": 2,
             "status": "adapter smoke test; not a research result",
             "agent": agent,
             "model_requested": model or "session-default",
@@ -337,7 +358,7 @@ def run_smoke(
             "changed_files": changed_files(before_files, workspace),
             "candidate_changed": tree_digest(workspace) != before_digest,
             "cost": {
-                **asdict(usage),
+                **cost_fields(usage, billing_mode),
                 "agent_seconds": round(agent_seconds, 6),
                 "oracle_seconds": round(baseline_seconds + final_seconds, 6),
             },
@@ -351,6 +372,9 @@ def main() -> None:
     parser.add_argument("--model")
     parser.add_argument("--timeout-seconds", type=int, default=300)
     parser.add_argument("--max-budget-usd", type=float, default=0.25)
+    parser.add_argument(
+        "--billing-mode", choices=("subscription", "api", "unknown"), default="unknown"
+    )
     parser.add_argument("--container-image")
     parser.add_argument("--auth-file", type=Path)
     parser.add_argument("--auth-env")
@@ -367,6 +391,7 @@ def main() -> None:
         args.auth_file,
         args.auth_env,
         args.state_file,
+        billing_mode=args.billing_mode,
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(output, indent=2, sort_keys=True) + "\n", encoding="utf-8")

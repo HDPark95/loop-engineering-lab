@@ -170,8 +170,15 @@ intervals are reported even when thresholds are missed.
   positive-delta cycles;
 - regression acceptance rate: accepted cycles with negative oracle delta;
 - input tokens, output tokens, agent seconds, judge seconds, oracle seconds,
-  and dollars per cycle;
-- gain per 1,000 tokens, gain per dollar, and gain per wall-clock hour.
+  CLI-reported API-price-equivalent dollars, and incremental billed dollars per
+  cycle;
+- gain per 1,000 tokens, gain per API-price-equivalent dollar, gain per
+  incremental billed dollar where nonzero, and gain per wall-clock hour.
+
+Subscription-authenticated runs record zero incremental billed dollars and
+still record an API-price-equivalent estimate when the CLI provides one. The
+latter is the cross-agent comparison metric; subscription quota consumption is
+reported separately and is not represented as a monetary charge.
 
 ## 8. Planned size
 
@@ -239,3 +246,6 @@ apparatus validation and not confirmatory evidence.
   the original HA2 cost hypothesis.
 - R6 (2026-08-08): validated both agent adapters on S1 in task-only Docker
   containers; each improved the held-out score from 0.111111 to 1.0.
+- R7 (2026-08-08): separated CLI-reported API-price-equivalent cost from
+  incremental billing and recorded subscription billing mode for adapter
+  smokes.

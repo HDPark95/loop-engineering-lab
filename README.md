@@ -32,8 +32,8 @@ SE 장치 스모크 검증:
     python3 -m unittest -v test_se_experiment.py
     python3 -m unittest -v test_agent_adapters.py
     python3 se_experiment.py --smoke-output results/se_smoke_matrix.json
-    python3 agent_adapters.py --agent codex --task s1 --container-image loop-eng-se-lab-agent:latest --auth-file "$CODEX_AUTH_FILE" --output results/codex_adapter_smoke.json
-    python3 agent_adapters.py --agent claude --task s1 --model sonnet --container-image loop-eng-se-lab-agent:latest --auth-env ANTHROPIC_API_KEY --max-budget-usd 0.25 --output results/claude_adapter_smoke.json
+    python3 agent_adapters.py --agent codex --task s1 --billing-mode subscription --container-image loop-eng-se-lab-agent:latest --auth-file "$CODEX_AUTH_FILE" --output results/codex_adapter_smoke.json
+    python3 agent_adapters.py --agent claude --task s1 --model sonnet --billing-mode subscription --container-image loop-eng-se-lab-agent:latest --auth-file "$CLAUDE_AUTH_FILE" --state-file "$CLAUDE_STATE_FILE" --max-budget-usd 0.25 --output results/claude_adapter_smoke.json
 
 ## 격리 (실측으로 증명, 가정 아님)
 
