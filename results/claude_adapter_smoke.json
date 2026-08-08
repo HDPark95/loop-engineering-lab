@@ -1,0 +1,31 @@
+{
+  "agent": "claude",
+  "baseline_score": 0.111111,
+  "candidate_changed": false,
+  "changed_files": [],
+  "cost": {
+    "agent_seconds": 6.808241,
+    "cache_tokens": 0,
+    "input_tokens": 0,
+    "oracle_seconds": 0.479279,
+    "output_tokens": 0,
+    "usd": 0
+  },
+  "execution": {
+    "api_error_status": 429,
+    "error_kind": "quota",
+    "model_completed": false
+  },
+  "final_score": 0.111111,
+  "isolation": "CLI sandbox",
+  "model_requested": "sonnet",
+  "process_returncode": 1,
+  "public_tests": {
+    "passed": true,
+    "returncode": 0
+  },
+  "real_gain": 0.0,
+  "schema_version": 1,
+  "status": "adapter smoke test; not a research result",
+  "task": "s1"
+}

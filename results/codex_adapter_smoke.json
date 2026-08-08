@@ -1,0 +1,33 @@
+{
+  "agent": "codex",
+  "baseline_score": 0.111111,
+  "candidate_changed": true,
+  "changed_files": [
+    "versioning.py"
+  ],
+  "cost": {
+    "agent_seconds": 36.733199,
+    "cache_tokens": 70144,
+    "input_tokens": 77906,
+    "oracle_seconds": 0.610799,
+    "output_tokens": 913,
+    "usd": null
+  },
+  "execution": {
+    "api_error_status": null,
+    "error_kind": null,
+    "model_completed": true
+  },
+  "final_score": 1.0,
+  "isolation": "external Docker task-only mount",
+  "model_requested": "session-default",
+  "process_returncode": 0,
+  "public_tests": {
+    "passed": true,
+    "returncode": 0
+  },
+  "real_gain": 0.888889,
+  "schema_version": 1,
+  "status": "adapter smoke test; not a research result",
+  "task": "s1"
+}

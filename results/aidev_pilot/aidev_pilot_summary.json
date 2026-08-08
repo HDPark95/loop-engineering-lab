@@ -1,0 +1,1836 @@
+{
+  "claim_coding": {
+    "ai_sample": {
+      "any_claim": {
+        "denominator": 10000,
+        "numerator": 1375,
+        "rate": 0.1375,
+        "wilson_95": [
+          0.130889,
+          0.144389
+        ]
+      },
+      "body_present": {
+        "denominator": 10000,
+        "numerator": 9888,
+        "rate": 0.9888,
+        "wilson_95": [
+          0.986542,
+          0.990683
+        ]
+      },
+      "closed_unmerged": {
+        "denominator": 10000,
+        "numerator": 2182,
+        "rate": 0.2182,
+        "wilson_95": [
+          0.210214,
+          0.226402
+        ]
+      },
+      "completion_claim": {
+        "denominator": 10000,
+        "numerator": 913,
+        "rate": 0.0913,
+        "wilson_95": [
+          0.08581,
+          0.097103
+        ]
+      },
+      "merge_rate_given_claim": {
+        "denominator": 1375,
+        "numerator": 648,
+        "rate": 0.471273,
+        "wilson_95": [
+          0.445005,
+          0.497701
+        ]
+      },
+      "merge_rate_without_claim": {
+        "denominator": 8625,
+        "numerator": 6488,
+        "rate": 0.752232,
+        "wilson_95": [
+          0.74301,
+          0.761229
+        ]
+      },
+      "merged": {
+        "denominator": 10000,
+        "numerator": 7136,
+        "rate": 0.7136,
+        "wilson_95": [
+          0.704659,
+          0.722377
+        ]
+      },
+      "n": 10000,
+      "resolved_merge_rate": {
+        "denominator": 9318,
+        "numerator": 7136,
+        "rate": 0.76583,
+        "wilson_95": [
+          0.757123,
+          0.774317
+        ]
+      },
+      "strong_claim": {
+        "denominator": 10000,
+        "numerator": 150,
+        "rate": 0.015,
+        "wilson_95": [
+          0.012797,
+          0.017575
+        ]
+      },
+      "verification_claim": {
+        "denominator": 10000,
+        "numerator": 661,
+        "rate": 0.0661,
+        "wilson_95": [
+          0.061395,
+          0.071138
+        ]
+      }
+    },
+    "human_baseline_all_available": {
+      "any_claim": {
+        "denominator": 6618,
+        "numerator": 891,
+        "rate": 0.134633,
+        "wilson_95": [
+          0.126621,
+          0.143069
+        ]
+      },
+      "body_present": {
+        "denominator": 6618,
+        "numerator": 5623,
+        "rate": 0.849652,
+        "wilson_95": [
+          0.840839,
+          0.858061
+        ]
+      },
+      "closed_unmerged": {
+        "denominator": 6618,
+        "numerator": 1068,
+        "rate": 0.161378,
+        "wilson_95": [
+          0.152712,
+          0.170437
+        ]
+      },
+      "completion_claim": {
+        "denominator": 6618,
+        "numerator": 286,
+        "rate": 0.043215,
+        "wilson_95": [
+          0.038576,
+          0.048385
+        ]
+      },
+      "merge_rate_given_claim": {
+        "denominator": 891,
+        "numerator": 552,
+        "rate": 0.619529,
+        "wilson_95": [
+          0.587201,
+          0.65083
+        ]
+      },
+      "merge_rate_without_claim": {
+        "denominator": 5727,
+        "numerator": 4529,
+        "rate": 0.790815,
+        "wilson_95": [
+          0.780088,
+          0.801153
+        ]
+      },
+      "merged": {
+        "denominator": 6618,
+        "numerator": 5081,
+        "rate": 0.767755,
+        "wilson_95": [
+          0.757428,
+          0.777771
+        ]
+      },
+      "n": 6618,
+      "resolved_merge_rate": {
+        "denominator": 6149,
+        "numerator": 5081,
+        "rate": 0.826313,
+        "wilson_95": [
+          0.816641,
+          0.835578
+        ]
+      },
+      "strong_claim": {
+        "denominator": 6618,
+        "numerator": 22,
+        "rate": 0.003324,
+        "wilson_95": [
+          0.002196,
+          0.005028
+        ]
+      },
+      "verification_claim": {
+        "denominator": 6618,
+        "numerator": 664,
+        "rate": 0.100332,
+        "wilson_95": [
+          0.093324,
+          0.107804
+        ]
+      }
+    },
+    "merge_rate_difference_claim_minus_no_claim": -0.280959,
+    "per_agent": {
+      "Claude_Code": {
+        "any_claim": {
+          "denominator": 142,
+          "numerator": 57,
+          "rate": 0.401408,
+          "wilson_95": [
+            0.324408,
+            0.483602
+          ]
+        },
+        "body_present": {
+          "denominator": 142,
+          "numerator": 142,
+          "rate": 1.0,
+          "wilson_95": [
+            0.97366,
+            1.0
+          ]
+        },
+        "closed_unmerged": {
+          "denominator": 142,
+          "numerator": 30,
+          "rate": 0.211268,
+          "wilson_95": [
+            0.152187,
+            0.285558
+          ]
+        },
+        "completion_claim": {
+          "denominator": 142,
+          "numerator": 37,
+          "rate": 0.260563,
+          "wilson_95": [
+            0.195353,
+            0.338387
+          ]
+        },
+        "merge_rate_given_claim": {
+          "denominator": 57,
+          "numerator": 38,
+          "rate": 0.666667,
+          "wilson_95": [
+            0.537225,
+            0.775062
+          ]
+        },
+        "merge_rate_without_claim": {
+          "denominator": 85,
+          "numerator": 51,
+          "rate": 0.6,
+          "wilson_95": [
+            0.493714,
+            0.697638
+          ]
+        },
+        "merged": {
+          "denominator": 142,
+          "numerator": 89,
+          "rate": 0.626761,
+          "wilson_95": [
+            0.544854,
+            0.70199
+          ]
+        },
+        "n": 142,
+        "resolved_merge_rate": {
+          "denominator": 119,
+          "numerator": 89,
+          "rate": 0.747899,
+          "wilson_95": [
+            0.66297,
+            0.817324
+          ]
+        },
+        "strong_claim": {
+          "denominator": 142,
+          "numerator": 8,
+          "rate": 0.056338,
+          "wilson_95": [
+            0.028821,
+            0.107227
+          ]
+        },
+        "verification_claim": {
+          "denominator": 142,
+          "numerator": 30,
+          "rate": 0.211268,
+          "wilson_95": [
+            0.152187,
+            0.285558
+          ]
+        }
+      },
+      "Copilot": {
+        "any_claim": {
+          "denominator": 1493,
+          "numerator": 630,
+          "rate": 0.421969,
+          "wilson_95": [
+            0.397149,
+            0.44719
+          ]
+        },
+        "body_present": {
+          "denominator": 1493,
+          "numerator": 1492,
+          "rate": 0.99933,
+          "wilson_95": [
+            0.996216,
+            0.999882
+          ]
+        },
+        "closed_unmerged": {
+          "denominator": 1493,
+          "numerator": 509,
+          "rate": 0.340924,
+          "wilson_95": [
+            0.317316,
+            0.36535
+          ]
+        },
+        "completion_claim": {
+          "denominator": 1493,
+          "numerator": 455,
+          "rate": 0.304756,
+          "wilson_95": [
+            0.281932,
+            0.328581
+          ]
+        },
+        "merge_rate_given_claim": {
+          "denominator": 630,
+          "numerator": 275,
+          "rate": 0.436508,
+          "wilson_95": [
+            0.398281,
+            0.475504
+          ]
+        },
+        "merge_rate_without_claim": {
+          "denominator": 863,
+          "numerator": 391,
+          "rate": 0.453071,
+          "wilson_95": [
+            0.42014,
+            0.486417
+          ]
+        },
+        "merged": {
+          "denominator": 1493,
+          "numerator": 666,
+          "rate": 0.446082,
+          "wilson_95": [
+            0.421038,
+            0.471402
+          ]
+        },
+        "n": 1493,
+        "resolved_merge_rate": {
+          "denominator": 1175,
+          "numerator": 666,
+          "rate": 0.566809,
+          "wilson_95": [
+            0.538304,
+            0.594878
+          ]
+        },
+        "strong_claim": {
+          "denominator": 1493,
+          "numerator": 67,
+          "rate": 0.044876,
+          "wilson_95": [
+            0.035491,
+            0.056597
+          ]
+        },
+        "verification_claim": {
+          "denominator": 1493,
+          "numerator": 250,
+          "rate": 0.167448,
+          "wilson_95": [
+            0.149367,
+            0.187236
+          ]
+        }
+      },
+      "Cursor": {
+        "any_claim": {
+          "denominator": 455,
+          "numerator": 62,
+          "rate": 0.136264,
+          "wilson_95": [
+            0.107771,
+            0.170847
+          ]
+        },
+        "body_present": {
+          "denominator": 455,
+          "numerator": 417,
+          "rate": 0.916484,
+          "wilson_95": [
+            0.887443,
+            0.93855
+          ]
+        },
+        "closed_unmerged": {
+          "denominator": 455,
+          "numerator": 106,
+          "rate": 0.232967,
+          "wilson_95": [
+            0.196459,
+            0.273946
+          ]
+        },
+        "completion_claim": {
+          "denominator": 455,
+          "numerator": 43,
+          "rate": 0.094505,
+          "wilson_95": [
+            0.07092,
+            0.124881
+          ]
+        },
+        "merge_rate_given_claim": {
+          "denominator": 62,
+          "numerator": 34,
+          "rate": 0.548387,
+          "wilson_95": [
+            0.425325,
+            0.665803
+          ]
+        },
+        "merge_rate_without_claim": {
+          "denominator": 393,
+          "numerator": 258,
+          "rate": 0.656489,
+          "wilson_95": [
+            0.608227,
+            0.701721
+          ]
+        },
+        "merged": {
+          "denominator": 455,
+          "numerator": 292,
+          "rate": 0.641758,
+          "wilson_95": [
+            0.596683,
+            0.68446
+          ]
+        },
+        "n": 455,
+        "resolved_merge_rate": {
+          "denominator": 398,
+          "numerator": 292,
+          "rate": 0.733668,
+          "wilson_95": [
+            0.688157,
+            0.774712
+          ]
+        },
+        "strong_claim": {
+          "denominator": 455,
+          "numerator": 4,
+          "rate": 0.008791,
+          "wilson_95": [
+            0.003424,
+            0.022383
+          ]
+        },
+        "verification_claim": {
+          "denominator": 455,
+          "numerator": 26,
+          "rate": 0.057143,
+          "wilson_95": [
+            0.039291,
+            0.08241
+          ]
+        }
+      },
+      "Devin": {
+        "any_claim": {
+          "denominator": 1495,
+          "numerator": 591,
+          "rate": 0.395318,
+          "wilson_95": [
+            0.370833,
+            0.420339
+          ]
+        },
+        "body_present": {
+          "denominator": 1495,
+          "numerator": 1491,
+          "rate": 0.997324,
+          "wilson_95": [
+            0.993141,
+            0.998959
+          ]
+        },
+        "closed_unmerged": {
+          "denominator": 1495,
+          "numerator": 645,
+          "rate": 0.431438,
+          "wilson_95": [
+            0.40654,
+            0.456688
+          ]
+        },
+        "completion_claim": {
+          "denominator": 1495,
+          "numerator": 365,
+          "rate": 0.244147,
+          "wilson_95": [
+            0.223045,
+            0.266561
+          ]
+        },
+        "merge_rate_given_claim": {
+          "denominator": 591,
+          "numerator": 276,
+          "rate": 0.467005,
+          "wilson_95": [
+            0.427124,
+            0.507312
+          ]
+        },
+        "merge_rate_without_claim": {
+          "denominator": 904,
+          "numerator": 533,
+          "rate": 0.589602,
+          "wilson_95": [
+            0.557222,
+            0.621223
+          ]
+        },
+        "merged": {
+          "denominator": 1495,
+          "numerator": 809,
+          "rate": 0.541137,
+          "wilson_95": [
+            0.515804,
+            0.566259
+          ]
+        },
+        "n": 1495,
+        "resolved_merge_rate": {
+          "denominator": 1454,
+          "numerator": 809,
+          "rate": 0.556396,
+          "wilson_95": [
+            0.530745,
+            0.58175
+          ]
+        },
+        "strong_claim": {
+          "denominator": 1495,
+          "numerator": 66,
+          "rate": 0.044147,
+          "wilson_95": [
+            0.03485,
+            0.055781
+          ]
+        },
+        "verification_claim": {
+          "denominator": 1495,
+          "numerator": 330,
+          "rate": 0.220736,
+          "wilson_95": [
+            0.200443,
+            0.24246
+          ]
+        }
+      },
+      "OpenAI_Codex": {
+        "any_claim": {
+          "denominator": 6415,
+          "numerator": 35,
+          "rate": 0.005456,
+          "wilson_95": [
+            0.003926,
+            0.007578
+          ]
+        },
+        "body_present": {
+          "denominator": 6415,
+          "numerator": 6346,
+          "rate": 0.989244,
+          "wilson_95": [
+            0.986411,
+            0.991492
+          ]
+        },
+        "closed_unmerged": {
+          "denominator": 6415,
+          "numerator": 892,
+          "rate": 0.139049,
+          "wilson_95": [
+            0.130798,
+            0.147732
+          ]
+        },
+        "completion_claim": {
+          "denominator": 6415,
+          "numerator": 13,
+          "rate": 0.002027,
+          "wilson_95": [
+            0.001185,
+            0.003464
+          ]
+        },
+        "merge_rate_given_claim": {
+          "denominator": 35,
+          "numerator": 25,
+          "rate": 0.714286,
+          "wilson_95": [
+            0.549451,
+            0.836735
+          ]
+        },
+        "merge_rate_without_claim": {
+          "denominator": 6380,
+          "numerator": 5255,
+          "rate": 0.823668,
+          "wilson_95": [
+            0.814122,
+            0.832824
+          ]
+        },
+        "merged": {
+          "denominator": 6415,
+          "numerator": 5280,
+          "rate": 0.823071,
+          "wilson_95": [
+            0.81354,
+            0.832215
+          ]
+        },
+        "n": 6415,
+        "resolved_merge_rate": {
+          "denominator": 6172,
+          "numerator": 5280,
+          "rate": 0.855476,
+          "wilson_95": [
+            0.846483,
+            0.864027
+          ]
+        },
+        "strong_claim": {
+          "denominator": 6415,
+          "numerator": 5,
+          "rate": 0.000779,
+          "wilson_95": [
+            0.000333,
+            0.001823
+          ]
+        },
+        "verification_claim": {
+          "denominator": 6415,
+          "numerator": 25,
+          "rate": 0.003897,
+          "wilson_95": [
+            0.002641,
+            0.005747
+          ]
+        }
+      }
+    },
+    "per_task_type": {
+      "build": {
+        "any_claim": {
+          "denominator": 183,
+          "numerator": 21,
+          "rate": 0.114754,
+          "wilson_95": [
+            0.076292,
+            0.169057
+          ]
+        },
+        "body_present": {
+          "denominator": 183,
+          "numerator": 180,
+          "rate": 0.983607,
+          "wilson_95": [
+            0.952918,
+            0.994409
+          ]
+        },
+        "closed_unmerged": {
+          "denominator": 183,
+          "numerator": 33,
+          "rate": 0.180328,
+          "wilson_95": [
+            0.131383,
+            0.242418
+          ]
+        },
+        "completion_claim": {
+          "denominator": 183,
+          "numerator": 7,
+          "rate": 0.038251,
+          "wilson_95": [
+            0.01865,
+            0.076839
+          ]
+        },
+        "merge_rate_given_claim": {
+          "denominator": 21,
+          "numerator": 12,
+          "rate": 0.571429,
+          "wilson_95": [
+            0.365466,
+            0.7553
+          ]
+        },
+        "merge_rate_without_claim": {
+          "denominator": 162,
+          "numerator": 125,
+          "rate": 0.771605,
+          "wilson_95": [
+            0.701113,
+            0.829514
+          ]
+        },
+        "merged": {
+          "denominator": 183,
+          "numerator": 137,
+          "rate": 0.748634,
+          "wilson_95": [
+            0.681111,
+            0.805933
+          ]
+        },
+        "n": 183,
+        "resolved_merge_rate": {
+          "denominator": 170,
+          "numerator": 137,
+          "rate": 0.805882,
+          "wilson_95": [
+            0.739941,
+            0.858305
+          ]
+        },
+        "strong_claim": {
+          "denominator": 183,
+          "numerator": 3,
+          "rate": 0.016393,
+          "wilson_95": [
+            0.005591,
+            0.047082
+          ]
+        },
+        "verification_claim": {
+          "denominator": 183,
+          "numerator": 16,
+          "rate": 0.087432,
+          "wilson_95": [
+            0.054533,
+            0.137295
+          ]
+        }
+      },
+      "chore": {
+        "any_claim": {
+          "denominator": 271,
+          "numerator": 36,
+          "rate": 0.132841,
+          "wilson_95": [
+            0.097521,
+            0.178426
+          ]
+        },
+        "body_present": {
+          "denominator": 271,
+          "numerator": 261,
+          "rate": 0.9631,
+          "wilson_95": [
+            0.933419,
+            0.979835
+          ]
+        },
+        "closed_unmerged": {
+          "denominator": 271,
+          "numerator": 73,
+          "rate": 0.269373,
+          "wilson_95": [
+            0.220049,
+            0.325143
+          ]
+        },
+        "completion_claim": {
+          "denominator": 271,
+          "numerator": 11,
+          "rate": 0.04059,
+          "wilson_95": [
+            0.022814,
+            0.071209
+          ]
+        },
+        "merge_rate_given_claim": {
+          "denominator": 36,
+          "numerator": 19,
+          "rate": 0.527778,
+          "wilson_95": [
+            0.370059,
+            0.68014
+          ]
+        },
+        "merge_rate_without_claim": {
+          "denominator": 235,
+          "numerator": 168,
+          "rate": 0.714894,
+          "wilson_95": [
+            0.654078,
+            0.768797
+          ]
+        },
+        "merged": {
+          "denominator": 271,
+          "numerator": 187,
+          "rate": 0.690037,
+          "wilson_95": [
+            0.63264,
+            0.742121
+          ]
+        },
+        "n": 271,
+        "resolved_merge_rate": {
+          "denominator": 260,
+          "numerator": 187,
+          "rate": 0.719231,
+          "wilson_95": [
+            0.661722,
+            0.770356
+          ]
+        },
+        "strong_claim": {
+          "denominator": 271,
+          "numerator": 7,
+          "rate": 0.02583,
+          "wilson_95": [
+            0.012567,
+            0.052348
+          ]
+        },
+        "verification_claim": {
+          "denominator": 271,
+          "numerator": 26,
+          "rate": 0.095941,
+          "wilson_95": [
+            0.066315,
+            0.136862
+          ]
+        }
+      },
+      "ci": {
+        "any_claim": {
+          "denominator": 121,
+          "numerator": 8,
+          "rate": 0.066116,
+          "wilson_95": [
+            0.03388,
+            0.125054
+          ]
+        },
+        "body_present": {
+          "denominator": 121,
+          "numerator": 119,
+          "rate": 0.983471,
+          "wilson_95": [
+            0.941733,
+            0.995455
+          ]
+        },
+        "closed_unmerged": {
+          "denominator": 121,
+          "numerator": 20,
+          "rate": 0.165289,
+          "wilson_95": [
+            0.109623,
+            0.241554
+          ]
+        },
+        "completion_claim": {
+          "denominator": 121,
+          "numerator": 4,
+          "rate": 0.033058,
+          "wilson_95": [
+            0.012929,
+            0.081923
+          ]
+        },
+        "merge_rate_given_claim": {
+          "denominator": 8,
+          "numerator": 6,
+          "rate": 0.75,
+          "wilson_95": [
+            0.409275,
+            0.928521
+          ]
+        },
+        "merge_rate_without_claim": {
+          "denominator": 113,
+          "numerator": 88,
+          "rate": 0.778761,
+          "wilson_95": [
+            0.693777,
+            0.845415
+          ]
+        },
+        "merged": {
+          "denominator": 121,
+          "numerator": 94,
+          "rate": 0.77686,
+          "wilson_95": [
+            0.69481,
+            0.84187
+          ]
+        },
+        "n": 121,
+        "resolved_merge_rate": {
+          "denominator": 114,
+          "numerator": 94,
+          "rate": 0.824561,
+          "wilson_95": [
+            0.7445,
+            0.883462
+          ]
+        },
+        "strong_claim": {
+          "denominator": 121,
+          "numerator": 0,
+          "rate": 0.0,
+          "wilson_95": [
+            0.0,
+            0.030771
+          ]
+        },
+        "verification_claim": {
+          "denominator": 121,
+          "numerator": 4,
+          "rate": 0.033058,
+          "wilson_95": [
+            0.012929,
+            0.081923
+          ]
+        }
+      },
+      "docs": {
+        "any_claim": {
+          "denominator": 1173,
+          "numerator": 71,
+          "rate": 0.060529,
+          "wilson_95": [
+            0.048264,
+            0.075663
+          ]
+        },
+        "body_present": {
+          "denominator": 1173,
+          "numerator": 1160,
+          "rate": 0.988917,
+          "wilson_95": [
+            0.981131,
+            0.993512
+          ]
+        },
+        "closed_unmerged": {
+          "denominator": 1173,
+          "numerator": 141,
+          "rate": 0.120205,
+          "wilson_95": [
+            0.102823,
+            0.140065
+          ]
+        },
+        "completion_claim": {
+          "denominator": 1173,
+          "numerator": 43,
+          "rate": 0.036658,
+          "wilson_95": [
+            0.027328,
+            0.049013
+          ]
+        },
+        "merge_rate_given_claim": {
+          "denominator": 71,
+          "numerator": 45,
+          "rate": 0.633803,
+          "wilson_95": [
+            0.517572,
+            0.736298
+          ]
+        },
+        "merge_rate_without_claim": {
+          "denominator": 1102,
+          "numerator": 940,
+          "rate": 0.852995,
+          "wilson_95": [
+            0.830861,
+            0.872675
+          ]
+        },
+        "merged": {
+          "denominator": 1173,
+          "numerator": 985,
+          "rate": 0.839727,
+          "wilson_95": [
+            0.817629,
+            0.859607
+          ]
+        },
+        "n": 1173,
+        "resolved_merge_rate": {
+          "denominator": 1126,
+          "numerator": 985,
+          "rate": 0.874778,
+          "wilson_95": [
+            0.854163,
+            0.892844
+          ]
+        },
+        "strong_claim": {
+          "denominator": 1173,
+          "numerator": 5,
+          "rate": 0.004263,
+          "wilson_95": [
+            0.001822,
+            0.009939
+          ]
+        },
+        "verification_claim": {
+          "denominator": 1173,
+          "numerator": 35,
+          "rate": 0.029838,
+          "wilson_95": [
+            0.021532,
+            0.041214
+          ]
+        }
+      },
+      "feat": {
+        "any_claim": {
+          "denominator": 4287,
+          "numerator": 548,
+          "rate": 0.127828,
+          "wilson_95": [
+            0.118165,
+            0.138158
+          ]
+        },
+        "body_present": {
+          "denominator": 4287,
+          "numerator": 4239,
+          "rate": 0.988803,
+          "wilson_95": [
+            0.985187,
+            0.991544
+          ]
+        },
+        "closed_unmerged": {
+          "denominator": 4287,
+          "numerator": 925,
+          "rate": 0.215769,
+          "wilson_95": [
+            0.203712,
+            0.228334
+          ]
+        },
+        "completion_claim": {
+          "denominator": 4287,
+          "numerator": 368,
+          "rate": 0.085841,
+          "wilson_95": [
+            0.077822,
+            0.094602
+          ]
+        },
+        "merge_rate_given_claim": {
+          "denominator": 548,
+          "numerator": 260,
+          "rate": 0.474453,
+          "wilson_95": [
+            0.432968,
+            0.516293
+          ]
+        },
+        "merge_rate_without_claim": {
+          "denominator": 3739,
+          "numerator": 2801,
+          "rate": 0.749131,
+          "wilson_95": [
+            0.734984,
+            0.762766
+          ]
+        },
+        "merged": {
+          "denominator": 4287,
+          "numerator": 3061,
+          "rate": 0.714019,
+          "wilson_95": [
+            0.700305,
+            0.72735
+          ]
+        },
+        "n": 4287,
+        "resolved_merge_rate": {
+          "denominator": 3986,
+          "numerator": 3061,
+          "rate": 0.767938,
+          "wilson_95": [
+            0.754578,
+            0.780781
+          ]
+        },
+        "strong_claim": {
+          "denominator": 4287,
+          "numerator": 66,
+          "rate": 0.015395,
+          "wilson_95": [
+            0.01212,
+            0.019539
+          ]
+        },
+        "verification_claim": {
+          "denominator": 4287,
+          "numerator": 246,
+          "rate": 0.057383,
+          "wilson_95": [
+            0.050809,
+            0.064749
+          ]
+        }
+      },
+      "fix": {
+        "any_claim": {
+          "denominator": 2427,
+          "numerator": 568,
+          "rate": 0.234034,
+          "wilson_95": [
+            0.217618,
+            0.25129
+          ]
+        },
+        "body_present": {
+          "denominator": 2427,
+          "numerator": 2407,
+          "rate": 0.991759,
+          "wilson_95": [
+            0.987305,
+            0.994659
+          ]
+        },
+        "closed_unmerged": {
+          "denominator": 2427,
+          "numerator": 642,
+          "rate": 0.264524,
+          "wilson_95": [
+            0.247358,
+            0.282434
+          ]
+        },
+        "completion_claim": {
+          "denominator": 2427,
+          "numerator": 427,
+          "rate": 0.175937,
+          "wilson_95": [
+            0.161304,
+            0.191595
+          ]
+        },
+        "merge_rate_given_claim": {
+          "denominator": 568,
+          "numerator": 243,
+          "rate": 0.427817,
+          "wilson_95": [
+            0.387747,
+            0.468856
+          ]
+        },
+        "merge_rate_without_claim": {
+          "denominator": 1859,
+          "numerator": 1332,
+          "rate": 0.716514,
+          "wilson_95": [
+            0.695597,
+            0.736539
+          ]
+        },
+        "merged": {
+          "denominator": 2427,
+          "numerator": 1575,
+          "rate": 0.648949,
+          "wilson_95": [
+            0.629738,
+            0.667689
+          ]
+        },
+        "n": 2427,
+        "resolved_merge_rate": {
+          "denominator": 2217,
+          "numerator": 1575,
+          "rate": 0.710419,
+          "wilson_95": [
+            0.691188,
+            0.728923
+          ]
+        },
+        "strong_claim": {
+          "denominator": 2427,
+          "numerator": 47,
+          "rate": 0.019365,
+          "wilson_95": [
+            0.014594,
+            0.025656
+          ]
+        },
+        "verification_claim": {
+          "denominator": 2427,
+          "numerator": 247,
+          "rate": 0.101772,
+          "wilson_95": [
+            0.090365,
+            0.114437
+          ]
+        }
+      },
+      "other": {
+        "any_claim": {
+          "denominator": 9,
+          "numerator": 0,
+          "rate": 0.0,
+          "wilson_95": [
+            0.0,
+            0.299145
+          ]
+        },
+        "body_present": {
+          "denominator": 9,
+          "numerator": 7,
+          "rate": 0.777778,
+          "wilson_95": [
+            0.452589,
+            0.936775
+          ]
+        },
+        "closed_unmerged": {
+          "denominator": 9,
+          "numerator": 8,
+          "rate": 0.888889,
+          "wilson_95": [
+            0.565,
+            0.980109
+          ]
+        },
+        "completion_claim": {
+          "denominator": 9,
+          "numerator": 0,
+          "rate": 0.0,
+          "wilson_95": [
+            0.0,
+            0.299145
+          ]
+        },
+        "merge_rate_given_claim": {
+          "denominator": 0,
+          "numerator": 0,
+          "rate": null,
+          "wilson_95": [
+            null,
+            null
+          ]
+        },
+        "merge_rate_without_claim": {
+          "denominator": 9,
+          "numerator": 0,
+          "rate": 0.0,
+          "wilson_95": [
+            0.0,
+            0.299145
+          ]
+        },
+        "merged": {
+          "denominator": 9,
+          "numerator": 0,
+          "rate": 0.0,
+          "wilson_95": [
+            0.0,
+            0.299145
+          ]
+        },
+        "n": 9,
+        "resolved_merge_rate": {
+          "denominator": 8,
+          "numerator": 0,
+          "rate": 0.0,
+          "wilson_95": [
+            0.0,
+            0.324408
+          ]
+        },
+        "strong_claim": {
+          "denominator": 9,
+          "numerator": 0,
+          "rate": 0.0,
+          "wilson_95": [
+            0.0,
+            0.299145
+          ]
+        },
+        "verification_claim": {
+          "denominator": 9,
+          "numerator": 0,
+          "rate": 0.0,
+          "wilson_95": [
+            0.0,
+            0.299145
+          ]
+        }
+      },
+      "perf": {
+        "any_claim": {
+          "denominator": 92,
+          "numerator": 12,
+          "rate": 0.130435,
+          "wilson_95": [
+            0.076215,
+            0.21428
+          ]
+        },
+        "body_present": {
+          "denominator": 92,
+          "numerator": 91,
+          "rate": 0.98913,
+          "wilson_95": [
+            0.940972,
+            0.998079
+          ]
+        },
+        "closed_unmerged": {
+          "denominator": 92,
+          "numerator": 30,
+          "rate": 0.326087,
+          "wilson_95": [
+            0.238948,
+            0.427167
+          ]
+        },
+        "completion_claim": {
+          "denominator": 92,
+          "numerator": 8,
+          "rate": 0.086957,
+          "wilson_95": [
+            0.044721,
+            0.162303
+          ]
+        },
+        "merge_rate_given_claim": {
+          "denominator": 12,
+          "numerator": 5,
+          "rate": 0.416667,
+          "wilson_95": [
+            0.19326,
+            0.680489
+          ]
+        },
+        "merge_rate_without_claim": {
+          "denominator": 80,
+          "numerator": 46,
+          "rate": 0.575,
+          "wilson_95": [
+            0.465693,
+            0.677434
+          ]
+        },
+        "merged": {
+          "denominator": 92,
+          "numerator": 51,
+          "rate": 0.554348,
+          "wilson_95": [
+            0.452637,
+            0.651702
+          ]
+        },
+        "n": 92,
+        "resolved_merge_rate": {
+          "denominator": 81,
+          "numerator": 51,
+          "rate": 0.62963,
+          "wilson_95": [
+            0.520837,
+            0.726683
+          ]
+        },
+        "strong_claim": {
+          "denominator": 92,
+          "numerator": 3,
+          "rate": 0.032609,
+          "wilson_95": [
+            0.011151,
+            0.091534
+          ]
+        },
+        "verification_claim": {
+          "denominator": 92,
+          "numerator": 7,
+          "rate": 0.076087,
+          "wilson_95": [
+            0.037344,
+            0.148812
+          ]
+        }
+      },
+      "refactor": {
+        "any_claim": {
+          "denominator": 656,
+          "numerator": 77,
+          "rate": 0.117378,
+          "wilson_95": [
+            0.094946,
+            0.144265
+          ]
+        },
+        "body_present": {
+          "denominator": 656,
+          "numerator": 651,
+          "rate": 0.992378,
+          "wilson_95": [
+            0.982283,
+            0.99674
+          ]
+        },
+        "closed_unmerged": {
+          "denominator": 656,
+          "numerator": 164,
+          "rate": 0.25,
+          "wilson_95": [
+            0.218384,
+            0.284527
+          ]
+        },
+        "completion_claim": {
+          "denominator": 656,
+          "numerator": 28,
+          "rate": 0.042683,
+          "wilson_95": [
+            0.029694,
+            0.060997
+          ]
+        },
+        "merge_rate_given_claim": {
+          "denominator": 77,
+          "numerator": 40,
+          "rate": 0.519481,
+          "wilson_95": [
+            0.40964,
+            0.62747
+          ]
+        },
+        "merge_rate_without_claim": {
+          "denominator": 579,
+          "numerator": 407,
+          "rate": 0.702936,
+          "wilson_95": [
+            0.664476,
+            0.738721
+          ]
+        },
+        "merged": {
+          "denominator": 656,
+          "numerator": 447,
+          "rate": 0.681402,
+          "wilson_95": [
+            0.64478,
+            0.715913
+          ]
+        },
+        "n": 656,
+        "resolved_merge_rate": {
+          "denominator": 611,
+          "numerator": 447,
+          "rate": 0.731588,
+          "wilson_95": [
+            0.695084,
+            0.765197
+          ]
+        },
+        "strong_claim": {
+          "denominator": 656,
+          "numerator": 12,
+          "rate": 0.018293,
+          "wilson_95": [
+            0.010495,
+            0.0317
+          ]
+        },
+        "verification_claim": {
+          "denominator": 656,
+          "numerator": 57,
+          "rate": 0.08689,
+          "wilson_95": [
+            0.067669,
+            0.110921
+          ]
+        }
+      },
+      "revert": {
+        "any_claim": {
+          "denominator": 4,
+          "numerator": 1,
+          "rate": 0.25,
+          "wilson_95": [
+            0.045587,
+            0.699358
+          ]
+        },
+        "body_present": {
+          "denominator": 4,
+          "numerator": 4,
+          "rate": 1.0,
+          "wilson_95": [
+            0.510109,
+            1.0
+          ]
+        },
+        "closed_unmerged": {
+          "denominator": 4,
+          "numerator": 0,
+          "rate": 0.0,
+          "wilson_95": [
+            0.0,
+            0.489891
+          ]
+        },
+        "completion_claim": {
+          "denominator": 4,
+          "numerator": 0,
+          "rate": 0.0,
+          "wilson_95": [
+            0.0,
+            0.489891
+          ]
+        },
+        "merge_rate_given_claim": {
+          "denominator": 1,
+          "numerator": 1,
+          "rate": 1.0,
+          "wilson_95": [
+            0.206549,
+            1.0
+          ]
+        },
+        "merge_rate_without_claim": {
+          "denominator": 3,
+          "numerator": 3,
+          "rate": 1.0,
+          "wilson_95": [
+            0.438503,
+            1.0
+          ]
+        },
+        "merged": {
+          "denominator": 4,
+          "numerator": 4,
+          "rate": 1.0,
+          "wilson_95": [
+            0.510109,
+            1.0
+          ]
+        },
+        "n": 4,
+        "resolved_merge_rate": {
+          "denominator": 4,
+          "numerator": 4,
+          "rate": 1.0,
+          "wilson_95": [
+            0.510109,
+            1.0
+          ]
+        },
+        "strong_claim": {
+          "denominator": 4,
+          "numerator": 0,
+          "rate": 0.0,
+          "wilson_95": [
+            0.0,
+            0.489891
+          ]
+        },
+        "verification_claim": {
+          "denominator": 4,
+          "numerator": 1,
+          "rate": 0.25,
+          "wilson_95": [
+            0.045587,
+            0.699358
+          ]
+        }
+      },
+      "style": {
+        "any_claim": {
+          "denominator": 49,
+          "numerator": 3,
+          "rate": 0.061224,
+          "wilson_95": [
+            0.02104,
+            0.165205
+          ]
+        },
+        "body_present": {
+          "denominator": 49,
+          "numerator": 49,
+          "rate": 1.0,
+          "wilson_95": [
+            0.927302,
+            1.0
+          ]
+        },
+        "closed_unmerged": {
+          "denominator": 49,
+          "numerator": 9,
+          "rate": 0.183673,
+          "wilson_95": [
+            0.099763,
+            0.313576
+          ]
+        },
+        "completion_claim": {
+          "denominator": 49,
+          "numerator": 1,
+          "rate": 0.020408,
+          "wilson_95": [
+            0.003612,
+            0.106935
+          ]
+        },
+        "merge_rate_given_claim": {
+          "denominator": 3,
+          "numerator": 2,
+          "rate": 0.666667,
+          "wilson_95": [
+            0.20766,
+            0.938508
+          ]
+        },
+        "merge_rate_without_claim": {
+          "denominator": 46,
+          "numerator": 35,
+          "rate": 0.76087,
+          "wilson_95": [
+            0.620649,
+            0.860878
+          ]
+        },
+        "merged": {
+          "denominator": 49,
+          "numerator": 37,
+          "rate": 0.755102,
+          "wilson_95": [
+            0.619137,
+            0.853977
+          ]
+        },
+        "n": 49,
+        "resolved_merge_rate": {
+          "denominator": 46,
+          "numerator": 37,
+          "rate": 0.804348,
+          "wilson_95": [
+            0.668287,
+            0.893494
+          ]
+        },
+        "strong_claim": {
+          "denominator": 49,
+          "numerator": 0,
+          "rate": 0.0,
+          "wilson_95": [
+            0.0,
+            0.072698
+          ]
+        },
+        "verification_claim": {
+          "denominator": 49,
+          "numerator": 2,
+          "rate": 0.040816,
+          "wilson_95": [
+            0.011266,
+            0.13713
+          ]
+        }
+      },
+      "test": {
+        "any_claim": {
+          "denominator": 728,
+          "numerator": 30,
+          "rate": 0.041209,
+          "wilson_95": [
+            0.029016,
+            0.058218
+          ]
+        },
+        "body_present": {
+          "denominator": 728,
+          "numerator": 720,
+          "rate": 0.989011,
+          "wilson_95": [
+            0.978467,
+            0.994421
+          ]
+        },
+        "closed_unmerged": {
+          "denominator": 728,
+          "numerator": 137,
+          "rate": 0.188187,
+          "wilson_95": [
+            0.161458,
+            0.218189
+          ]
+        },
+        "completion_claim": {
+          "denominator": 728,
+          "numerator": 16,
+          "rate": 0.021978,
+          "wilson_95": [
+            0.013573,
+            0.035402
+          ]
+        },
+        "merge_rate_given_claim": {
+          "denominator": 30,
+          "numerator": 15,
+          "rate": 0.5,
+          "wilson_95": [
+            0.331541,
+            0.668459
+          ]
+        },
+        "merge_rate_without_claim": {
+          "denominator": 698,
+          "numerator": 543,
+          "rate": 0.777937,
+          "wilson_95": [
+            0.745629,
+            0.807203
+          ]
+        },
+        "merged": {
+          "denominator": 728,
+          "numerator": 558,
+          "rate": 0.766484,
+          "wilson_95": [
+            0.734401,
+            0.795768
+          ]
+        },
+        "n": 728,
+        "resolved_merge_rate": {
+          "denominator": 695,
+          "numerator": 558,
+          "rate": 0.802878,
+          "wilson_95": [
+            0.771671,
+            0.830755
+          ]
+        },
+        "strong_claim": {
+          "denominator": 728,
+          "numerator": 7,
+          "rate": 0.009615,
+          "wilson_95": [
+            0.004665,
+            0.019714
+          ]
+        },
+        "verification_claim": {
+          "denominator": 728,
+          "numerator": 20,
+          "rate": 0.027473,
+          "wilson_95": [
+            0.017853,
+            0.042052
+          ]
+        }
+      }
+    },
+    "status": "lexical feasibility rule; construct validation required before confirmatory use"
+  },
+  "dataset": {
+    "license": "CC-BY-4.0",
+    "repository": "hao-li/AIDev",
+    "revision": "68ed5f4b80d27a9e057fc57567f38bd322ac73ec",
+    "table_sha256": {
+      "human_pr_task_type.parquet": "5527d52bfd9605a25d1ed1ef03bce0e1cc217f6ffed936e2be1b80a04123e658",
+      "human_pull_request.parquet": "910238f8fe5deb544ae82be343232ff6838f271f3de4b4e4787a515336a91248",
+      "pr_commits.parquet": "339228e250d420cd20ffe4b90583d57040263427ea605c1c039631b8ca2bfb4f",
+      "pr_reviews.parquet": "3b7996c6365000e9e7f91bb428ecff78b36290997bee4732e840b0f5cdce70f5",
+      "pr_task_type.parquet": "f32a97a45ac944f4ea473327e62d8f41361502c2b6b3778e76fb64c2b8896476",
+      "pr_timeline.parquet": "9f45c52c0a7ffa4395ea6c7ce5beb993b3dfb2425ef3848c6d28e2e96471a6f8",
+      "pull_request.parquet": "08f520b5ef36b6281f82090db09ac14aefc3534ee113886e7bc85131fd8d214c"
+    }
+  },
+  "outcome_observability": {
+    "closed_unmerged": {
+      "available": true,
+      "sample_closed_unmerged": 2182
+    },
+    "merge_status": {
+      "available": true,
+      "sample_merged": 7136
+    },
+    "post_merge_revert": {
+      "available": false,
+      "committed_events_in_sample": 24310,
+      "committed_events_with_timestamp": 0,
+      "reason": "committed timeline events lack timestamps and the supplied tables do not link later revert PRs to the merged PR"
+    },
+    "reviews": {
+      "available": true,
+      "sample_with_changes_requested": 322,
+      "sample_with_review": 2523
+    },
+    "within_pr_revert_marker": {
+      "available": true,
+      "interpretation": "lexical marker inside the same PR, not a post-merge revert",
+      "sample_prs": 303
+    }
+  },
+  "p3_decision": {
+    "completion_claim_extractable": true,
+    "design_action": "Use merge/closed-unmerged and changes-requested as field outcomes; exclude post-merge revert until a separately timestamped cross-PR linkage is mined.",
+    "human_baseline_comparable": true,
+    "merge_and_change_request_outcomes_extractable": true,
+    "post_merge_revert_extractable": false
+  },
+  "privacy": {
+    "aggregate_only": true,
+    "raw_text_written": false,
+    "user_or_repository_identifiers_written": false
+  },
+  "sampling": {
+    "method": "lowest SHA-256(seed + ':' + PR id), without replacement",
+    "population": 33596,
+    "sample_size": 10000,
+    "seed": "loop-engineering-aidev-pilot-v1"
+  },
+  "schema_version": 1
+}

@@ -1,0 +1,608 @@
+{
+  "factorization": {
+    "feedback": [
+      "numeric",
+      "sign"
+    ],
+    "gate_grounded": [
+      true,
+      false
+    ]
+  },
+  "results": [
+    {
+      "baseline_score": 0.111111,
+      "cell": {
+        "feedback": "numeric",
+        "gate_grounded": true,
+        "name": "grounded-numeric"
+      },
+      "final_deployed_score": 1.0,
+      "gain_per_1000_tokens": 2.116402,
+      "gain_per_usd": 296.296333,
+      "real_gain": 0.888889,
+      "rows": [
+        {
+          "accepted": false,
+          "candidate": "cosmetic-comment",
+          "claim_improved": true,
+          "cost": {
+            "agent_seconds": 0.00832686701323837,
+            "input_tokens": 100,
+            "judge_seconds": 0.0,
+            "oracle_seconds": 0.5288002359448001,
+            "output_tokens": 50,
+            "usd": 0.001
+          },
+          "cycle": 1,
+          "deployed_score": 0.111111,
+          "feedback": "{\"accepted\": false, \"metrics\": {\"canary_leak\": false, \"failure_count\": 8, \"hidden_passed\": 1, \"hidden_total\": 9}, \"oracle_delta\": 0.0}",
+          "metrics": {
+            "canary_leak": false,
+            "failure_count": 8,
+            "hidden_passed": 1,
+            "hidden_total": 9
+          },
+          "oracle_delta": 0.0,
+          "oracle_score": 0.111111
+        },
+        {
+          "accepted": true,
+          "candidate": "numeric-version-fix",
+          "claim_improved": true,
+          "cost": {
+            "agent_seconds": 0.0005164219764992595,
+            "input_tokens": 180,
+            "judge_seconds": 0.0,
+            "oracle_seconds": 0.4069502499769442,
+            "output_tokens": 90,
+            "usd": 0.002
+          },
+          "cycle": 2,
+          "deployed_score": 1.0,
+          "feedback": "{\"accepted\": true, \"metrics\": {\"canary_leak\": false, \"failure_count\": 0, \"hidden_passed\": 9, \"hidden_total\": 9}, \"oracle_delta\": 0.888889}",
+          "metrics": {
+            "canary_leak": false,
+            "failure_count": 0,
+            "hidden_passed": 9,
+            "hidden_total": 9
+          },
+          "oracle_delta": 0.888889,
+          "oracle_score": 1.0
+        }
+      ],
+      "status": "apparatus smoke test; not a research result",
+      "task": "s1",
+      "total_cost": {
+        "agent_seconds": 0.00884328898973763,
+        "input_tokens": 280,
+        "judge_seconds": 0.0,
+        "oracle_seconds": 1.3169652139185928,
+        "output_tokens": 140,
+        "usd": 0.003
+      }
+    },
+    {
+      "baseline_score": 0.111111,
+      "cell": {
+        "feedback": "sign",
+        "gate_grounded": true,
+        "name": "grounded-sign"
+      },
+      "final_deployed_score": 1.0,
+      "gain_per_1000_tokens": 2.116402,
+      "gain_per_usd": 296.296333,
+      "real_gain": 0.888889,
+      "rows": [
+        {
+          "accepted": false,
+          "candidate": "cosmetic-comment",
+          "claim_improved": true,
+          "cost": {
+            "agent_seconds": 0.0004631400224752724,
+            "input_tokens": 100,
+            "judge_seconds": 0.0,
+            "oracle_seconds": 0.4129859870299697,
+            "output_tokens": 50,
+            "usd": 0.001
+          },
+          "cycle": 1,
+          "deployed_score": 0.111111,
+          "feedback": "rejected: outcome did not improve",
+          "metrics": {
+            "canary_leak": false,
+            "failure_count": 8,
+            "hidden_passed": 1,
+            "hidden_total": 9
+          },
+          "oracle_delta": 0.0,
+          "oracle_score": 0.111111
+        },
+        {
+          "accepted": true,
+          "candidate": "numeric-version-fix",
+          "claim_improved": true,
+          "cost": {
+            "agent_seconds": 0.0003487220383249223,
+            "input_tokens": 180,
+            "judge_seconds": 0.0,
+            "oracle_seconds": 0.3414110690355301,
+            "output_tokens": 90,
+            "usd": 0.002
+          },
+          "cycle": 2,
+          "deployed_score": 1.0,
+          "feedback": "accepted: outcome improved",
+          "metrics": {
+            "canary_leak": false,
+            "failure_count": 0,
+            "hidden_passed": 9,
+            "hidden_total": 9
+          },
+          "oracle_delta": 0.888889,
+          "oracle_score": 1.0
+        }
+      ],
+      "status": "apparatus smoke test; not a research result",
+      "task": "s1",
+      "total_cost": {
+        "agent_seconds": 0.0008118620608001947,
+        "input_tokens": 280,
+        "judge_seconds": 0.0,
+        "oracle_seconds": 1.1762858860893175,
+        "output_tokens": 140,
+        "usd": 0.003
+      }
+    },
+    {
+      "baseline_score": 0.111111,
+      "cell": {
+        "feedback": "numeric",
+        "gate_grounded": false,
+        "name": "ungrounded-numeric"
+      },
+      "final_deployed_score": 1.0,
+      "gain_per_1000_tokens": 2.116402,
+      "gain_per_usd": 296.296333,
+      "real_gain": 0.888889,
+      "rows": [
+        {
+          "accepted": true,
+          "candidate": "cosmetic-comment",
+          "claim_improved": true,
+          "cost": {
+            "agent_seconds": 0.0005321149947121739,
+            "input_tokens": 100,
+            "judge_seconds": 0.0,
+            "oracle_seconds": 0.5729742919793352,
+            "output_tokens": 50,
+            "usd": 0.001
+          },
+          "cycle": 1,
+          "deployed_score": 0.111111,
+          "feedback": "{\"accepted\": true, \"metrics\": {\"canary_leak\": false, \"failure_count\": 8, \"hidden_passed\": 1, \"hidden_total\": 9}, \"oracle_delta\": 0.0}",
+          "metrics": {
+            "canary_leak": false,
+            "failure_count": 8,
+            "hidden_passed": 1,
+            "hidden_total": 9
+          },
+          "oracle_delta": 0.0,
+          "oracle_score": 0.111111
+        },
+        {
+          "accepted": true,
+          "candidate": "numeric-version-fix",
+          "claim_improved": true,
+          "cost": {
+            "agent_seconds": 0.00047936802729964256,
+            "input_tokens": 180,
+            "judge_seconds": 0.0,
+            "oracle_seconds": 0.48688024398870766,
+            "output_tokens": 90,
+            "usd": 0.002
+          },
+          "cycle": 2,
+          "deployed_score": 1.0,
+          "feedback": "{\"accepted\": true, \"metrics\": {\"canary_leak\": false, \"failure_count\": 0, \"hidden_passed\": 9, \"hidden_total\": 9}, \"oracle_delta\": 0.888889}",
+          "metrics": {
+            "canary_leak": false,
+            "failure_count": 0,
+            "hidden_passed": 9,
+            "hidden_total": 9
+          },
+          "oracle_delta": 0.888889,
+          "oracle_score": 1.0
+        }
+      ],
+      "status": "apparatus smoke test; not a research result",
+      "task": "s1",
+      "total_cost": {
+        "agent_seconds": 0.0010114830220118165,
+        "input_tokens": 280,
+        "judge_seconds": 0.0,
+        "oracle_seconds": 1.4118101639323868,
+        "output_tokens": 140,
+        "usd": 0.003
+      }
+    },
+    {
+      "baseline_score": 0.111111,
+      "cell": {
+        "feedback": "sign",
+        "gate_grounded": false,
+        "name": "ungrounded-sign"
+      },
+      "final_deployed_score": 1.0,
+      "gain_per_1000_tokens": 2.116402,
+      "gain_per_usd": 296.296333,
+      "real_gain": 0.888889,
+      "rows": [
+        {
+          "accepted": true,
+          "candidate": "cosmetic-comment",
+          "claim_improved": true,
+          "cost": {
+            "agent_seconds": 0.0005317599861882627,
+            "input_tokens": 100,
+            "judge_seconds": 0.0,
+            "oracle_seconds": 0.36808338400442153,
+            "output_tokens": 50,
+            "usd": 0.001
+          },
+          "cycle": 1,
+          "deployed_score": 0.111111,
+          "feedback": "accepted: outcome improved",
+          "metrics": {
+            "canary_leak": false,
+            "failure_count": 8,
+            "hidden_passed": 1,
+            "hidden_total": 9
+          },
+          "oracle_delta": 0.0,
+          "oracle_score": 0.111111
+        },
+        {
+          "accepted": true,
+          "candidate": "numeric-version-fix",
+          "claim_improved": true,
+          "cost": {
+            "agent_seconds": 0.0003844140446744859,
+            "input_tokens": 180,
+            "judge_seconds": 0.0,
+            "oracle_seconds": 0.4045568179572001,
+            "output_tokens": 90,
+            "usd": 0.002
+          },
+          "cycle": 2,
+          "deployed_score": 1.0,
+          "feedback": "accepted: outcome improved",
+          "metrics": {
+            "canary_leak": false,
+            "failure_count": 0,
+            "hidden_passed": 9,
+            "hidden_total": 9
+          },
+          "oracle_delta": 0.888889,
+          "oracle_score": 1.0
+        }
+      ],
+      "status": "apparatus smoke test; not a research result",
+      "task": "s1",
+      "total_cost": {
+        "agent_seconds": 0.0009161740308627486,
+        "input_tokens": 280,
+        "judge_seconds": 0.0,
+        "oracle_seconds": 1.2837777549866587,
+        "output_tokens": 140,
+        "usd": 0.003
+      }
+    },
+    {
+      "baseline_score": 0.0,
+      "cell": {
+        "feedback": "numeric",
+        "gate_grounded": true,
+        "name": "grounded-numeric"
+      },
+      "final_deployed_score": 99.67,
+      "gain_per_1000_tokens": 237.309524,
+      "gain_per_usd": 33223.333333,
+      "real_gain": 99.67,
+      "rows": [
+        {
+          "accepted": false,
+          "candidate": "cosmetic-comment",
+          "claim_improved": true,
+          "cost": {
+            "agent_seconds": 0.0006622329819947481,
+            "input_tokens": 100,
+            "judge_seconds": 0.0,
+            "oracle_seconds": 0.38636226300150156,
+            "output_tokens": 50,
+            "usd": 0.001
+          },
+          "cycle": 1,
+          "deployed_score": 0.0,
+          "feedback": "{\"accepted\": false, \"metrics\": {\"canary_leak\": false, \"error_rate\": 0.4, \"errors\": 48, \"p95_logical_work_units\": 7921, \"requests\": 120, \"restarts\": 15}, \"oracle_delta\": 0.0}",
+          "metrics": {
+            "canary_leak": false,
+            "error_rate": 0.4,
+            "errors": 48,
+            "p95_logical_work_units": 7921,
+            "requests": 120,
+            "restarts": 15
+          },
+          "oracle_delta": 0.0,
+          "oracle_score": 0.0
+        },
+        {
+          "accepted": true,
+          "candidate": "bounded-work-handler",
+          "claim_improved": true,
+          "cost": {
+            "agent_seconds": 0.0005226529901847243,
+            "input_tokens": 180,
+            "judge_seconds": 0.0,
+            "oracle_seconds": 0.47827708203112707,
+            "output_tokens": 90,
+            "usd": 0.002
+          },
+          "cycle": 2,
+          "deployed_score": 99.67,
+          "feedback": "{\"accepted\": true, \"metrics\": {\"canary_leak\": false, \"error_rate\": 0.0, \"errors\": 0, \"p95_logical_work_units\": 33, \"requests\": 120, \"restarts\": 0}, \"oracle_delta\": 99.67}",
+          "metrics": {
+            "canary_leak": false,
+            "error_rate": 0.0,
+            "errors": 0,
+            "p95_logical_work_units": 33,
+            "requests": 120,
+            "restarts": 0
+          },
+          "oracle_delta": 99.67,
+          "oracle_score": 99.67
+        }
+      ],
+      "status": "apparatus smoke test; not a research result",
+      "task": "s3",
+      "total_cost": {
+        "agent_seconds": 0.0011848859721794724,
+        "input_tokens": 280,
+        "judge_seconds": 0.0,
+        "oracle_seconds": 1.297929473046679,
+        "output_tokens": 140,
+        "usd": 0.003
+      }
+    },
+    {
+      "baseline_score": 0.0,
+      "cell": {
+        "feedback": "sign",
+        "gate_grounded": true,
+        "name": "grounded-sign"
+      },
+      "final_deployed_score": 99.67,
+      "gain_per_1000_tokens": 237.309524,
+      "gain_per_usd": 33223.333333,
+      "real_gain": 99.67,
+      "rows": [
+        {
+          "accepted": false,
+          "candidate": "cosmetic-comment",
+          "claim_improved": true,
+          "cost": {
+            "agent_seconds": 0.0006341509870253503,
+            "input_tokens": 100,
+            "judge_seconds": 0.0,
+            "oracle_seconds": 0.38902841397793964,
+            "output_tokens": 50,
+            "usd": 0.001
+          },
+          "cycle": 1,
+          "deployed_score": 0.0,
+          "feedback": "rejected: outcome did not improve",
+          "metrics": {
+            "canary_leak": false,
+            "error_rate": 0.4,
+            "errors": 48,
+            "p95_logical_work_units": 7921,
+            "requests": 120,
+            "restarts": 15
+          },
+          "oracle_delta": 0.0,
+          "oracle_score": 0.0
+        },
+        {
+          "accepted": true,
+          "candidate": "bounded-work-handler",
+          "claim_improved": true,
+          "cost": {
+            "agent_seconds": 0.000530285993590951,
+            "input_tokens": 180,
+            "judge_seconds": 0.0,
+            "oracle_seconds": 0.47985285305185243,
+            "output_tokens": 90,
+            "usd": 0.002
+          },
+          "cycle": 2,
+          "deployed_score": 99.67,
+          "feedback": "accepted: outcome improved",
+          "metrics": {
+            "canary_leak": false,
+            "error_rate": 0.0,
+            "errors": 0,
+            "p95_logical_work_units": 33,
+            "requests": 120,
+            "restarts": 0
+          },
+          "oracle_delta": 99.67,
+          "oracle_score": 99.67
+        }
+      ],
+      "status": "apparatus smoke test; not a research result",
+      "task": "s3",
+      "total_cost": {
+        "agent_seconds": 0.0011644369806163013,
+        "input_tokens": 280,
+        "judge_seconds": 0.0,
+        "oracle_seconds": 1.4947945770109072,
+        "output_tokens": 140,
+        "usd": 0.003
+      }
+    },
+    {
+      "baseline_score": 0.0,
+      "cell": {
+        "feedback": "numeric",
+        "gate_grounded": false,
+        "name": "ungrounded-numeric"
+      },
+      "final_deployed_score": 99.67,
+      "gain_per_1000_tokens": 237.309524,
+      "gain_per_usd": 33223.333333,
+      "real_gain": 99.67,
+      "rows": [
+        {
+          "accepted": true,
+          "candidate": "cosmetic-comment",
+          "claim_improved": true,
+          "cost": {
+            "agent_seconds": 0.00048093596706166863,
+            "input_tokens": 100,
+            "judge_seconds": 0.0,
+            "oracle_seconds": 0.3048659269697964,
+            "output_tokens": 50,
+            "usd": 0.001
+          },
+          "cycle": 1,
+          "deployed_score": 0.0,
+          "feedback": "{\"accepted\": true, \"metrics\": {\"canary_leak\": false, \"error_rate\": 0.4, \"errors\": 48, \"p95_logical_work_units\": 7921, \"requests\": 120, \"restarts\": 15}, \"oracle_delta\": 0.0}",
+          "metrics": {
+            "canary_leak": false,
+            "error_rate": 0.4,
+            "errors": 48,
+            "p95_logical_work_units": 7921,
+            "requests": 120,
+            "restarts": 15
+          },
+          "oracle_delta": 0.0,
+          "oracle_score": 0.0
+        },
+        {
+          "accepted": true,
+          "candidate": "bounded-work-handler",
+          "claim_improved": true,
+          "cost": {
+            "agent_seconds": 0.00037752999924123287,
+            "input_tokens": 180,
+            "judge_seconds": 0.0,
+            "oracle_seconds": 0.3205356190446764,
+            "output_tokens": 90,
+            "usd": 0.002
+          },
+          "cycle": 2,
+          "deployed_score": 99.67,
+          "feedback": "{\"accepted\": true, \"metrics\": {\"canary_leak\": false, \"error_rate\": 0.0, \"errors\": 0, \"p95_logical_work_units\": 33, \"requests\": 120, \"restarts\": 0}, \"oracle_delta\": 99.67}",
+          "metrics": {
+            "canary_leak": false,
+            "error_rate": 0.0,
+            "errors": 0,
+            "p95_logical_work_units": 33,
+            "requests": 120,
+            "restarts": 0
+          },
+          "oracle_delta": 99.67,
+          "oracle_score": 99.67
+        }
+      ],
+      "status": "apparatus smoke test; not a research result",
+      "task": "s3",
+      "total_cost": {
+        "agent_seconds": 0.0008584659663029015,
+        "input_tokens": 280,
+        "judge_seconds": 0.0,
+        "oracle_seconds": 1.163391356007196,
+        "output_tokens": 140,
+        "usd": 0.003
+      }
+    },
+    {
+      "baseline_score": 0.0,
+      "cell": {
+        "feedback": "sign",
+        "gate_grounded": false,
+        "name": "ungrounded-sign"
+      },
+      "final_deployed_score": 99.67,
+      "gain_per_1000_tokens": 237.309524,
+      "gain_per_usd": 33223.333333,
+      "real_gain": 99.67,
+      "rows": [
+        {
+          "accepted": true,
+          "candidate": "cosmetic-comment",
+          "claim_improved": true,
+          "cost": {
+            "agent_seconds": 0.0005079059628769755,
+            "input_tokens": 100,
+            "judge_seconds": 0.0,
+            "oracle_seconds": 0.3214071490219794,
+            "output_tokens": 50,
+            "usd": 0.001
+          },
+          "cycle": 1,
+          "deployed_score": 0.0,
+          "feedback": "accepted: outcome improved",
+          "metrics": {
+            "canary_leak": false,
+            "error_rate": 0.4,
+            "errors": 48,
+            "p95_logical_work_units": 7921,
+            "requests": 120,
+            "restarts": 15
+          },
+          "oracle_delta": 0.0,
+          "oracle_score": 0.0
+        },
+        {
+          "accepted": true,
+          "candidate": "bounded-work-handler",
+          "claim_improved": true,
+          "cost": {
+            "agent_seconds": 0.0005554230301640928,
+            "input_tokens": 180,
+            "judge_seconds": 0.0,
+            "oracle_seconds": 0.5409147820319049,
+            "output_tokens": 90,
+            "usd": 0.002
+          },
+          "cycle": 2,
+          "deployed_score": 99.67,
+          "feedback": "accepted: outcome improved",
+          "metrics": {
+            "canary_leak": false,
+            "error_rate": 0.0,
+            "errors": 0,
+            "p95_logical_work_units": 33,
+            "requests": 120,
+            "restarts": 0
+          },
+          "oracle_delta": 99.67,
+          "oracle_score": 99.67
+        }
+      ],
+      "status": "apparatus smoke test; not a research result",
+      "task": "s3",
+      "total_cost": {
+        "agent_seconds": 0.0010633289930410683,
+        "input_tokens": 280,
+        "judge_seconds": 0.0,
+        "oracle_seconds": 1.2935317980591208,
+        "output_tokens": 140,
+        "usd": 0.003
+      }
+    }
+  ],
+  "schema_version": 1,
+  "status": "apparatus smoke test; not a research result"
+}
