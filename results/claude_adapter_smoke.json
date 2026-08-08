@@ -7,11 +7,13 @@
   ],
   "cost": {
     "agent_seconds": 23.567365,
+    "billing_mode": "subscription",
     "cache_tokens": 138240,
+    "cli_reported_usd": 0.086998,
     "input_tokens": 9,
+    "incremental_billed_usd": 0.0,
     "oracle_seconds": 0.695493,
-    "output_tokens": 894,
-    "usd": 0.086998
+    "output_tokens": 894
   },
   "execution": {
     "api_error_status": null,
@@ -27,7 +29,7 @@
     "returncode": 0
   },
   "real_gain": 0.888889,
-  "schema_version": 1,
+  "schema_version": 2,
   "status": "adapter smoke test; not a research result",
   "task": "s1"
 }

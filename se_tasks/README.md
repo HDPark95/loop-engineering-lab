@@ -32,8 +32,9 @@ exercise both oracles and all four factor cells with scripted candidates.
 
 Use `agent_adapters.py` for a disposable one-shot protocol check with either
 Codex or Claude Code. The command records only aggregate score, changed file
-names, timing, tokens, and reported cost; it discards model text and source
-changes. Alias or session-default model selections are acceptable only for an
+names, timing, tokens, billing mode, CLI-reported API-price-equivalent cost,
+and incremental billed cost; it discards model text and source changes. Alias
+or session-default model selections are acceptable only for an
 apparatus smoke. Confirmatory runs require an immutable model identifier and a
 frozen total cost ceiling in the preregistration.
 
@@ -51,6 +52,8 @@ research host.
 The committed adapter smokes are operational records, not study data. Codex
 completed S1 in the task-only container and improved the held-out score from
 0.111111 to 1.0. Claude completed the same task-only-container protocol and
-also improved the score from 0.111111 to 1.0, with a reported cost of 0.086998
-USD. Both source changes were discarded after scoring. This satisfies the
+also improved the score from 0.111111 to 1.0. Claude Code reported 0.086998 USD
+as an API-price-equivalent estimate, but the run used Max 20x subscription
+OAuth and therefore incurred 0 USD in incremental billing while consuming plan
+quota. Both source changes were discarded after scoring. This satisfies the
 adapter protocol smoke gate but is not a confirmatory model comparison.
