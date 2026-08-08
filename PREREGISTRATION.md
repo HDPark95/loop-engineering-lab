@@ -215,9 +215,9 @@ All boxes must be satisfied in one commit before confirmatory execution:
 
 - [ ] two-annotator claim coding reaches the 0.80 precision/recall thresholds;
 - [ ] confirmatory AIDev IDs are locked without outcome inspection;
-- [ ] S1 and S3 public tests, held-out oracles, and canaries are versioned;
-- [ ] container mount and network proofs pass on the measurement host;
-- [ ] two agent adapters pass the same protocol smoke test;
+- [x] S1 and S3 public tests, held-out oracles, and canaries are versioned;
+- [x] container mount and network proofs pass on the measurement host;
+- [x] two agent adapters pass the same protocol smoke test;
 - [ ] model identifiers, prices, seeds, and the 960-cycle budget are filled in;
 - [ ] cost ceiling is approved;
 - [ ] this commit hash is recorded in the manuscript and run manifest.
@@ -237,3 +237,5 @@ apparatus validation and not confirmatory evidence.
   with the primary 2x2 factorization.
 - R5 (2026-08-08): mechanized token, time, dollar, and break-even outcomes for
   the original HA2 cost hypothesis.
+- R6 (2026-08-08): validated both agent adapters on S1 in task-only Docker
+  containers; each improved the held-out score from 0.111111 to 1.0.
