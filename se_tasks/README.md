@@ -39,15 +39,18 @@ frozen total cost ceiling in the preregistration.
 
 When the host cannot create a nested CLI sandbox, pass `--container-image` plus
 either `--auth-file` or `--auth-env`. The adapter then uses the agent image as
-an external sandbox and mounts only the disposable task directory plus the
-read-only authentication file, or forwards the named environment variable
-without putting its value on the command line. It does not mount the repository
-or oracle. The bypass flag used inside that container must never be used
-directly on a research host.
+an external sandbox and mounts only the disposable task directory plus a
+mode-0600 copy of the authentication file in a disposable private directory,
+or forwards the named environment variable
+through a mode-0600 temporary environment file without putting its value on the
+command line. The file is outside the task mount and is deleted with the
+disposable run directory. The adapter does not mount the repository or oracle.
+The bypass flag used inside that container must never be used directly on a
+research host.
 
 The committed adapter smokes are operational records, not study data. Codex
 completed S1 in the task-only container and improved the held-out score from
-0.111111 to 1.0. Claude reached the host CLI protocol with the 0.25 USD ceiling
-but did not start a model turn because the available account returned a quota
-error; its recorded cost is 0 USD. The two-adapter freeze gate therefore
-remains open.
+0.111111 to 1.0. Claude completed the same task-only-container protocol and
+also improved the score from 0.111111 to 1.0, with a reported cost of 0.086998
+USD. Both source changes were discarded after scoring. This satisfies the
+adapter protocol smoke gate but is not a confirmatory model comparison.

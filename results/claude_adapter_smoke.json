@@ -1,30 +1,32 @@
 {
   "agent": "claude",
   "baseline_score": 0.111111,
-  "candidate_changed": false,
-  "changed_files": [],
+  "candidate_changed": true,
+  "changed_files": [
+    "versioning.py"
+  ],
   "cost": {
-    "agent_seconds": 6.808241,
-    "cache_tokens": 0,
-    "input_tokens": 0,
-    "oracle_seconds": 0.479279,
-    "output_tokens": 0,
-    "usd": 0
+    "agent_seconds": 23.567365,
+    "cache_tokens": 138240,
+    "input_tokens": 9,
+    "oracle_seconds": 0.695493,
+    "output_tokens": 894,
+    "usd": 0.086998
   },
   "execution": {
-    "api_error_status": 429,
-    "error_kind": "quota",
-    "model_completed": false
+    "api_error_status": null,
+    "error_kind": null,
+    "model_completed": true
   },
-  "final_score": 0.111111,
-  "isolation": "CLI sandbox",
+  "final_score": 1.0,
+  "isolation": "external Docker task-only mount",
   "model_requested": "sonnet",
-  "process_returncode": 1,
+  "process_returncode": 0,
   "public_tests": {
     "passed": true,
     "returncode": 0
   },
-  "real_gain": 0.0,
+  "real_gain": 0.888889,
   "schema_version": 1,
   "status": "adapter smoke test; not a research result",
   "task": "s1"

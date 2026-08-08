@@ -139,6 +139,8 @@ def container_command_for(
     auth_file: Path | None = None,
     auth_env: str | None = None,
     state_file: Path | None = None,
+    auth_env_file: Path | None = None,
+    auth_dir: Path | None = None,
 ) -> list[str]:
     """Build a CLI command for a container that sees only the task and auth."""
     common = [
@@ -146,7 +148,9 @@ def container_command_for(
         "run",
         "--rm",
         "--user",
-        "node",
+        f"{os.getuid()}:{os.getgid()}",
+        "--env",
+        "HOME=/tmp",
         "--network",
         "bridge",
         "--mount",
@@ -165,7 +169,7 @@ def container_command_for(
             "--cd",
             "/workspace",
         ]
-        target = "/home/node/.codex/auth.json"
+        target = "/tmp/.codex/auth.json"
     elif agent == "claude":
         inner = [
             "claude",
@@ -178,19 +182,24 @@ def container_command_for(
             "--output-format",
             "json",
         ]
-        target = "/home/node/.claude/.credentials.json"
+        target = "/tmp/.claude/.credentials.json"
     else:
         raise ValueError(f"unsupported agent: {agent}")
     if model:
         inner.extend(["--model", model])
     mounts = [*common]
-    if auth_file:
+    if auth_dir:
+        target_dir = "/tmp/.codex" if agent == "codex" else "/tmp/.claude"
+        mounts.extend(["--mount", f"type=bind,src={auth_dir.resolve()},dst={target_dir}"])
+    elif auth_file:
         mounts.extend(["--mount", f"type=bind,src={auth_file.resolve()},dst={target},readonly"])
-    if auth_env:
+    if auth_env_file:
+        mounts.extend(["--env-file", str(auth_env_file.resolve())])
+    elif auth_env:
         mounts.extend(["--env", auth_env])
     if agent == "claude" and state_file:
         mounts.extend(
-            ["--mount", f"type=bind,src={state_file.resolve()},dst=/home/node/.claude.json,readonly"]
+            ["--mount", f"type=bind,src={state_file.resolve()},dst=/tmp/.claude.json,readonly"]
         )
     return [
         *mounts,
@@ -267,6 +276,22 @@ def run_smoke(
         before_digest = tree_digest(workspace)
         baseline, baseline_seconds = se_experiment.run_oracle(task, workspace)
 
+        docker_auth_dir = None
+        if container_image and auth_file:
+            docker_auth_dir = Path(temp_root) / "docker-auth"
+            docker_auth_dir.mkdir(mode=0o700)
+            auth_name = "auth.json" if agent == "codex" else ".credentials.json"
+            auth_copy = docker_auth_dir / auth_name
+            shutil.copy2(auth_file, auth_copy)
+            auth_copy.chmod(0o600)
+        docker_auth_env_file = None
+        if container_image and auth_env:
+            docker_auth_env_file = Path(temp_root) / "docker-auth.env"
+            docker_auth_env_file.write_text(
+                f"{auth_env}={os.environ[auth_env]}\n", encoding="utf-8"
+            )
+            docker_auth_env_file.chmod(0o600)
+
         started = time.perf_counter()
         command = (
             container_command_for(
@@ -275,9 +300,11 @@ def run_smoke(
                 model,
                 max_budget_usd,
                 container_image,
-                auth_file,
-                auth_env,
+                None if docker_auth_dir else auth_file,
+                None if docker_auth_env_file else auth_env,
                 state_file,
+                docker_auth_env_file,
+                docker_auth_dir,
             )
             if container_image
             else command_for(agent, workspace, model, max_budget_usd)

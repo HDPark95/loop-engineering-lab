@@ -2,6 +2,7 @@
 """Unit tests for command construction and aggregate usage parsing."""
 
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -29,8 +30,10 @@ class AdapterTest(unittest.TestCase):
         )
         self.assertIn("--dangerously-bypass-approvals-and-sandbox", command)
         self.assertIn("type=bind,src=/tmp/work,dst=/workspace", command)
-        self.assertIn("type=bind,src=/tmp/auth.json,dst=/home/node/.codex/auth.json,readonly", command)
-        self.assertIn("node", command)
+        self.assertIn("type=bind,src=/tmp/auth.json,dst=/tmp/.codex/auth.json,readonly", command)
+        position = command.index("--user")
+        self.assertEqual(command[position + 1], f"{os.getuid()}:{os.getgid()}")
+        self.assertIn("HOME=/tmp", command)
         self.assertNotIn("/oracle", " ".join(command))
 
     def test_codex_usage_parser(self):
@@ -77,15 +80,40 @@ class AdapterTest(unittest.TestCase):
             None,
             Path("/tmp/state.json"),
         )
-        self.assertIn("type=bind,src=/tmp/state.json,dst=/home/node/.claude.json,readonly", command)
+        self.assertIn("type=bind,src=/tmp/state.json,dst=/tmp/.claude.json,readonly", command)
 
     def test_container_can_forward_auth_environment_by_name(self):
         command = agent_adapters.container_command_for(
             "claude", Path("/tmp/work"), "sonnet", 0.2, "agent-image", None, "ANTHROPIC_API_KEY"
         )
-        position = command.index("--env")
-        self.assertEqual(command[position + 1], "ANTHROPIC_API_KEY")
-        self.assertNotIn("=", command[position + 1])
+        position = command.index("ANTHROPIC_API_KEY")
+        self.assertEqual(command[position - 1], "--env")
+        self.assertNotIn("=", command[position])
+
+    def test_container_can_use_a_private_environment_file(self):
+        command = agent_adapters.container_command_for(
+            "claude",
+            Path("/tmp/work"),
+            "sonnet",
+            0.2,
+            "agent-image",
+            auth_env_file=Path("/tmp/private.env"),
+        )
+        position = command.index("--env-file")
+        self.assertEqual(command[position + 1], "/tmp/private.env")
+        self.assertNotIn("ANTHROPIC_API_KEY=", " ".join(command))
+
+    def test_container_can_mount_a_disposable_auth_directory(self):
+        command = agent_adapters.container_command_for(
+            "codex",
+            Path("/tmp/work"),
+            None,
+            0.2,
+            "agent-image",
+            auth_dir=Path("/tmp/private-auth"),
+        )
+        self.assertIn("type=bind,src=/tmp/private-auth,dst=/tmp/.codex", command)
+        self.assertNotIn("/home/", " ".join(command))
 
     def test_tree_digest_changes_with_contents(self):
         with tempfile.TemporaryDirectory() as temp_root:
