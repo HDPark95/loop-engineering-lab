@@ -6,6 +6,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import agent_adapters
 
@@ -76,6 +77,15 @@ class AdapterTest(unittest.TestCase):
     def test_unknown_cost_does_not_infer_incremental_billing(self):
         cost = agent_adapters.cost_fields(agent_adapters.Usage(30, 8, 4, None), "unknown")
         self.assertIsNone(cost["incremental_billed_usd"])
+
+    def test_invalid_billing_mode_fails_before_external_work(self):
+        with mock.patch.object(
+            agent_adapters.shutil, "which", side_effect=AssertionError("external work started")
+        ):
+            with self.assertRaisesRegex(ValueError, "unsupported billing mode"):
+                agent_adapters.run_smoke(
+                    "codex", "s1", None, 1, 0.2, billing_mode="unsupported"
+                )
 
     def test_claude_api_error_is_not_completion(self):
         output = json.dumps({"is_error": True, "api_error_status": 429, "result": "rate limited"})
