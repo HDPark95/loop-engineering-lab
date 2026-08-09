@@ -32,15 +32,21 @@ Raw parquet files are intentionally gitignored. The committed outputs contain
 aggregates only: no PR text, GitHub user name, repository name, URL, or numeric
 identifier is written.
 
-The preregistered human-validation gate has executable preparation and scoring
-tools. Preparation writes raw PR text only below the gitignored `data/`
-directory. Two annotators receive separate copies of the blinded packet; only
-the aggregate scorer output may be committed.
+The preregistered validation gate has executable preparation and scoring tools.
+Preparation writes raw PR text only below the gitignored `data/` directory. Each
+annotator receives a separate copy of the blinded packet; only the aggregate
+scorer output may be committed.
 
 ```sh
 .venv/bin/python analysis/prepare_claim_annotation.py \
   --data-dir data/aidev \
   --output-dir data/claim_annotation
+.venv/bin/python analysis/llm_annotate_claims.py \
+  --packet data/claim_annotation/claim_annotation_packet.csv \
+  --output data/claim_annotation/annotator_a.csv --annotator a --engine claude
+.venv/bin/python analysis/llm_annotate_claims.py \
+  --packet data/claim_annotation/claim_annotation_packet.csv \
+  --output data/claim_annotation/annotator_b.csv --annotator b --engine codex
 .venv/bin/python analysis/score_claim_annotation.py \
   --annotator-a data/claim_annotation/a.csv \
   --annotator-b data/claim_annotation/b.csv \
@@ -48,6 +54,46 @@ the aggregate scorer output may be committed.
   --classifier data/claim_annotation/claim_annotation_classifier.csv \
   --output results/claim_validation.json
 ```
+
+## Validation run of 2026-08-10: the gate did not pass
+
+The annotators in this run were language models, not the two people the
+preregistration names. Annotator A ran on Claude and annotator B on Codex under
+different prompt wordings, so their errors are not forced to share an engine or
+a phrasing. Contested items went to a third rater run on both engines, and an
+item was adjudicated only where the two engines returned the same label. This is
+machine annotation and is reported as such. It does not discharge the
+preregistered human-annotation requirement; it establishes whether the lexical
+classifier is worth taking to human validation at all.
+
+`results/claim_validation.json` records the outcome on the 353 adjudicated
+items: precision 0.913, recall 0.640, so the 0.80 recall threshold fails and
+`freeze_gate_passed` is false. Preregistration section 3.2 step 4 therefore
+applies: the classifier is replaced and revalidated on a fresh 400-PR subset
+before any confirmatory field analysis.
+
+Two numbers should be read with care. Cohen's kappa of 0.765 is computed on the
+adjudicated subset only; across all 400 items, before adjudication removed the
+hardest ones, the two annotators agreed on claim presence at kappa 0.604. And
+the two third-rater engines agreed on only 50 of the 97 contested items, which
+says those items are genuinely ambiguous under the current guidelines rather
+than noisy.
+
+Splitting the 87 false negatives that both annotators marked as claims:
+
+- 51 are past-tense descriptions of completed work ("I implemented X",
+  "Fixes #54706"). Whether these are completion claims is a construct decision,
+  not a classifier defect.
+- 30 carry explicit language the rules do not cover, mostly checklist test plans
+  ("All acceptance criteria verified", "Confirmed the root cause").
+- 3 are non-English bodies. Only 3 of the 400 packet items are non-English, so
+  language coverage is not what drives the shortfall in this sample.
+
+Recall also splits sharply by agent: 0.952 for OpenAI Codex against 0.582 for
+Copilot, 0.596 for Devin, 0.635 for Claude Code, and 0.700 for Cursor. The
+rules track one agent's PR template. The by-agent claim-prevalence spread in the
+pilot below therefore measures the classifier as much as the agents, and must
+not be read as an agent-level finding.
 
 ## Frozen pilot rule
 
