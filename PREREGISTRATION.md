@@ -353,9 +353,14 @@ intervals narrowed by about a factor of 1.58.
 **The unit of confirmatory inference is the trajectory.**
 
 - Cycle-level binary outcomes (regression acceptance, false rejection) are
-  analysed with a generalized linear mixed model with a logit link, a random
-  intercept per trajectory nested in task-agent-seed, and fixed effects for gate
-  grounding, feedback, their interaction, task, and agent.
+  reduced to a per-trajectory proportion and analysed at the trajectory level.
+  Every interval comes from resampling trajectories with replacement, never
+  cycles. A generalized linear mixed model with a logit link and a random
+  intercept per trajectory nested in task-agent-seed targets the same estimand
+  and is reported as a sensitivity analysis; at 20 clusters per arm it is the
+  more fragile of the two, and it would add a scientific stack to a replication
+  package that is otherwise standard library. The estimator that carries the
+  claim is the cluster bootstrap, implemented in `analysis/fit_clustered.py`.
 - Trajectory-level outcomes (final delivered HO-B score, erosion, cycles to
   first positive delta) are analysed with the trajectory as the row. Final
   delivered score is an ANCOVA on the cycle-1 covariate of §4.2.
@@ -365,7 +370,9 @@ intervals narrowed by about a factor of 1.58.
 - **No interval anywhere in this study is computed treating cycles as
   independent.** The pooled conditional acceptance rates that `analyze.py`
   already emits are relabelled in the released output as descriptive only, not
-  inferential quantities.
+  inferential quantities. `analysis/fit_clustered.py` refuses to present any
+  contrast as a test while the logs carry no outcome-half delta, because in that
+  state the grounded arm's rate is fixed at zero by construction.
 
 ### 8.2 Alpha, families, and multiplicity
 
@@ -387,19 +394,21 @@ family of a software engineering submission would also be strategically poor.
 
 ### 8.3 Power
 
-Computed at 20 trajectories per arm per task (two agents x two feedback levels x
-five seeds), two-sided unless noted, from the between-trajectory standard
-deviations the pilot exhibits:
+Every figure below is produced by `analysis/power_sim.py` and nothing here is
+typed by hand. An arm pools the two feedback levels and holds 20 trajectories
+(two agents x two feedback levels x five seeds); a single cell holds 10. The
+between-trajectory standard deviations the pilot exhibits are 0.0962 for the
+self-claim arm and 0.1925 for the judge arm, and the table is computed at 0.15.
 
-| Contrast | sd | n/arm | SE | MDE at 80% power |
+| Contrast | n | SE | MDE at 80% power | Sided |
 | --- | --- | --- | --- | --- |
-| B-H1, grounded vs ungrounded | 0.15 | 20 | 0.047 | 0.118 (one-sided) |
-| RQ-B2, grounded-sign vs ungrounded-numeric | 0.15 | 20 | 0.067 | 0.167 |
-| RQ-B2, full 2x2 interaction | 0.15 | 10/cell | 0.095 | 0.266 |
-| B-H2 as an equivalence test | 0.15 | 20 | 0.047 | not achievable |
+| B-H1, grounded vs ungrounded | 20 per arm | 0.047 | 0.118 | one |
+| RQ-B2, grounded-sign vs ungrounded-numeric | 10 per cell | 0.067 | 0.167 | one |
+| RQ-B2, full 2x2 interaction | 10 per cell | 0.095 | 0.266 | two |
 
-B-H1 is adequately powered: at a true effect of 0.40 the power is 0.98, and the
-pilot value was 0.56.
+Simulation at each minimum detectable effect returns 0.799 and 0.797, which is
+the 0.80 the closed form was solved for. B-H1 is amply powered: at a true effect
+of 0.20 its power is 0.995, and the pilot value was 0.56.
 
 **The full 2x2 interaction is underpowered by design and is declared so here
 rather than discovered later.** The primary test of RQ-B2 is therefore a single
@@ -514,3 +523,19 @@ apparatus validation and not confirmatory evidence.
   0.05.
 - R11 (2026-08-10): the in-band self-report is elicited as a structured verdict
   and parsed (S5.1), replacing `edited and ok`, which measured edit success.
+- R12 (2026-08-10): replaced the claim classifier after the validation gate
+  measured v1 at precision 0.913 and recall 0.640, below the registered 0.80
+  recall threshold. Registration 3.2 step 4 applies. The v1 miss was structural:
+  every completion pattern required a determiner immediately after the assertion
+  verb, so "I implemented Turborepo support" did not match. Of 89 misses, 78
+  carried a past-tense or perfect assertion of completed work and the two
+  independent annotators agreed with each other on 84, so the misses were the
+  rule's fault and not label noise. v2 matches the assertion form and leaves the
+  object free. On the development packet it reads precision 0.874 and recall
+  0.927. Validation runs on a second 400-PR packet drawn disjoint from the first
+  by `--exclude-packet`, and the registered gate still requires two human
+  annotators; machine annotation is development evidence, not the gate.
+- R13 (2026-08-10): registered `analysis/power_sim.py` and
+  `analysis/fit_clustered.py`, and corrected section 8.3, where the RQ-B2
+  two-cell contrast had been tabulated at 20 trajectories two-sided when it is
+  10 per cell one-sided. Writing the simulator is what surfaced the error.

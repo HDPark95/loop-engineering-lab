@@ -35,28 +35,79 @@ REQUIRED_TABLES = (
     "human_pr_task_type.parquet",
 )
 
-# Conservative lexical rules for a feasibility test, not a validated construct.
-# They look for an explicit assertion that work or verification has completed;
-# task nouns in a title alone (for example, "fix parser") do not count.
+# Claim classifier v2 (2026-08-10). v1 was a conservative lexical rule written for
+# a feasibility check, and the preregistered validation gate measured it at
+# precision 0.913 and recall 0.640 against adjudicated labels. The 0.80 recall
+# threshold failed, so registration 3.2 step 4 applies and the rule is replaced.
+#
+# The v1 miss was structural, not a matter of missing vocabulary: every completion
+# pattern required a determiner immediately after the assertion verb
+# ("implemented the", "fixed this"), so "I implemented Turborepo support" and
+# "Added a hot reload feature" did not match. Of the 89 misses, 78 contained a
+# past-tense or perfect assertion of completed work, and the two independent
+# annotators agreed with each other on 84 of them, so the misses were the rule's
+# fault rather than label noise.
+#
+# v2 matches the assertion form and leaves the object free. The construct's own
+# discriminator is carried over verbatim: "adds a retry helper" is a description,
+# "the retry problem is now solved" is a claim.
+#
+# Deliberately NOT included: `(was|were) <verb>ed`. "The version field was updated
+# from 2.1.1 to 2.1.2" describes what the diff contains rather than asserting that
+# the work is finished, and it was the lowest-precision candidate pattern measured
+# (0.762). Also not included: a bare past-tense bullet change list, which is the one
+# construction on which the two annotators most often disagreed.
+_ASSERTION_VERB = (
+    r"(?:implement|add|fix|resolve|complete|finish|deliver|restore|remove|update|"
+    r"upgrade|create|bump|migrate|refactor|rename|delete|introduce|correct|"
+    r"replace|expose|enable|support|handle|address|port|convert|extract|split)"
+)
+
 COMPLETION_PATTERNS = tuple(
-    re.compile(pattern, re.IGNORECASE)
+    re.compile(pattern, re.IGNORECASE | re.MULTILINE)
     for pattern in (
-        r"\b(?:successfully|fully)\s+(?:implemented|completed|fixed|resolved|finished|delivered)\b",
-        r"\b(?:implemented|completed|fixed|resolved|finished)\s+(?:the|this|all|an?|requested)\b",
-        r"\b(?:this\s+(?:pull request|pr)|these changes|this change)\s+"
-        r"(?:implements|completes|fixes|resolves|addresses|delivers)\b",
-        r"\b(?:implementation|work|task|feature|fix)\s+(?:is|has been)\s+"
+        # first person, past tense: "I implemented X", "we have added Y"
+        rf"\b(?:I|we)\s+(?:have\s+)?{_ASSERTION_VERB}(?:ed|d)\b",
+        # the change as subject: "this PR fixes X", "these changes implement Y"
+        rf"\b(?:this\s+(?:pull\s+request|pr|change|commit)|these\s+changes)\s+"
+        rf"(?:has\s+|have\s+)?{_ASSERTION_VERB}(?:ed|d|s)\b",
+        # sentence-initial past tense: "Added a hot reload feature"
+        rf"^\s*(?:[-*+]\s+|\d+\.\s+)?{_ASSERTION_VERB}(?:ed|d)\b",
+        # passive perfect: "the endpoint has been exposed"
+        rf"\b(?:has|have|had)\s+been\s+{_ASSERTION_VERB}(?:ed|d)\b",
+        # explicit statement of a finished state
+        r"\b(?:implementation|work|task|feature|fix|change|migration|refactor)\s+"
+        r"(?:is|are|has been|have been)\s+(?:now\s+)?"
         r"(?:complete|completed|done|finished|ready)\b",
-        r"\bready\s+for\s+(?:review|merge|testing)\b",
+        # "the retry problem is now solved" is the construct's own example of a
+        # claim, against "adds a retry helper" as its example of a description.
+        r"\b(?:is|are)\s+now\s+"
+        r"(?:working|fixed|resolved|solved|addressed|handled|supported|available"
+        r"|complete|done)\b",
+        r"\bready\s+for\s+(?:review|merge|merging|testing|production)\b",
+        r"\b(?:successfully|fully)\s+\w+ed\b",
+        # GitHub issue-closing keywords. A digit is required so that the unfilled
+        # template placeholder "Fixes # (issue)" does not count as an assertion.
+        r"\b(?:fixes|closes|resolves|fixed|closed|resolved)\s+#\d+\b",
+        # CJK completion assertions; the field layer reports non-English bodies as a
+        # prespecified subgroup and cannot do that if it cannot code them at all.
+        r"(?:\u4fee\u590d\u4e86|\u5b9e\u73b0\u4e86|\u5b8c\u6210\u4e86|\u6dfb\u52a0\u4e86|\u5df2\u5b8c\u6210|\u5df2\u4fee\u590d|\u5df2\u5b9e\u73b0)",
+        r"(?:\u4fee\u6b63\u3057\u307e\u3057\u305f|\u5b9f\u88c5\u3057\u307e\u3057\u305f|\u5b8c\u4e86\u3057\u307e\u3057\u305f|\u5bfe\u5fdc\u3057\u307e\u3057\u305f)",
+        r"(?:\uc218\uc815\ud588|\uad6c\ud604\ud588|\uc644\ub8cc\ud588|\ucd94\uac00\ud588)",
     )
 )
 VERIFICATION_PATTERNS = tuple(
-    re.compile(pattern, re.IGNORECASE)
+    re.compile(pattern, re.IGNORECASE | re.MULTILINE)
     for pattern in (
-        r"\b(?:all\s+)?tests?\s+(?:pass|passed|passing|succeed|succeeded)\b",
-        r"\b(?:tested|verified|validated)\s+(?:the|this|all|that|locally|manually|successfully)\b",
-        r"\b(?:ci|checks?|build)\s+(?:is\s+)?(?:green|passes|passed|passing|successful)\b",
-        r"\b(?:no|zero)\s+(?:test\s+)?failures?\b",
+        r"\b(?:all\s+)?tests?\s+(?:pass|passed|passing|succeed|succeeded|are\s+green)\b",
+        r"\b(?:tested|verified|validated|confirmed)\s+"
+        r"(?:the|this|that|all|it|locally|manually|successfully|in|on|with|by|and)\b",
+        r"\b(?:ci|checks?|build|pipeline|lint|suite)\s+(?:is\s+|are\s+)?"
+        r"(?:green|pass|passes|passed|passing|successful|clean)\b",
+        r"\b(?:no|zero)\s+(?:new\s+)?(?:test\s+)?(?:failures?|regressions?|errors?)\b",
+        r"\bverified\s+(?:by|via|through)\b",
+        r"\b(?:I|we)\s+(?:have\s+)?(?:tested|verified|validated|confirmed|ran|run)\b",
+        r"(?:\u6d4b\u8bd5\u901a\u8fc7|\u5df2\u9a8c\u8bc1|\u9a8c\u8bc1\u901a\u8fc7)",
     )
 )
 STRONG_PATTERNS = tuple(
@@ -68,6 +119,7 @@ STRONG_PATTERNS = tuple(
         r"(?:complete|completed|done|finished)\b",
     )
 )
+HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 REVERT_PATTERN = re.compile(r"\brevert(?:ed|s|ing)?\b", re.IGNORECASE)
 
 
@@ -91,7 +143,9 @@ def matches_any(patterns: Iterable[re.Pattern[str]], text: str) -> bool:
 
 
 def classify_claim(body: str | None) -> dict[str, bool | str]:
-    text = body or ""
+    # Template boilerplate lives in HTML comments and is instruction to the author,
+    # not an assertion by the author, so it is removed before matching.
+    text = HTML_COMMENT.sub(" ", body or "")
     completion = matches_any(COMPLETION_PATTERNS, text)
     verification = matches_any(VERIFICATION_PATTERNS, text)
     strong = matches_any(STRONG_PATTERNS, text)
