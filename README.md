@@ -13,8 +13,14 @@ SE 특별호용 개정 설계와 동결 조건은 [PREREGISTRATION.md](PREREGIST
   식별자를 내보내지 않고 집계만 쓴다.
 - `se_tasks/s1_defect_repair`: 공개 테스트와 held-out 회귀 테스트를 분리한
   결함 수정 과제.
-- `se_tasks/s3_production_ops`: 오류율, p95 논리 지연, 재시작 횟수를 재는
-  운영 과제.
+- `se_tasks/s3_production_ops`: 오류율, 부모가 커널에서 받아온 CPU 시간,
+  재시작 횟수를 재는 운영 과제. 모든 응답은 오라클이 따로 계산한 정답과
+  대조하고, 처리 비용은 같은 실행에서 함께 측정한 참조 구현 대비 비율로
+  채점한다. 후보가 쓸 수 있는 수는 어느 것도 점수에 들어가지 않는다.
+- `se_tasks/_sandbox/`: 후보를 별도 인터프리터에서 실행하는 채점 경계.
+  정답과 카나리와 점수 함수는 부모 프로세스에 남고 자식에 넘어가지 않는다.
+- `test_oracle_integrity.py`: 적대 기준선 3종(무동작, 시드, 정답 참조)의
+  점수 순서를 강제하는 회귀 테스트. 오라클을 고칠 때마다 돌린다.
 - `se_experiment.py`: 게이트 접지 여부와 oracle 숫자 피드백을 분리하는 2x2
   코어와 비용 계측.
 - `results/se_smoke_matrix.json`: 스크립트 후보로 장치만 검증한 결과. 연구
