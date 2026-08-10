@@ -539,3 +539,22 @@ apparatus validation and not confirmatory evidence.
   `analysis/fit_clustered.py`, and corrected section 8.3, where the RQ-B2
   two-cell contrast had been tabulated at 20 trajectories two-sided when it is
   10 per cell one-sided. Writing the simulator is what surfaced the error.
+- R14 (2026-08-10): the replacement lexical classifier of R12 also fails the
+  validation gate, and the failure is a property of the instrument rather than of
+  the rule set. Recall clears 0.80 comfortably (0.955 on the second packet, once
+  reweighted to the frame it was drawn from). Precision does not, and plateaus
+  between 0.726 and 0.787 across two disjoint packets and four rule variants,
+  including the variants that trade recall away for it. Registration 3.2 step 4
+  permits another replacement, and repeating it until a packet passes would be
+  fitting the instrument to the annotation noise, which is the behaviour this
+  study exists to measure. We therefore stop iterating on the lexical rule and
+  record the plateau. The decision on what replaces it is pending and is a design
+  decision, not a threshold decision: the registered 0.80 stands.
+- R15 (2026-08-10): the validation packet is stratified by agent and by the
+  classifier's own preliminary verdict, so raw packet precision and recall
+  estimate the packet rather than the corpus. Stratum weights on the second packet
+  range from 1.12 to 91.28, and reweighting moves recall from 0.824 to 0.955 while
+  moving precision from 0.739 to 0.726. All validation figures are henceforth
+  reported inverse-probability weighted to the frame, with the raw packet figures
+  alongside. This corrects an estimation defect in the registered procedure, not a
+  threshold.

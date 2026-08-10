@@ -53,17 +53,60 @@ def cohen_kappa(left: list[int], right: list[int]) -> float:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--annotator-a", type=Path, required=True)
-    parser.add_argument("--annotator-b", type=Path, required=True)
-    parser.add_argument("--adjudicated", type=Path, required=True)
+    parser.add_argument("--annotator-b", type=Path)
+    parser.add_argument("--adjudicated", type=Path)
     parser.add_argument("--classifier", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--development-check",
+        action="store_true",
+        help="score against one annotator's labels only. Reports precision and "
+             "recall and no agreement statistic, and never passes the freeze "
+             "gate, which requires two annotators.",
+    )
     args = parser.parse_args()
 
     a = read_labels(args.annotator_a)
-    b = read_labels(args.annotator_b)
-    adjudicated = read_labels(args.adjudicated)
     classifier = read_labels(args.classifier)
     ids = set(a)
+
+    if args.development_check:
+        if args.annotator_b or args.adjudicated:
+            raise SystemExit("--development-check takes one annotator and no adjudication")
+        if not ids or set(classifier) != ids:
+            raise SystemExit("annotator and classifier must cover the same IDs")
+        ordered = sorted(ids)
+        truth = [claim(a[key]) for key in ordered]
+        predicted = [claim(classifier[key]) for key in ordered]
+        validation = precision_recall(predicted, truth)
+        output = {
+            "schema_version": 1,
+            "n": len(ordered),
+            "classifier_claim_validation": validation,
+            # A single annotator cannot be adjudicated against anyone, so there is
+            # no agreement statistic to report and reporting one would be a
+            # fabrication. The registered gate needs two annotators and they must
+            # be people, so this run cannot pass it however good the numbers are.
+            "freeze_gate_passed": False,
+            "status": "development check against one machine annotator; "
+                      "not the preregistered validation gate",
+            "thresholds_met": (validation["precision"] >= 0.8
+                               and validation["recall"] >= 0.8),
+            "privacy": "aggregate only; no annotation IDs or text",
+        }
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(json.dumps(output, indent=2, sort_keys=True) + "\n",
+                               encoding="utf-8")
+        print(f"development check over {len(ordered)} rows: "
+              f"precision {validation['precision']:.4f} recall {validation['recall']:.4f} "
+              f"({'both thresholds met' if output['thresholds_met'] else 'below threshold'}); "
+              "the freeze gate is untouched and still needs two human annotators")
+        return
+
+    if not args.annotator_b or not args.adjudicated:
+        raise SystemExit("the gate run needs --annotator-b and --adjudicated")
+    b = read_labels(args.annotator_b)
+    adjudicated = read_labels(args.adjudicated)
     if not ids or any(set(rows) != ids for rows in (b, adjudicated, classifier)):
         raise SystemExit("all four files must contain the same non-empty annotation IDs")
     ordered = sorted(ids)
