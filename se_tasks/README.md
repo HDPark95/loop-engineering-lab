@@ -18,17 +18,63 @@ can access its evaluator. The oracle mounts the artifact read-only and has no
 network. A task-specific canary is scanned in the candidate before every
 evaluation; a hit invalidates the run.
 
+**Grading runs out of process.** Until 2026-08 the oracles imported the
+candidate with `importlib` and called it inside their own interpreter, which put
+the candidate and the answer key in one address space. A candidate could read
+the canary and the workload out of `sys.modules['__main__']` at run time without
+writing either to disk, so the file-scanning canary check reported clean while
+the leak happened. That is now closed: `_sandbox/run_candidate.py` executes the
+candidate in a separate interpreter whose working directory is the candidate
+directory, the parent sends inputs and receives outputs, and expected values,
+the canary, and the score function never enter the child. `test_oracle_integrity.py`
+asserts that a probing candidate reaches none of those symbols.
+
+**No number the candidate can write reaches the score.** A review of the first
+repair found the same defect one layer down, twice. A candidate registered an
+`atexit` handler and printed a forged grading record after the runner's own,
+scoring 100.0 while returning a wrong answer to every request; and a candidate
+reached the runner's line counter through `sys.gettrace()` and set it to zero,
+so a quadratic implementation burning 0.59 CPU seconds looked cheaper than a
+linear one. The runner now emits a single framed record and leaves through
+`os._exit`, the parent rejects output carrying a second record, and effort is
+CPU time taken from the kernel. Line counts survive as diagnostics and are not
+scored. Both probes are in `test_oracle_integrity.py`.
+
 ## Task families
 
 - S1 (`s1_defect_repair`): repair semantic-version comparison. The public tests
   cover ordinary versions; the held-out regression tests cover multi-digit
   components, malformed versions, and unequal lengths.
 - S3 (`s3_production_ops`): harden a request handler under a hidden deterministic
-  workload. The oracle reports error rate, logical p95 latency, and restart
-  count, then converts them to a frozen higher-is-better score.
+  workload. Every response is checked against an answer the oracle computes
+  independently, and effort is CPU time measured by the parent from
+  `getrusage(RUSAGE_CHILDREN)` and scored as a ratio against a reference
+  implementation timed in the same evaluation. The score combines error rate,
+  restarts, and that ratio.
+
+  The earlier version of this oracle derived its latency percentile from the
+  `work_units` integer the candidate returned about itself and never checked any
+  answer. A handler that did nothing and reported zero scored a perfect 100.0
+  while the seed scored 0.0, so the global optimum of the metric was to stop
+  working, and the scripted improvement shipped in `se_experiment.py` was itself
+  that hack. Both are fixed, and `test_oracle_integrity.py` now fails if a
+  do-nothing candidate ever outscores the seed again.
+
+  The seed was also made to do the quadratic work its issue text describes. It
+  previously computed `len(payload) * len(payload)`, which is constant work, so
+  there was no inefficiency for a candidate to remove or for the oracle to
+  measure.
 
 Use `python3 se_experiment.py --smoke-output results/se_smoke_matrix.json` to
 exercise both oracles and all four factor cells with scripted candidates.
+
+Run `python3 -m unittest test_oracle_integrity` on every change to either
+oracle. It grades three adversarial baselines (a do-nothing candidate, the
+shipped seed, and a correct reference) and asserts an ordering rather than a
+number: doing nothing must score below the seed, and the seed must score below
+the reference and above the floor. A seed pinned at zero is also a defect,
+because a loop measuring deltas against a floor cannot tell a partial repair
+from no repair.
 
 Use `agent_adapters.py` for a disposable one-shot protocol check with either
 Codex or Claude Code. The result retains run metadata, execution and isolation
