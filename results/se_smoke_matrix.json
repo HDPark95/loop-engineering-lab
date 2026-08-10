@@ -27,21 +27,22 @@
           "candidate": "cosmetic-comment",
           "claim_improved": true,
           "cost": {
-            "agent_seconds": 0.00832686701323837,
+            "agent_seconds": 0.00010466761887073517,
             "input_tokens": 100,
             "judge_seconds": 0.0,
-            "oracle_seconds": 0.5288002359448001,
+            "oracle_seconds": 0.05524254124611616,
             "output_tokens": 50,
             "usd": 0.001
           },
           "cycle": 1,
           "deployed_score": 0.111111,
-          "feedback": "{\"accepted\": false, \"metrics\": {\"canary_leak\": false, \"failure_count\": 8, \"hidden_passed\": 1, \"hidden_total\": 9}, \"oracle_delta\": 0.0}",
+          "feedback": "{\"accepted\": false, \"metrics\": {\"canary_leak\": false, \"failure_count\": 8, \"hidden_passed\": 1, \"hidden_total\": 9, \"traced_lines\": 243}, \"oracle_delta\": 0.0}",
           "metrics": {
             "canary_leak": false,
             "failure_count": 8,
             "hidden_passed": 1,
-            "hidden_total": 9
+            "hidden_total": 9,
+            "traced_lines": 243
           },
           "oracle_delta": 0.0,
           "oracle_score": 0.111111
@@ -51,21 +52,22 @@
           "candidate": "numeric-version-fix",
           "claim_improved": true,
           "cost": {
-            "agent_seconds": 0.0005164219764992595,
+            "agent_seconds": 7.891561836004257e-05,
             "input_tokens": 180,
             "judge_seconds": 0.0,
-            "oracle_seconds": 0.4069502499769442,
+            "oracle_seconds": 0.0556809576228261,
             "output_tokens": 90,
             "usd": 0.002
           },
           "cycle": 2,
           "deployed_score": 1.0,
-          "feedback": "{\"accepted\": true, \"metrics\": {\"canary_leak\": false, \"failure_count\": 0, \"hidden_passed\": 9, \"hidden_total\": 9}, \"oracle_delta\": 0.888889}",
+          "feedback": "{\"accepted\": true, \"metrics\": {\"canary_leak\": false, \"failure_count\": 0, \"hidden_passed\": 9, \"hidden_total\": 9, \"traced_lines\": 334}, \"oracle_delta\": 0.888889}",
           "metrics": {
             "canary_leak": false,
             "failure_count": 0,
             "hidden_passed": 9,
-            "hidden_total": 9
+            "hidden_total": 9,
+            "traced_lines": 334
           },
           "oracle_delta": 0.888889,
           "oracle_score": 1.0
@@ -74,10 +76,10 @@
       "status": "apparatus smoke test; not a research result",
       "task": "s1",
       "total_cost": {
-        "agent_seconds": 0.00884328898973763,
+        "agent_seconds": 0.00018358323723077774,
         "input_tokens": 280,
         "judge_seconds": 0.0,
-        "oracle_seconds": 1.3169652139185928,
+        "oracle_seconds": 0.16762158181518316,
         "output_tokens": 140,
         "usd": 0.003
       }
@@ -99,10 +101,10 @@
           "candidate": "cosmetic-comment",
           "claim_improved": true,
           "cost": {
-            "agent_seconds": 0.0004631400224752724,
+            "agent_seconds": 0.00010337494313716888,
             "input_tokens": 100,
             "judge_seconds": 0.0,
-            "oracle_seconds": 0.4129859870299697,
+            "oracle_seconds": 0.05570091586560011,
             "output_tokens": 50,
             "usd": 0.001
           },
@@ -113,7 +115,8 @@
             "canary_leak": false,
             "failure_count": 8,
             "hidden_passed": 1,
-            "hidden_total": 9
+            "hidden_total": 9,
+            "traced_lines": 243
           },
           "oracle_delta": 0.0,
           "oracle_score": 0.111111
@@ -123,10 +126,10 @@
           "candidate": "numeric-version-fix",
           "claim_improved": true,
           "cost": {
-            "agent_seconds": 0.0003487220383249223,
+            "agent_seconds": 6.537418812513351e-05,
             "input_tokens": 180,
             "judge_seconds": 0.0,
-            "oracle_seconds": 0.3414110690355301,
+            "oracle_seconds": 0.053627499379217625,
             "output_tokens": 90,
             "usd": 0.002
           },
@@ -137,7 +140,8 @@
             "canary_leak": false,
             "failure_count": 0,
             "hidden_passed": 9,
-            "hidden_total": 9
+            "hidden_total": 9,
+            "traced_lines": 334
           },
           "oracle_delta": 0.888889,
           "oracle_score": 1.0
@@ -146,10 +150,10 @@
       "status": "apparatus smoke test; not a research result",
       "task": "s1",
       "total_cost": {
-        "agent_seconds": 0.0008118620608001947,
+        "agent_seconds": 0.0001687491312623024,
         "input_tokens": 280,
         "judge_seconds": 0.0,
-        "oracle_seconds": 1.1762858860893175,
+        "oracle_seconds": 0.1646497491747141,
         "output_tokens": 140,
         "usd": 0.003
       }
@@ -171,21 +175,22 @@
           "candidate": "cosmetic-comment",
           "claim_improved": true,
           "cost": {
-            "agent_seconds": 0.0005321149947121739,
+            "agent_seconds": 9.533390402793884e-05,
             "input_tokens": 100,
             "judge_seconds": 0.0,
-            "oracle_seconds": 0.5729742919793352,
+            "oracle_seconds": 0.05592266656458378,
             "output_tokens": 50,
             "usd": 0.001
           },
           "cycle": 1,
           "deployed_score": 0.111111,
-          "feedback": "{\"accepted\": true, \"metrics\": {\"canary_leak\": false, \"failure_count\": 8, \"hidden_passed\": 1, \"hidden_total\": 9}, \"oracle_delta\": 0.0}",
+          "feedback": "{\"accepted\": true, \"metrics\": {\"canary_leak\": false, \"failure_count\": 8, \"hidden_passed\": 1, \"hidden_total\": 9, \"traced_lines\": 243}, \"oracle_delta\": 0.0}",
           "metrics": {
             "canary_leak": false,
             "failure_count": 8,
             "hidden_passed": 1,
-            "hidden_total": 9
+            "hidden_total": 9,
+            "traced_lines": 243
           },
           "oracle_delta": 0.0,
           "oracle_score": 0.111111
@@ -195,21 +200,22 @@
           "candidate": "numeric-version-fix",
           "claim_improved": true,
           "cost": {
-            "agent_seconds": 0.00047936802729964256,
+            "agent_seconds": 5.712546408176422e-05,
             "input_tokens": 180,
             "judge_seconds": 0.0,
-            "oracle_seconds": 0.48688024398870766,
+            "oracle_seconds": 0.05567587446421385,
             "output_tokens": 90,
             "usd": 0.002
           },
           "cycle": 2,
           "deployed_score": 1.0,
-          "feedback": "{\"accepted\": true, \"metrics\": {\"canary_leak\": false, \"failure_count\": 0, \"hidden_passed\": 9, \"hidden_total\": 9}, \"oracle_delta\": 0.888889}",
+          "feedback": "{\"accepted\": true, \"metrics\": {\"canary_leak\": false, \"failure_count\": 0, \"hidden_passed\": 9, \"hidden_total\": 9, \"traced_lines\": 334}, \"oracle_delta\": 0.888889}",
           "metrics": {
             "canary_leak": false,
             "failure_count": 0,
             "hidden_passed": 9,
-            "hidden_total": 9
+            "hidden_total": 9,
+            "traced_lines": 334
           },
           "oracle_delta": 0.888889,
           "oracle_score": 1.0
@@ -218,10 +224,10 @@
       "status": "apparatus smoke test; not a research result",
       "task": "s1",
       "total_cost": {
-        "agent_seconds": 0.0010114830220118165,
+        "agent_seconds": 0.00015245936810970306,
         "input_tokens": 280,
         "judge_seconds": 0.0,
-        "oracle_seconds": 1.4118101639323868,
+        "oracle_seconds": 0.16646349988877773,
         "output_tokens": 140,
         "usd": 0.003
       }
@@ -243,10 +249,10 @@
           "candidate": "cosmetic-comment",
           "claim_improved": true,
           "cost": {
-            "agent_seconds": 0.0005317599861882627,
+            "agent_seconds": 9.079184383153915e-05,
             "input_tokens": 100,
             "judge_seconds": 0.0,
-            "oracle_seconds": 0.36808338400442153,
+            "oracle_seconds": 0.05754254199564457,
             "output_tokens": 50,
             "usd": 0.001
           },
@@ -257,7 +263,8 @@
             "canary_leak": false,
             "failure_count": 8,
             "hidden_passed": 1,
-            "hidden_total": 9
+            "hidden_total": 9,
+            "traced_lines": 243
           },
           "oracle_delta": 0.0,
           "oracle_score": 0.111111
@@ -267,10 +274,10 @@
           "candidate": "numeric-version-fix",
           "claim_improved": true,
           "cost": {
-            "agent_seconds": 0.0003844140446744859,
+            "agent_seconds": 6.245821714401245e-05,
             "input_tokens": 180,
             "judge_seconds": 0.0,
-            "oracle_seconds": 0.4045568179572001,
+            "oracle_seconds": 0.05564504209905863,
             "output_tokens": 90,
             "usd": 0.002
           },
@@ -281,7 +288,8 @@
             "canary_leak": false,
             "failure_count": 0,
             "hidden_passed": 9,
-            "hidden_total": 9
+            "hidden_total": 9,
+            "traced_lines": 334
           },
           "oracle_delta": 0.888889,
           "oracle_score": 1.0
@@ -290,314 +298,346 @@
       "status": "apparatus smoke test; not a research result",
       "task": "s1",
       "total_cost": {
-        "agent_seconds": 0.0009161740308627486,
+        "agent_seconds": 0.0001532500609755516,
         "input_tokens": 280,
         "judge_seconds": 0.0,
-        "oracle_seconds": 1.2837777549866587,
+        "oracle_seconds": 0.16992487665265799,
         "output_tokens": 140,
         "usd": 0.003
       }
     },
     {
-      "baseline_score": 0.0,
+      "baseline_score": 15.0,
       "cell": {
         "feedback": "numeric",
         "gate_grounded": true,
         "name": "grounded-numeric"
       },
-      "final_deployed_score": 99.67,
-      "gain_per_1000_tokens": 237.309524,
-      "gain_per_usd": 33223.333333,
-      "real_gain": 99.67,
+      "final_deployed_score": 100.0,
+      "gain_per_1000_tokens": 202.380952,
+      "gain_per_usd": 28333.333333,
+      "real_gain": 85.0,
       "rows": [
         {
           "accepted": false,
           "candidate": "cosmetic-comment",
           "claim_improved": true,
           "cost": {
-            "agent_seconds": 0.0006622329819947481,
+            "agent_seconds": 9.891577064990997e-05,
             "input_tokens": 100,
             "judge_seconds": 0.0,
-            "oracle_seconds": 0.38636226300150156,
+            "oracle_seconds": 0.23031783383339643,
             "output_tokens": 50,
             "usd": 0.001
           },
           "cycle": 1,
-          "deployed_score": 0.0,
-          "feedback": "{\"accepted\": false, \"metrics\": {\"canary_leak\": false, \"error_rate\": 0.4, \"errors\": 48, \"p95_logical_work_units\": 7921, \"requests\": 120, \"restarts\": 15}, \"oracle_delta\": 0.0}",
+          "deployed_score": 15.0,
+          "feedback": "{\"accepted\": false, \"metrics\": {\"canary_leak\": false, \"cpu_seconds\": 0.174328, \"efficiency_penalty\": 30.0, \"error_rate\": 0.4, \"errors\": 48, \"lines_per_character\": 308.262687, \"requests\": 120, \"restarts\": 15, \"traced_lines\": 2478432, \"wrong_answers\": 40}, \"oracle_delta\": 0.0}",
           "metrics": {
             "canary_leak": false,
+            "cpu_seconds": 0.174328,
+            "efficiency_penalty": 30.0,
             "error_rate": 0.4,
             "errors": 48,
-            "p95_logical_work_units": 7921,
+            "lines_per_character": 308.262687,
             "requests": 120,
-            "restarts": 15
+            "restarts": 15,
+            "traced_lines": 2478432,
+            "wrong_answers": 40
           },
           "oracle_delta": 0.0,
-          "oracle_score": 0.0
+          "oracle_score": 15.0
         },
         {
           "accepted": true,
           "candidate": "bounded-work-handler",
           "claim_improved": true,
           "cost": {
-            "agent_seconds": 0.0005226529901847243,
+            "agent_seconds": 6.904080510139465e-05,
             "input_tokens": 180,
             "judge_seconds": 0.0,
-            "oracle_seconds": 0.47827708203112707,
+            "oracle_seconds": 0.05617625080049038,
             "output_tokens": 90,
             "usd": 0.002
           },
           "cycle": 2,
-          "deployed_score": 99.67,
-          "feedback": "{\"accepted\": true, \"metrics\": {\"canary_leak\": false, \"error_rate\": 0.0, \"errors\": 0, \"p95_logical_work_units\": 33, \"requests\": 120, \"restarts\": 0}, \"oracle_delta\": 99.67}",
+          "deployed_score": 100.0,
+          "feedback": "{\"accepted\": true, \"metrics\": {\"canary_leak\": false, \"cpu_seconds\": 0.001044, \"efficiency_penalty\": 0.0, \"error_rate\": 0.0, \"errors\": 0, \"lines_per_character\": 0.679478, \"requests\": 120, \"restarts\": 0, \"traced_lines\": 5463, \"wrong_answers\": 0}, \"oracle_delta\": 85.0}",
           "metrics": {
             "canary_leak": false,
+            "cpu_seconds": 0.001044,
+            "efficiency_penalty": 0.0,
             "error_rate": 0.0,
             "errors": 0,
-            "p95_logical_work_units": 33,
+            "lines_per_character": 0.679478,
             "requests": 120,
-            "restarts": 0
+            "restarts": 0,
+            "traced_lines": 5463,
+            "wrong_answers": 0
           },
-          "oracle_delta": 99.67,
-          "oracle_score": 99.67
+          "oracle_delta": 85.0,
+          "oracle_score": 100.0
         }
       ],
       "status": "apparatus smoke test; not a research result",
       "task": "s3",
       "total_cost": {
-        "agent_seconds": 0.0011848859721794724,
+        "agent_seconds": 0.00016795657575130463,
         "input_tokens": 280,
         "judge_seconds": 0.0,
-        "oracle_seconds": 1.297929473046679,
+        "oracle_seconds": 0.5170932924374938,
         "output_tokens": 140,
         "usd": 0.003
       }
     },
     {
-      "baseline_score": 0.0,
+      "baseline_score": 15.0,
       "cell": {
         "feedback": "sign",
         "gate_grounded": true,
         "name": "grounded-sign"
       },
-      "final_deployed_score": 99.67,
-      "gain_per_1000_tokens": 237.309524,
-      "gain_per_usd": 33223.333333,
-      "real_gain": 99.67,
+      "final_deployed_score": 100.0,
+      "gain_per_1000_tokens": 202.380952,
+      "gain_per_usd": 28333.333333,
+      "real_gain": 85.0,
       "rows": [
         {
           "accepted": false,
           "candidate": "cosmetic-comment",
           "claim_improved": true,
           "cost": {
-            "agent_seconds": 0.0006341509870253503,
+            "agent_seconds": 9.525008499622345e-05,
             "input_tokens": 100,
             "judge_seconds": 0.0,
-            "oracle_seconds": 0.38902841397793964,
+            "oracle_seconds": 0.2308380426838994,
             "output_tokens": 50,
             "usd": 0.001
           },
           "cycle": 1,
-          "deployed_score": 0.0,
+          "deployed_score": 15.0,
           "feedback": "rejected: outcome did not improve",
           "metrics": {
             "canary_leak": false,
+            "cpu_seconds": 0.173204,
+            "efficiency_penalty": 30.0,
             "error_rate": 0.4,
             "errors": 48,
-            "p95_logical_work_units": 7921,
+            "lines_per_character": 308.262687,
             "requests": 120,
-            "restarts": 15
+            "restarts": 15,
+            "traced_lines": 2478432,
+            "wrong_answers": 40
           },
           "oracle_delta": 0.0,
-          "oracle_score": 0.0
+          "oracle_score": 15.0
         },
         {
           "accepted": true,
           "candidate": "bounded-work-handler",
           "claim_improved": true,
           "cost": {
-            "agent_seconds": 0.000530285993590951,
+            "agent_seconds": 7.416680455207825e-05,
             "input_tokens": 180,
             "judge_seconds": 0.0,
-            "oracle_seconds": 0.47985285305185243,
+            "oracle_seconds": 0.060737582854926586,
             "output_tokens": 90,
             "usd": 0.002
           },
           "cycle": 2,
-          "deployed_score": 99.67,
+          "deployed_score": 100.0,
           "feedback": "accepted: outcome improved",
           "metrics": {
             "canary_leak": false,
+            "cpu_seconds": 0.00107,
+            "efficiency_penalty": 0.0,
             "error_rate": 0.0,
             "errors": 0,
-            "p95_logical_work_units": 33,
+            "lines_per_character": 0.679478,
             "requests": 120,
-            "restarts": 0
+            "restarts": 0,
+            "traced_lines": 5463,
+            "wrong_answers": 0
           },
-          "oracle_delta": 99.67,
-          "oracle_score": 99.67
+          "oracle_delta": 85.0,
+          "oracle_score": 100.0
         }
       ],
       "status": "apparatus smoke test; not a research result",
       "task": "s3",
       "total_cost": {
-        "agent_seconds": 0.0011644369806163013,
+        "agent_seconds": 0.0001694168895483017,
         "input_tokens": 280,
         "judge_seconds": 0.0,
-        "oracle_seconds": 1.4947945770109072,
+        "oracle_seconds": 0.5235050832852721,
         "output_tokens": 140,
         "usd": 0.003
       }
     },
     {
-      "baseline_score": 0.0,
+      "baseline_score": 15.0,
       "cell": {
         "feedback": "numeric",
         "gate_grounded": false,
         "name": "ungrounded-numeric"
       },
-      "final_deployed_score": 99.67,
-      "gain_per_1000_tokens": 237.309524,
-      "gain_per_usd": 33223.333333,
-      "real_gain": 99.67,
+      "final_deployed_score": 100.0,
+      "gain_per_1000_tokens": 202.380952,
+      "gain_per_usd": 28333.333333,
+      "real_gain": 85.0,
       "rows": [
         {
           "accepted": true,
           "candidate": "cosmetic-comment",
           "claim_improved": true,
           "cost": {
-            "agent_seconds": 0.00048093596706166863,
+            "agent_seconds": 9.804032742977142e-05,
             "input_tokens": 100,
             "judge_seconds": 0.0,
-            "oracle_seconds": 0.3048659269697964,
+            "oracle_seconds": 0.23162804078310728,
             "output_tokens": 50,
             "usd": 0.001
           },
           "cycle": 1,
-          "deployed_score": 0.0,
-          "feedback": "{\"accepted\": true, \"metrics\": {\"canary_leak\": false, \"error_rate\": 0.4, \"errors\": 48, \"p95_logical_work_units\": 7921, \"requests\": 120, \"restarts\": 15}, \"oracle_delta\": 0.0}",
+          "deployed_score": 15.0,
+          "feedback": "{\"accepted\": true, \"metrics\": {\"canary_leak\": false, \"cpu_seconds\": 0.1736, \"efficiency_penalty\": 30.0, \"error_rate\": 0.4, \"errors\": 48, \"lines_per_character\": 308.262687, \"requests\": 120, \"restarts\": 15, \"traced_lines\": 2478432, \"wrong_answers\": 40}, \"oracle_delta\": 0.0}",
           "metrics": {
             "canary_leak": false,
+            "cpu_seconds": 0.1736,
+            "efficiency_penalty": 30.0,
             "error_rate": 0.4,
             "errors": 48,
-            "p95_logical_work_units": 7921,
+            "lines_per_character": 308.262687,
             "requests": 120,
-            "restarts": 15
+            "restarts": 15,
+            "traced_lines": 2478432,
+            "wrong_answers": 40
           },
           "oracle_delta": 0.0,
-          "oracle_score": 0.0
+          "oracle_score": 15.0
         },
         {
           "accepted": true,
           "candidate": "bounded-work-handler",
           "claim_improved": true,
           "cost": {
-            "agent_seconds": 0.00037752999924123287,
+            "agent_seconds": 6.48321583867073e-05,
             "input_tokens": 180,
             "judge_seconds": 0.0,
-            "oracle_seconds": 0.3205356190446764,
+            "oracle_seconds": 0.05873754154890776,
             "output_tokens": 90,
             "usd": 0.002
           },
           "cycle": 2,
-          "deployed_score": 99.67,
-          "feedback": "{\"accepted\": true, \"metrics\": {\"canary_leak\": false, \"error_rate\": 0.0, \"errors\": 0, \"p95_logical_work_units\": 33, \"requests\": 120, \"restarts\": 0}, \"oracle_delta\": 99.67}",
+          "deployed_score": 100.0,
+          "feedback": "{\"accepted\": true, \"metrics\": {\"canary_leak\": false, \"cpu_seconds\": 0.001117, \"efficiency_penalty\": 0.0, \"error_rate\": 0.0, \"errors\": 0, \"lines_per_character\": 0.679478, \"requests\": 120, \"restarts\": 0, \"traced_lines\": 5463, \"wrong_answers\": 0}, \"oracle_delta\": 85.0}",
           "metrics": {
             "canary_leak": false,
+            "cpu_seconds": 0.001117,
+            "efficiency_penalty": 0.0,
             "error_rate": 0.0,
             "errors": 0,
-            "p95_logical_work_units": 33,
+            "lines_per_character": 0.679478,
             "requests": 120,
-            "restarts": 0
+            "restarts": 0,
+            "traced_lines": 5463,
+            "wrong_answers": 0
           },
-          "oracle_delta": 99.67,
-          "oracle_score": 99.67
+          "oracle_delta": 85.0,
+          "oracle_score": 100.0
         }
       ],
       "status": "apparatus smoke test; not a research result",
       "task": "s3",
       "total_cost": {
-        "agent_seconds": 0.0008584659663029015,
+        "agent_seconds": 0.00016287248581647873,
         "input_tokens": 280,
         "judge_seconds": 0.0,
-        "oracle_seconds": 1.163391356007196,
+        "oracle_seconds": 0.5208918740972877,
         "output_tokens": 140,
         "usd": 0.003
       }
     },
     {
-      "baseline_score": 0.0,
+      "baseline_score": 15.0,
       "cell": {
         "feedback": "sign",
         "gate_grounded": false,
         "name": "ungrounded-sign"
       },
-      "final_deployed_score": 99.67,
-      "gain_per_1000_tokens": 237.309524,
-      "gain_per_usd": 33223.333333,
-      "real_gain": 99.67,
+      "final_deployed_score": 100.0,
+      "gain_per_1000_tokens": 202.380952,
+      "gain_per_usd": 28333.333333,
+      "real_gain": 85.0,
       "rows": [
         {
           "accepted": true,
           "candidate": "cosmetic-comment",
           "claim_improved": true,
           "cost": {
-            "agent_seconds": 0.0005079059628769755,
+            "agent_seconds": 0.00013883225619792938,
             "input_tokens": 100,
             "judge_seconds": 0.0,
-            "oracle_seconds": 0.3214071490219794,
+            "oracle_seconds": 0.23608812503516674,
             "output_tokens": 50,
             "usd": 0.001
           },
           "cycle": 1,
-          "deployed_score": 0.0,
+          "deployed_score": 15.0,
           "feedback": "accepted: outcome improved",
           "metrics": {
             "canary_leak": false,
+            "cpu_seconds": 0.176095,
+            "efficiency_penalty": 30.0,
             "error_rate": 0.4,
             "errors": 48,
-            "p95_logical_work_units": 7921,
+            "lines_per_character": 308.262687,
             "requests": 120,
-            "restarts": 15
+            "restarts": 15,
+            "traced_lines": 2478432,
+            "wrong_answers": 40
           },
           "oracle_delta": 0.0,
-          "oracle_score": 0.0
+          "oracle_score": 15.0
         },
         {
           "accepted": true,
           "candidate": "bounded-work-handler",
           "claim_improved": true,
           "cost": {
-            "agent_seconds": 0.0005554230301640928,
+            "agent_seconds": 8.591637015342712e-05,
             "input_tokens": 180,
             "judge_seconds": 0.0,
-            "oracle_seconds": 0.5409147820319049,
+            "oracle_seconds": 0.05865758378058672,
             "output_tokens": 90,
             "usd": 0.002
           },
           "cycle": 2,
-          "deployed_score": 99.67,
+          "deployed_score": 100.0,
           "feedback": "accepted: outcome improved",
           "metrics": {
             "canary_leak": false,
+            "cpu_seconds": 0.001047,
+            "efficiency_penalty": 0.0,
             "error_rate": 0.0,
             "errors": 0,
-            "p95_logical_work_units": 33,
+            "lines_per_character": 0.679478,
             "requests": 120,
-            "restarts": 0
+            "restarts": 0,
+            "traced_lines": 5463,
+            "wrong_answers": 0
           },
-          "oracle_delta": 99.67,
-          "oracle_score": 99.67
+          "oracle_delta": 85.0,
+          "oracle_score": 100.0
         }
       ],
       "status": "apparatus smoke test; not a research result",
       "task": "s3",
       "total_cost": {
-        "agent_seconds": 0.0010633289930410683,
+        "agent_seconds": 0.0002247486263513565,
         "input_tokens": 280,
         "judge_seconds": 0.0,
-        "oracle_seconds": 1.2935317980591208,
+        "oracle_seconds": 0.5281154997646809,
         "output_tokens": 140,
         "usd": 0.003
       }
