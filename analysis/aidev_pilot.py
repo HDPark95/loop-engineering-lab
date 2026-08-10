@@ -71,8 +71,13 @@ COMPLETION_PATTERNS = tuple(
         # the change as subject: "this PR fixes X", "these changes implement Y"
         rf"\b(?:this\s+(?:pull\s+request|pr|change|commit)|these\s+changes)\s+"
         rf"(?:has\s+|have\s+)?{_ASSERTION_VERB}(?:ed|d|s)\b",
-        # sentence-initial past tense: "Added a hot reload feature"
-        rf"^\s*(?:[-*+]\s+|\d+\.\s+)?{_ASSERTION_VERB}(?:ed|d)\b",
+        # Sentence-initial past tense: "Added a hot reload feature".
+        # The leading indent is spaces and tabs, never `\s`: under re.MULTILINE
+        # `\s` also matches the newlines that `^` anchors to, so `^\s*` can start
+        # at every line and consume the whole run of blank lines after it. On a
+        # body of 20,000 blank lines that pattern took 73 seconds; the
+        # confirmatory pass reads 23,596 bodies.
+        rf"^[ \t]*(?:[-*+][ \t]+|\d+\.[ \t]+)?{_ASSERTION_VERB}(?:ed|d)\b",
         # passive perfect: "the endpoint has been exposed"
         rf"\b(?:has|have|had)\s+been\s+{_ASSERTION_VERB}(?:ed|d)\b",
         # explicit statement of a finished state

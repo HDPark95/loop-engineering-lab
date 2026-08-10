@@ -109,3 +109,13 @@ class ClaimClassifierV2Test(unittest.TestCase):
     def test_empty_body_is_not_a_claim(self):
         self.assertNotClaim("")
         self.assertFalse(MODULE.classify_claim(None)["claim"])
+
+    def test_a_body_of_blank_lines_returns_promptly(self):
+        # `^\s*` under re.MULTILINE anchors at every line start and `\s` also
+        # matches the newlines it anchors to, so the indent prefix could consume
+        # the whole run of blank lines from every position. That cost 73 seconds
+        # on 20,000 blank lines, and the confirmatory pass reads 23,596 bodies.
+        import time
+        start = time.perf_counter()
+        MODULE.classify_claim("\n" * 20000)
+        self.assertLess(time.perf_counter() - start, 1.0)
