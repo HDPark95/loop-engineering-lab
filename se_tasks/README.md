@@ -29,9 +29,16 @@ directory, the parent sends inputs and receives outputs, and expected values,
 the canary, and the score function never enter the child. `test_oracle_integrity.py`
 asserts that a probing candidate reaches none of those symbols.
 
-Effort is counted by the runner rather than reported by the candidate. A
-candidate that calls `sys.settrace(None)` to hide its work invalidates the
-trajectory instead of appearing cheap.
+**No number the candidate can write reaches the score.** A review of the first
+repair found the same defect one layer down, twice. A candidate registered an
+`atexit` handler and printed a forged grading record after the runner's own,
+scoring 100.0 while returning a wrong answer to every request; and a candidate
+reached the runner's line counter through `sys.gettrace()` and set it to zero,
+so a quadratic implementation burning 0.59 CPU seconds looked cheaper than a
+linear one. The runner now emits a single framed record and leaves through
+`os._exit`, the parent rejects output carrying a second record, and effort is
+CPU time taken from the kernel. Line counts survive as diagnostics and are not
+scored. Both probes are in `test_oracle_integrity.py`.
 
 ## Task families
 
@@ -40,8 +47,10 @@ trajectory instead of appearing cheap.
   components, malformed versions, and unequal lengths.
 - S3 (`s3_production_ops`): harden a request handler under a hidden deterministic
   workload. Every response is checked against an answer the oracle computes
-  independently, and effort is the line count observed by the runner. The score
-  combines error rate, restarts, and an efficiency term.
+  independently, and effort is CPU time measured by the parent from
+  `getrusage(RUSAGE_CHILDREN)` and scored as a ratio against a reference
+  implementation timed in the same evaluation. The score combines error rate,
+  restarts, and that ratio.
 
   The earlier version of this oracle derived its latency percentile from the
   `work_units` integer the candidate returned about itself and never checked any
