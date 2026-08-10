@@ -60,6 +60,25 @@ def load_trajectories(logdir):
     return trajectories
 
 
+def outcome_field(rows):
+    """Which delta the outcome is computed on, refusing a mixed trajectory.
+
+    `delta_hob` is the outcome half of section 4.1. A trajectory that carries it
+    on some cycles and not others is a harness bug, and silently falling back to
+    `delta` on the missing ones would compute the primary variable partly on the
+    half the gate read. That is the exact confusion the split exists to prevent,
+    so it raises instead.
+    """
+    present = sum(1 for r in rows if "delta_hob" in r)
+    if present == 0:
+        return "delta"
+    if present != len(rows):
+        raise ValueError(
+            f"{present} of {len(rows)} cycles carry delta_hob; a trajectory must "
+            "carry the outcome half on every cycle or on none")
+    return "delta_hob"
+
+
 def regression_acceptance_rate(rows):
     """Share of accepted cycles whose outcome-half delta is not positive.
 
@@ -71,13 +90,13 @@ def regression_acceptance_rate(rows):
     accepted = [r for r in rows if r.get("accept")]
     if not accepted:
         return None, "none-accepted"
-    field = "delta_hob" if "delta_hob" in accepted[0] else "delta"
+    field = outcome_field(rows)
     bad = sum(1 for r in accepted if r[field] <= 0)
     return bad / len(accepted), field
 
 
 def false_rejection_rate(rows):
-    field = "delta_hob" if rows and "delta_hob" in rows[0] else "delta"
+    field = outcome_field(rows)
     improved = [r for r in rows if r[field] > 0]
     if not improved:
         return None
