@@ -253,6 +253,7 @@ class ManifestGateTest(unittest.TestCase):
                         "container_image": "sha256:" + "c" * 64,
                         "timeout_seconds": 900,
                         "auth_file_env": "LOOP_CLAUDE_AUTH_FILE",
+                        "persist_refreshed_credentials": True,
                     },
                 ],
             )
@@ -282,6 +283,7 @@ class ManifestGateTest(unittest.TestCase):
                     "container_image": "sha256:" + "c" * 64,
                     "timeout_seconds": 900,
                     "auth_file_env": "LOOP_CLAUDE_AUTH_FILE",
+                    "persist_refreshed_credentials": True,
                 },
             ]
             frozen = manifest(
@@ -296,6 +298,20 @@ class ManifestGateTest(unittest.TestCase):
             )
             add_isolation_preflight(Path(tmp), frozen)
             self.assertEqual(run_measurement.load_manifest(write_manifest(Path(tmp), frozen)), frozen)
+
+            no_refresh_persistence = json.loads(json.dumps(frozen))
+            no_refresh_persistence["agents"][1].pop("persist_refreshed_credentials")
+            with self.assertRaisesRegex(SystemExit, "serialized OAuth"):
+                run_measurement.load_manifest(
+                    write_manifest(Path(tmp), no_refresh_persistence)
+                )
+
+            external_claude_state = json.loads(json.dumps(frozen))
+            external_claude_state["agents"][1]["state_file_env"] = "CLAUDE_STATE_FILE"
+            with self.assertRaisesRegex(SystemExit, "external Claude state"):
+                run_measurement.load_manifest(
+                    write_manifest(Path(tmp), external_claude_state)
+                )
 
             mutations = (
                 {"tasks": ["s1_swebench", "s3", "g1"]},
@@ -317,6 +333,25 @@ class ManifestGateTest(unittest.TestCase):
 
 
 class RunnerTest(unittest.TestCase):
+    def test_serialized_claude_has_a_dedicated_worker_lane(self):
+        data = manifest(
+            max_concurrent_agents=3,
+            agents=[
+                {
+                    "name": "claude",
+                    "adapter": "claude",
+                    "persist_refreshed_credentials": True,
+                },
+                {"name": "codex", "adapter": "codex"},
+            ],
+        )
+        self.assertEqual(
+            run_measurement.worker_lane_limits(data),
+            {"claude": 1, "other": 2},
+        )
+        data["max_concurrent_agents"] = 1
+        self.assertEqual(run_measurement.worker_lane_limits(data), {"shared": 1})
+
     def test_shadow_price_uses_cache_and_request_level_long_context_tiers(self):
         agent = {
             **frozen_price(),
@@ -1132,6 +1167,7 @@ class ReplayTest(unittest.TestCase):
             "manifest_digest": "m",
             "preregistration_commit": "p",
             "candidate_archive_manifest_sha256": "archive",
+            "credential_leak_scan_passed": True,
             "cost_allocation_fraction": 0.25,
             "candidate_changed": True,
             "agent_completed": True,
@@ -1172,6 +1208,12 @@ class ReplayTest(unittest.TestCase):
         }
         report = replay.integrity([row], [], [])
         self.assertTrue(report["clean"])
+
+        row["credential_leak_scan_passed"] = False
+        report = replay.integrity([row], [], [])
+        self.assertEqual(report["invalid_measurement_contract_trajectories"], ["t1"])
+        self.assertFalse(report["clean"])
+        row["credential_leak_scan_passed"] = True
 
         row["execution_api_equivalent_usd"] = 0.0143
         report = replay.integrity([row], [], [])

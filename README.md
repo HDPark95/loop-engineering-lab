@@ -40,12 +40,13 @@ SE 장치 스모크 검증:
     python3 -m unittest -v test_agent_adapters.py
     python3 se_experiment.py --smoke-output results/se_smoke_matrix.json
     python3 agent_adapters.py --agent codex --task s1 --billing-mode subscription --container-image loop-eng-se-lab-agent:latest --auth-file "$CODEX_AUTH_FILE" --output results/codex_adapter_smoke.json
-    python3 agent_adapters.py --agent claude --task s1 --model sonnet --billing-mode subscription --container-image loop-eng-se-lab-agent:latest --auth-file "$CLAUDE_AUTH_FILE" --state-file "$CLAUDE_STATE_FILE" --max-budget-usd 0.25 --output results/claude_adapter_smoke.json
+    python3 agent_adapters.py --agent claude --task s1 --model sonnet --billing-mode subscription --container-image loop-eng-se-lab-agent:latest --auth-file "$CLAUDE_AUTH_FILE" --persist-refreshed-credentials --max-budget-usd 0.25 --output results/claude_adapter_smoke.json
 
-Claude 쿼터 리셋 뒤 두 번째 명령을 한 번 실행해 alias 요청과 별도로
-`model_served`에 기록된 런타임 모델 ID를 동결한다. `model_served`가 null이거나
-alias면 불변 모델 식별 근거가 아니므로 manifest를 만들지 않는다. 스모크 파일은
-장치 검증 기록일 뿐 확증 결과에는 포함하지 않는다.
+Claude 쿼터 리셋 뒤 두 번째 명령을 alias로 한 번 실행해 `model_served`에 기록된
+런타임 모델 ID를 찾고, 그 exact ID를 `--model`에 넣어 한 번 더 실행한다. 두 번째
+기록의 `model_requested`와 `model_served`가 같은 불변 ID일 때만 manifest에 동결한다.
+`model_served`가 null이거나 alias면 불변 모델 식별 근거가 아니므로 manifest를 만들지
+않는다. 두 스모크 파일은 장치 검증 기록일 뿐 확증 결과에는 포함하지 않는다.
 
 ### 본 측정 러너
 
@@ -67,7 +68,7 @@ read와 요청별 long-context 구간을 직접 반영하며, 런타임이 cache
 - alias가 아닌 두 agent의 정확한 model ID, reasoning effort, 출처와 조회시점까지
   고정한 일반·캐시·cache-write·long-context API 환산 단가
 - digest로 고정한 agent/candidate-sandbox image, 실행 timeout, 인증 파일 경로를
-  담는 환경변수 이름
+  담는 환경변수 이름. Claude entry는 `persist_refreshed_credentials=true`
 - preregistration commit, 다섯 seed, 6 cycles, 네 task와 네 factor cell
 - block별 네 cell의 실행 순서를 SHA-256으로 고정 난수화하는 `cell_schedule_seed`
 - frozen candidate sandbox image로 실행한 isolation preflight JSON의 경로와 SHA-256
@@ -84,6 +85,22 @@ read와 요청별 long-context 구간을 직접 반영하며, 런타임이 cache
 manifest가 파일 SHA-256와 image ID를 다시 대조한다.
 
     python3 preflight_isolation.py --sandbox-image sha256:<image-id> --output preflight/sandbox-isolation.json
+
+Claude의 구독 OAuth access token은 장시간 실행 중 갱신될 수 있다. 확인용 원본을
+직접 쓰지 말고 mode 0600인 runner 전용 credential file을 만들어
+`auth_file_env`가 그 경로를 가리키게 한다. Claude 호출은 refresh-token 경쟁을 막기
+위해 한 번에 하나만 실행하고 나머지 두 worker는 Codex 전용 lane으로 둔다. 각 호출은
+이 파일의 일회성 사본과 `/workspace` 신뢰·비대화형 권한 확인만 담은 최소 상태를
+새로 생성해 마운트한다. 사용자 홈의 전체 Claude 상태 파일은 manifest와 adapter가
+거부하므로 그 파일에 캐시된 계정·조직·로컬 프로젝트 metadata와 경로는 직접
+노출되지 않는다. 단, OAuth profile scope를 통해 CLI가 조회할 수 있는 식별 metadata는
+credential 경계의 잔여위험이며 exact-secret scan의 탐지 범위가 아니다. CLI가
+토큰을 갱신했을 때 account metadata가 그대로이고 access token과 만료시점이 함께
+전진한 OAuth record만 원자적으로 전용 파일에 반영한다. 원시 token 값은 측정 로그에
+기록하지 않는다. 매 호출은 실행 전후 credential의 exact secret 값을 stdout, stderr와
+candidate tree에서 byte scan하고, 하나라도 나오면 archive와 cycle log 작성 전에 해당
+시도를 폐기한다. replay와 reward-hacking audit은 이 scan의 성공 플래그가 없으면 fail
+closed한다.
 
 Codex adapter는 CLI 최종 텍스트의 자기보고를 모델 식별 근거로 쓰지 않는다.
 컨테이너 안에서 Codex App Server를 시작하고 `thread/start`,

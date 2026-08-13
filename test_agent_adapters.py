@@ -5,6 +5,8 @@ import json
 import os
 import subprocess
 import tempfile
+import threading
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -12,7 +14,154 @@ from unittest import mock
 import agent_adapters
 
 
+def claude_credentials(
+    access_token: str = "access-before-token-test",
+    refresh_token: str = "refresh-before-token-test",
+    expires_at: int = 1000,
+) -> dict:
+    return {
+        "claudeAiOauth": {
+            "accessToken": access_token,
+            "refreshToken": refresh_token,
+            "expiresAt": expires_at,
+            "subscriptionType": "max",
+            "rateLimitTier": "default_claude_max_20x",
+            "scopes": ["user:inference", "user:profile"],
+        },
+        "unrelated": {"preserve": True},
+    }
+
+
+def codex_credentials() -> dict:
+    return {
+        "auth_mode": "chatgpt",
+        "tokens": {
+            "access_token": "codex-access-token-for-tests",
+            "refresh_token": "codex-refresh-token-for-tests",
+            "id_token": "codex-id-token-for-tests",
+            "account_id": "account-metadata",
+        },
+    }
+
+
 class AdapterTest(unittest.TestCase):
+    def test_exact_credentials_are_rejected_from_output_and_candidate(self):
+        secret = "exact-refresh-token-for-leak-test"
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp)
+            with self.assertRaises(agent_adapters.AgentInvocationError) as output_error:
+                agent_adapters.reject_credential_leak(
+                    workspace, f"prefix {secret} suffix", "", (secret,)
+                )
+            self.assertNotIn(secret, str(output_error.exception))
+
+            (workspace / "candidate.txt").write_text(secret, encoding="utf-8")
+            with self.assertRaises(agent_adapters.AgentInvocationError) as file_error:
+                agent_adapters.reject_credential_leak(workspace, "", "", (secret,))
+            self.assertNotIn(secret, str(file_error.exception))
+
+    def test_validated_claude_refresh_updates_only_oauth_state(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "source.json"
+            disposable = Path(tmp) / "disposable.json"
+            before = claude_credentials()
+            source.write_text(json.dumps(before), encoding="utf-8")
+            source.chmod(0o600)
+            refreshed = claude_credentials(
+                "access-after-token-test", "refresh-after-token-test", 2000
+            )
+            refreshed["unrelated"] = {"agent": "must not persist"}
+            disposable.write_text(json.dumps(refreshed), encoding="utf-8")
+            disposable.chmod(0o600)
+
+            self.assertTrue(
+                agent_adapters.persist_refreshed_claude_credentials(
+                    source, disposable, before
+                )
+            )
+            written = json.loads(source.read_text(encoding="utf-8"))
+            self.assertEqual(written["claudeAiOauth"], refreshed["claudeAiOauth"])
+            self.assertEqual(written["unrelated"], {"preserve": True})
+            self.assertEqual(source.stat().st_mode & 0o777, 0o600)
+
+    def test_invalid_claude_refresh_is_rejected_without_overwrite(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "source.json"
+            disposable = Path(tmp) / "disposable.json"
+            before = claude_credentials()
+            source.write_text(json.dumps(before), encoding="utf-8")
+            source.chmod(0o600)
+            invalid = claude_credentials(
+                "access-after-token-test", "refresh-after-token-test", 2000
+            )
+            invalid["claudeAiOauth"]["subscriptionType"] = "different"
+            disposable.write_text(json.dumps(invalid), encoding="utf-8")
+            disposable.chmod(0o600)
+
+            with self.assertRaisesRegex(
+                agent_adapters.AgentInvocationError, "account metadata"
+            ):
+                agent_adapters.persist_refreshed_claude_credentials(
+                    source, disposable, before
+                )
+            self.assertEqual(json.loads(source.read_text(encoding="utf-8")), before)
+
+    def test_claude_refresh_source_requires_exact_private_mode(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "source.json"
+            source.write_text(json.dumps(claude_credentials()), encoding="utf-8")
+            source.chmod(0o700)
+            with self.assertRaisesRegex(
+                agent_adapters.AgentInvocationError, "mode 0600"
+            ):
+                agent_adapters._read_private_json(source)
+
+    def test_confirmatory_claude_invocations_are_serialized(self):
+        active = 0
+        maximum = 0
+        state_lock = threading.Lock()
+
+        def fake_cycle(**_kwargs):
+            nonlocal active, maximum
+            with state_lock:
+                active += 1
+                maximum = max(maximum, active)
+            time.sleep(0.05)
+            with state_lock:
+                active -= 1
+            return {}
+
+        arguments = {
+            "agent": "claude",
+            "model": "claude-test",
+            "task": "s1",
+            "workspace": Path("/tmp/work"),
+            "cycle": 1,
+            "feedback": "",
+            "container_image": "sha256:" + "a" * 64,
+            "auth_file": Path("/tmp/auth"),
+            "state_file": None,
+            "timeout_seconds": 1,
+            "billing_mode": "subscription",
+            "max_budget_usd": 1.0,
+            "persist_refreshed_credentials": True,
+        }
+        with mock.patch.object(
+            agent_adapters, "_run_measurement_cycle_unlocked", side_effect=fake_cycle
+        ):
+            threads = [
+                threading.Thread(
+                    target=agent_adapters.run_measurement_cycle,
+                    kwargs=arguments,
+                )
+                for _ in range(2)
+            ]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+        self.assertEqual(maximum, 1)
+
     def test_codex_command_is_ephemeral_and_workspace_scoped(self):
         command = agent_adapters.command_for("codex", Path("/tmp/work"), "gpt-test", 0.25)
         self.assertIn("--ephemeral", command)
@@ -208,7 +357,8 @@ class AdapterTest(unittest.TestCase):
             workspace = Path(tmp) / "workspace"
             workspace.mkdir()
             auth = Path(tmp) / "auth.json"
-            auth.write_text("{}", encoding="utf-8")
+            auth.write_text(json.dumps(claude_credentials()), encoding="utf-8")
+            auth.chmod(0o600)
             with (
                 mock.patch.object(
                     agent_adapters.shutil, "which", return_value="/usr/bin/docker"
@@ -234,12 +384,174 @@ class AdapterTest(unittest.TestCase):
             self.assertEqual((result["input_tokens"], result["output_tokens"]), (30, 8))
             self.assertFalse((workspace / ".loop-verdict-schema.json").exists())
 
+    def test_measurement_cycle_mounts_only_sanitized_claude_state(self):
+        report = {"improved": False, "confidence": 0.7, "evidence": "no change"}
+        completed = mock.Mock(
+            returncode=0,
+            stdout=json.dumps(
+                {
+                    "structured_output": report,
+                    "modelUsage": {"claude-test-20260801": {}},
+                    "usage": {"input_tokens": 3, "output_tokens": 2},
+                }
+            ),
+            stderr="",
+        )
+        observed = {}
+
+        def inspect_runtime(command, **_kwargs):
+            mounts = [
+                command[index + 1]
+                for index, value in enumerate(command[:-1])
+                if value == "--mount"
+            ]
+            auth_mount = next(item for item in mounts if "dst=/tmp/.claude" in item)
+            state_mount = next(item for item in mounts if "dst=/tmp/.claude.json" in item)
+            auth_dir = Path(auth_mount.split("src=", 1)[1].split(",dst=", 1)[0])
+            state_path = Path(state_mount.split("src=", 1)[1].split(",dst=", 1)[0])
+            observed["settings"] = json.loads(
+                (auth_dir / "settings.json").read_text(encoding="utf-8")
+            )
+            observed["state"] = json.loads(state_path.read_text(encoding="utf-8"))
+            observed["state_mode"] = state_path.stat().st_mode & 0o777
+            return completed
+
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp) / "workspace"
+            workspace.mkdir()
+            auth = Path(tmp) / "auth.json"
+            auth.write_text(json.dumps(claude_credentials()), encoding="utf-8")
+            auth.chmod(0o600)
+            with (
+                mock.patch.object(
+                    agent_adapters.shutil, "which", return_value="/usr/bin/docker"
+                ),
+                mock.patch.object(
+                    agent_adapters.subprocess, "run", side_effect=inspect_runtime
+                ),
+            ):
+                agent_adapters.run_measurement_cycle(
+                    agent="claude",
+                    model="claude-test-20260801",
+                    task="s1",
+                    workspace=workspace,
+                    cycle=1,
+                    feedback="",
+                    container_image="sha256:" + "a" * 64,
+                    auth_file=auth,
+                    state_file=None,
+                    timeout_seconds=10,
+                    billing_mode="subscription",
+                    max_budget_usd=1.0,
+                )
+        self.assertEqual(observed["settings"], agent_adapters.SANITIZED_CLAUDE_SETTINGS)
+        self.assertEqual(observed["state"], agent_adapters.SANITIZED_CLAUDE_STATE)
+        self.assertEqual(observed["state_mode"], 0o600)
+        serialized = json.dumps(observed)
+        self.assertNotIn("oauthAccount", serialized)
+        self.assertNotIn("/home/", serialized)
+
+    def test_external_claude_state_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            workspace = root / "workspace"
+            workspace.mkdir()
+            auth = root / "auth.json"
+            auth.write_text(json.dumps(claude_credentials()), encoding="utf-8")
+            auth.chmod(0o600)
+            state = root / "state.json"
+            state.write_text("{}", encoding="utf-8")
+            with (
+                mock.patch.object(
+                    agent_adapters.shutil, "which", return_value="/usr/bin/docker"
+                ),
+                self.assertRaisesRegex(
+                    agent_adapters.AgentInvocationError, "external Claude state"
+                ),
+            ):
+                agent_adapters.run_measurement_cycle(
+                    agent="claude",
+                    model="claude-test-20260801",
+                    task="s1",
+                    workspace=workspace,
+                    cycle=1,
+                    feedback="",
+                    container_image="sha256:" + "a" * 64,
+                    auth_file=auth,
+                    state_file=state,
+                    timeout_seconds=10,
+                    billing_mode="subscription",
+                    max_budget_usd=1.0,
+                )
+
+    def test_measurement_cycle_persists_a_valid_claude_rotation(self):
+        report = {"improved": False, "confidence": 0.7, "evidence": "tests still fail"}
+        stdout = json.dumps({
+            "structured_output": report,
+            "modelUsage": {"claude-test-20260801": {}},
+            "usage": {"input_tokens": 30, "output_tokens": 8},
+        })
+        completed = mock.Mock(returncode=0, stdout=stdout, stderr="")
+
+        def rotate(command, **_kwargs):
+            auth_mount = next(
+                value
+                for value in command
+                if isinstance(value, str) and "dst=/tmp/.claude" in value
+            )
+            auth_dir = Path(auth_mount.split("src=", 1)[1].split(",dst=", 1)[0])
+            copied = auth_dir / ".credentials.json"
+            copied.write_text(
+                json.dumps(
+                    claude_credentials(
+                        "access-after-token-test", "refresh-after-token-test", 2000
+                    )
+                ),
+                encoding="utf-8",
+            )
+            copied.chmod(0o600)
+            return completed
+
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp) / "workspace"
+            workspace.mkdir()
+            auth = Path(tmp) / "auth.json"
+            auth.write_text(json.dumps(claude_credentials()), encoding="utf-8")
+            auth.chmod(0o600)
+            with (
+                mock.patch.object(
+                    agent_adapters.shutil, "which", return_value="/usr/bin/docker"
+                ),
+                mock.patch.object(agent_adapters.subprocess, "run", side_effect=rotate),
+            ):
+                result = agent_adapters.run_measurement_cycle(
+                    agent="claude",
+                    model="claude-test-20260801",
+                    task="s1",
+                    workspace=workspace,
+                    cycle=2,
+                    feedback="rejected",
+                    container_image="sha256:" + "a" * 64,
+                    auth_file=auth,
+                    state_file=None,
+                    timeout_seconds=10,
+                    billing_mode="subscription",
+                    max_budget_usd=1.0,
+                    persist_refreshed_credentials=True,
+                )
+            self.assertTrue(result["credential_refresh_persisted"])
+            self.assertEqual(
+                json.loads(auth.read_text(encoding="utf-8"))["claudeAiOauth"]["accessToken"],
+                "access-after-token-test",
+            )
+
     def test_measurement_cycle_removes_schema_when_auth_copy_fails(self):
         with tempfile.TemporaryDirectory() as tmp:
             workspace = Path(tmp) / "workspace"
             workspace.mkdir()
             auth = Path(tmp) / "auth.json"
-            auth.write_text("{}", encoding="utf-8")
+            auth.write_text(json.dumps(codex_credentials()), encoding="utf-8")
+            auth.chmod(0o600)
             with (
                 mock.patch.object(
                     agent_adapters.shutil, "which", return_value="/usr/bin/docker"
@@ -270,7 +582,8 @@ class AdapterTest(unittest.TestCase):
             workspace = Path(tmp) / "workspace"
             workspace.mkdir()
             auth = Path(tmp) / "auth.json"
-            auth.write_text("{}", encoding="utf-8")
+            auth.write_text(json.dumps(codex_credentials()), encoding="utf-8")
+            auth.chmod(0o600)
             timeout = subprocess.TimeoutExpired("docker", 10)
             with (
                 mock.patch.object(

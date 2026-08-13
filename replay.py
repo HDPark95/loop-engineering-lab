@@ -358,6 +358,7 @@ def integrity(cycles: list[dict], abandoned: list[dict], unparsable: list[int]) 
                         and isinstance(row.get("cell_schedule_position"), int)
                         and not isinstance(row.get("cell_schedule_position"), bool)
                         and 1 <= row["cell_schedule_position"] <= 4
+                        and row.get("credential_leak_scan_passed") is True
                     )
                 )
             )

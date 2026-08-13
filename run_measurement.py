@@ -36,6 +36,7 @@ models. A mismatch is recorded on the cycle rather than corrected.
 from __future__ import annotations
 
 import argparse
+from contextlib import ExitStack
 import hashlib
 import json
 import math
@@ -333,6 +334,20 @@ def load_manifest(path: Path) -> dict:
                 raise SystemExit(
                     f"agent {agent.get('name')!r} must freeze reasoning_effort"
                 )
+            if (
+                adapter == "claude"
+                and not manifest.get("apparatus_test", False)
+                and agent.get("persist_refreshed_credentials") is not True
+            ):
+                raise SystemExit(
+                    f"agent {agent.get('name')!r} must enable serialized OAuth "
+                    "credential refresh persistence"
+                )
+            if adapter == "claude" and "state_file_env" in agent:
+                raise SystemExit(
+                    f"agent {agent.get('name')!r} must not expose an external Claude "
+                    "state file; the adapter generates sanitized state per call"
+                )
 
     if manifest["billing_mode"] not in {"subscription", "api"}:
         raise SystemExit("billing_mode must be 'subscription' or 'api'")
@@ -449,6 +464,19 @@ def scheduled_trajectories(keys: list[TrajectoryKey], manifest: dict) -> list[Tr
             if position < len(ordered_members[group]):
                 schedule.append(ordered_members[group][position])
     return schedule
+
+
+def worker_lane_limits(manifest: dict) -> dict[str, int]:
+    """Reserve one worker for serialized Claude without starving other agents."""
+    concurrency = int(manifest["max_concurrent_agents"])
+    serialized_claude = any(
+        entry.get("adapter", entry.get("name")) == "claude"
+        and entry.get("persist_refreshed_credentials") is True
+        for entry in manifest["agents"]
+    )
+    if serialized_claude and concurrency >= 2:
+        return {"claude": 1, "other": concurrency - 1}
+    return {"shared": concurrency}
 
 
 def common_attempt_states(
@@ -968,6 +996,9 @@ def real_agent_driver(
             billing_mode=manifest["billing_mode"],
             max_budget_usd=float(manifest["estimated_api_equivalent_usd_per_trajectory"]),
             reasoning_effort=entry.get("reasoning_effort"),
+            persist_refreshed_credentials=bool(
+                entry.get("persist_refreshed_credentials", False)
+            ),
         )
     except agent_adapters.AgentInvocationError as exc:
         if exc.kind == "quota":
@@ -1327,6 +1358,7 @@ def run_trajectory(
                 "confirmatory_eligible": bool(
                     not manifest.get("apparatus_test", False)
                     and outcome.get("model_served") == key.model
+                    and outcome.get("credential_leak_scan_passed") is True
                     and (
                         not agent_entry.get("reasoning_effort")
                         or outcome.get("reasoning_effort_served")
@@ -1428,6 +1460,12 @@ def run_trajectory(
                 "incremental_billed_usd": round(incremental_billed_usd, 6),
                 "quota_wait_events": outcome.get("quota_wait_events", 0),
                 "quota_wait_seconds": outcome.get("quota_wait_seconds", 0.0),
+                "credential_refresh_persisted": outcome.get(
+                    "credential_refresh_persisted", False
+                ),
+                "credential_leak_scan_passed": outcome.get(
+                    "credential_leak_scan_passed", False
+                ),
                 "wall_clock_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             }
             try:
@@ -1608,6 +1646,7 @@ def main() -> int:
     prior_shadow, prior_billed = logged_costs(args.log, digest)
     within_ceiling = ceiling is None or prior_billed + total_billed_estimate <= ceiling
     concurrency = int(manifest["max_concurrent_agents"])
+    lane_limits = worker_lane_limits(manifest)
     archive_root = None
     if manifest.get("artifact_archive_dir"):
         configured_archive = Path(manifest["artifact_archive_dir"])
@@ -1641,6 +1680,7 @@ def main() -> int:
                 "cost_ceiling_usd": ceiling,
                 "within_ceiling": within_ceiling,
                 "max_concurrent_agents": concurrency,
+                "worker_lane_limits": lane_limits,
                 "quota_wait_seconds": float(manifest["quota_wait_seconds"]),
                 "quota_max_retries": int(manifest["quota_max_retries"]),
             },
@@ -1680,13 +1720,29 @@ def main() -> int:
     individually_abandoned: set[str] = set()
 
     try:
-        with ThreadPoolExecutor(max_workers=concurrency) as pool:
+        with ExitStack() as stack:
+            if "shared" in lane_limits:
+                shared_pool = stack.enter_context(
+                    ThreadPoolExecutor(max_workers=lane_limits["shared"])
+                )
+                claude_pool = shared_pool
+                other_pool = shared_pool
+            else:
+                claude_pool = stack.enter_context(
+                    ThreadPoolExecutor(max_workers=lane_limits["claude"])
+                )
+                other_pool = stack.enter_context(
+                    ThreadPoolExecutor(max_workers=lane_limits["other"])
+                )
             futures = {}
             if not budget.reserve(total_shadow_estimate):
                 stopped_for_budget.extend(key.token() for key in todo)
             for key in ([] if stopped_for_budget else scheduled_trajectories(todo, manifest)):
                 group = common_group(key)
                 attempt_id = attempt_ids[group]
+                entry = agents_by_name[key.agent]
+                adapter = entry.get("adapter", entry.get("name"))
+                pool = claude_pool if adapter == "claude" else other_pool
                 futures[
                     pool.submit(
                         run_trajectory,
