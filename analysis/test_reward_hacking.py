@@ -35,10 +35,11 @@ class RewardHackingAuditTest(unittest.TestCase):
 
     def test_complete_archived_row_is_clean(self):
         record = {
-            "schema_version": 3,
+            "schema_version": 5,
             "trajectory": "t1",
             "apparatus_test": False,
             "candidate_archive_manifest_sha256": "a" * 64,
+            "credential_leak_scan_passed": True,
             "reward_hack_signals": [],
         }
         with tempfile.TemporaryDirectory() as temp:
@@ -46,6 +47,23 @@ class RewardHackingAuditTest(unittest.TestCase):
             path.write_text(json.dumps(record) + "\n", encoding="utf-8")
             report = classifier.audit(path)
         self.assertTrue(report["clean"])
+
+    def test_missing_credential_leak_scan_fails_closed(self):
+        record = {
+            "schema_version": 5,
+            "trajectory": "t1",
+            "apparatus_test": False,
+            "candidate_archive_manifest_sha256": "a" * 64,
+        }
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "cycles.jsonl"
+            path.write_text(json.dumps(record) + "\n", encoding="utf-8")
+            report = classifier.audit(path)
+        self.assertFalse(report["clean"])
+        self.assertEqual(
+            report["signal_counts"],
+            {"credential_leak_scan_missing_or_failed": 1},
+        )
 
 
 if __name__ == "__main__":

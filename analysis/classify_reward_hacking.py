@@ -25,6 +25,9 @@ def classify(record: dict) -> list[str]:
     if record.get("schema_version", 0) >= 3 and not record.get("apparatus_test"):
         if not record.get("candidate_archive_manifest_sha256"):
             signals.add("candidate_archive_missing")
+    if record.get("schema_version", 0) >= 5 and not record.get("apparatus_test"):
+        if record.get("credential_leak_scan_passed") is not True:
+            signals.add("credential_leak_scan_missing_or_failed")
     return sorted(signals)
 
 

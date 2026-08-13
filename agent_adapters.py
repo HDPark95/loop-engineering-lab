@@ -10,12 +10,14 @@ smokes are apparatus checks, not confirmatory observations.
 from __future__ import annotations
 
 import argparse
+from contextlib import nullcontext
 import hashlib
 import json
 import os
 import shutil
 import subprocess
 import tempfile
+import threading
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -24,6 +26,18 @@ import se_experiment
 
 APP_SERVER_CLIENT_SOURCE = Path(__file__).resolve().parent / "codex_app_server_client.py"
 DOCKER_CLEANUP_TIMEOUT_SECONDS = 5
+CLAUDE_CREDENTIAL_LOCK = threading.Lock()
+SECRET_KEY_MARKERS = ("token", "api_key", "apikey", "secret")
+SANITIZED_CLAUDE_STATE = {
+    "hasCompletedOnboarding": True,
+    "projects": {
+        "/workspace": {
+            "hasTrustDialogAccepted": True,
+            "hasCompletedProjectOnboarding": True,
+        }
+    },
+}
+SANITIZED_CLAUDE_SETTINGS = {"skipDangerousModePermissionPrompt": True}
 
 PROMPT = """Repair the issue in ISSUE.md in the current isolated directory.
 Work only in the current directory. Inspect the implementation and public tests,
@@ -49,6 +63,218 @@ class AgentInvocationError(RuntimeError):
     def __init__(self, message: str, kind: str = "command") -> None:
         super().__init__(message)
         self.kind = kind
+
+
+def _read_private_json(path: Path) -> dict:
+    """Read a runner-owned credential file without ever echoing its contents."""
+    try:
+        status = path.lstat()
+    except OSError as exc:
+        raise AgentInvocationError("authentication file is unreadable", "authentication") from exc
+    if path.is_symlink() or not path.is_file():
+        raise AgentInvocationError(
+            "authentication state must be a regular file, not a symlink",
+            "authentication",
+        )
+    if status.st_uid != os.getuid() or status.st_mode & 0o777 != 0o600:
+        raise AgentInvocationError(
+            "authentication state must be owned by the runner and mode 0600",
+            "authentication",
+        )
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise AgentInvocationError("authentication state is not valid JSON", "authentication") from exc
+    if not isinstance(document, dict):
+        raise AgentInvocationError("authentication state must be a JSON object", "authentication")
+    return document
+
+
+def _claude_oauth(document: dict) -> dict:
+    oauth = document.get("claudeAiOauth")
+    if not isinstance(oauth, dict):
+        raise AgentInvocationError(
+            "Claude authentication state has no claudeAiOauth record",
+            "authentication",
+        )
+    for field in ("accessToken", "refreshToken", "subscriptionType", "rateLimitTier"):
+        if not isinstance(oauth.get(field), str) or not oauth[field]:
+            raise AgentInvocationError(
+                f"Claude authentication state has invalid {field}",
+                "authentication",
+            )
+    expires_at = oauth.get("expiresAt")
+    if (
+        not isinstance(expires_at, (int, float))
+        or isinstance(expires_at, bool)
+        or expires_at <= 0
+    ):
+        raise AgentInvocationError(
+            "Claude authentication state has invalid expiresAt",
+            "authentication",
+        )
+    scopes = oauth.get("scopes")
+    if (
+        not isinstance(scopes, list)
+        or not scopes
+        or any(not isinstance(scope, str) or not scope for scope in scopes)
+    ):
+        raise AgentInvocationError(
+            "Claude authentication state has invalid scopes",
+            "authentication",
+        )
+    return oauth
+
+
+def credential_secret_values(document: dict) -> tuple[str, ...]:
+    """Extract authentication secrets without returning account metadata."""
+    secrets: set[str] = set()
+
+    def visit(value, key: str = "") -> None:
+        if isinstance(value, dict):
+            for child_key, child_value in value.items():
+                visit(child_value, str(child_key))
+        elif isinstance(value, list):
+            for child in value:
+                visit(child, key)
+        elif (
+            isinstance(value, str)
+            and len(value) >= 16
+            and any(marker in key.lower() for marker in SECRET_KEY_MARKERS)
+        ):
+            secrets.add(value)
+
+    visit(document)
+    if not secrets:
+        raise AgentInvocationError(
+            "authentication state has no scannable secret values",
+            "authentication",
+        )
+    return tuple(sorted(secrets))
+
+
+def secret_leak_paths(root: Path, secrets: tuple[str, ...]) -> list[str]:
+    """Return candidate-relative paths containing an exact credential value."""
+    encoded = tuple(secret.encode("utf-8") for secret in secrets)
+    maximum = max(len(secret) for secret in encoded)
+    leaks = []
+    for path in sorted(root.rglob("*")):
+        if path.is_symlink() or not path.is_file():
+            continue
+        try:
+            with path.open("rb") as handle:
+                overlap = b""
+                while chunk := handle.read(1024 * 1024):
+                    payload = overlap + chunk
+                    if any(secret in payload for secret in encoded):
+                        leaks.append(path.relative_to(root).as_posix())
+                        break
+                    overlap = payload[-(maximum - 1):] if maximum > 1 else b""
+        except OSError as exc:
+            raise AgentInvocationError(
+                "candidate credential-leak scan could not read a file",
+                "credential_leak",
+            ) from exc
+    return leaks
+
+
+def reject_credential_leak(
+    workspace: Path,
+    stdout: str,
+    stderr: str,
+    secrets: tuple[str, ...],
+) -> None:
+    if any(secret in stdout or secret in stderr for secret in secrets):
+        raise AgentInvocationError(
+            "agent output exposed authentication material",
+            "credential_leak",
+        )
+    leaks = secret_leak_paths(workspace, secrets)
+    if leaks:
+        raise AgentInvocationError(
+            "candidate artifact exposed authentication material",
+            "credential_leak",
+        )
+
+
+def _atomic_private_json_write(path: Path, document: dict) -> None:
+    descriptor, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    temporary_path = Path(temporary)
+    try:
+        os.fchmod(descriptor, 0o600)
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            json.dump(document, handle, separators=(",", ":"))
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary_path, path)
+        directory = os.open(path.parent, os.O_RDONLY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    finally:
+        temporary_path.unlink(missing_ok=True)
+
+
+def prepare_sanitized_claude_runtime(root: Path, auth_dir: Path) -> Path:
+    """Create only the non-secret state needed for a non-interactive CLI call."""
+    settings_path = auth_dir / "settings.json"
+    state_path = root / "claude-state.json"
+    _atomic_private_json_write(settings_path, SANITIZED_CLAUDE_SETTINGS)
+    _atomic_private_json_write(state_path, SANITIZED_CLAUDE_STATE)
+    return state_path
+
+
+def persist_refreshed_claude_credentials(
+    source: Path,
+    disposable_copy: Path,
+    before_document: dict,
+) -> bool:
+    """Persist only a structurally valid OAuth rotation from the Claude CLI.
+
+    Confirmatory Claude calls are serialized, so one process owns the refresh
+    token at a time. The coding agent sees only a disposable credential copy;
+    after the CLI exits, only the validated OAuth record can flow back to the
+    runner-owned source file. No task artifact can cross this boundary.
+    """
+    before = _claude_oauth(before_document)
+    after_document = _read_private_json(disposable_copy)
+    after = _claude_oauth(after_document)
+    if after == before:
+        return False
+
+    mutable_fields = {"accessToken", "refreshToken", "expiresAt"}
+    if set(after) != set(before) or any(
+        after[field] != before[field] for field in set(before) - mutable_fields
+    ):
+        raise AgentInvocationError(
+            "Claude credential refresh changed account metadata or schema",
+            "authentication",
+        )
+    if after["accessToken"] == before["accessToken"]:
+        raise AgentInvocationError(
+            "Claude credential state changed without a new access token",
+            "authentication",
+        )
+    if after["expiresAt"] <= before["expiresAt"]:
+        raise AgentInvocationError(
+            "Claude credential refresh did not advance token expiry",
+            "authentication",
+        )
+
+    current_document = _read_private_json(source)
+    current = _claude_oauth(current_document)
+    if current != before:
+        if current == after:
+            return True
+        raise AgentInvocationError(
+            "Claude credential source changed during a serialized invocation",
+            "authentication",
+        )
+    current_document["claudeAiOauth"] = after
+    _atomic_private_json_write(source, current_document)
+    return True
 
 
 def _bounded_docker_cleanup(container_name: str) -> None:
@@ -393,7 +619,7 @@ def reported_model(agent: str, stdout: str) -> str | None:
     return next(iter(models)) if len(models) == 1 else None
 
 
-def run_measurement_cycle(
+def _run_measurement_cycle_unlocked(
     *,
     agent: str,
     model: str,
@@ -408,22 +634,36 @@ def run_measurement_cycle(
     billing_mode: str,
     max_budget_usd: float,
     reasoning_effort: str | None = None,
+    persist_refreshed_credentials: bool = False,
 ) -> dict:
     """Run one real prompt cycle and retain only structured aggregate output."""
     if agent not in {"codex", "claude"}:
         raise ValueError(f"unsupported measurement agent: {agent}")
     if not auth_file.is_file():
-        raise AgentInvocationError(f"authentication file is unreadable: {auth_file}", "authentication")
+        raise AgentInvocationError("authentication file is unreadable", "authentication")
+    if agent == "claude" and state_file is not None:
+        raise AgentInvocationError(
+            "external Claude state files are prohibited; sanitized state is generated per call",
+            "authentication",
+        )
     if state_file is not None and not state_file.is_file():
         raise AgentInvocationError(f"state file is unreadable: {state_file}", "authentication")
     if not shutil.which("docker"):
         raise AgentInvocationError("docker executable not found", "isolation")
+
+    credential_document = _read_private_json(auth_file)
+    credential_secrets = credential_secret_values(credential_document)
+    credential_before = None
+    if agent == "claude" and persist_refreshed_credentials:
+        credential_before = credential_document
+        _claude_oauth(credential_before)
 
     schema_path = workspace / ".loop-verdict-schema.json"
     schema_path.write_text(json.dumps(VERDICT_SCHEMA, separators=(",", ":")), encoding="utf-8")
     try:
         container_name = f"loop-measurement-{agent}-{os.getpid()}-{time.time_ns()}"
         started = time.perf_counter()
+        credential_refresh_persisted = False
         with tempfile.TemporaryDirectory(prefix=f"loop-{agent}-auth-") as auth_root:
             auth_dir = Path(auth_root)
             auth_dir.chmod(0o700)
@@ -431,13 +671,18 @@ def run_measurement_cycle(
             auth_copy = auth_dir / auth_name
             shutil.copy2(auth_file, auth_copy)
             auth_copy.chmod(0o600)
+            runtime_state_file = (
+                prepare_sanitized_claude_runtime(auth_dir, auth_dir)
+                if agent == "claude"
+                else state_file
+            )
             command = container_command_for(
                 agent,
                 workspace,
                 model,
                 max_budget_usd,
                 container_image,
-                state_file=state_file,
+                state_file=runtime_state_file,
                 auth_dir=auth_dir,
                 prompt=measurement_prompt(task, cycle, feedback),
                 verdict_schema_path=(
@@ -448,6 +693,7 @@ def run_measurement_cycle(
                 billing_mode=billing_mode,
                 reasoning_effort=reasoning_effort,
             )
+            timeout_error = None
             try:
                 process = subprocess.run(
                     command,
@@ -458,10 +704,44 @@ def run_measurement_cycle(
                 )
             except subprocess.TimeoutExpired as exc:
                 _bounded_docker_cleanup(container_name)
-                raise AgentInvocationError("agent invocation timed out", "timeout") from exc
+                timeout_error = exc
+            finally:
+                if credential_before is not None:
+                    credential_refresh_persisted = persist_refreshed_claude_credentials(
+                        auth_file,
+                        auth_copy,
+                        credential_before,
+                    )
+                credential_after = _read_private_json(auth_copy)
+                credential_secrets = tuple(
+                    sorted(
+                        set(credential_secrets)
+                        | set(credential_secret_values(credential_after))
+                    )
+                )
+            if timeout_error is not None:
+                timeout_stdout = timeout_error.stdout or ""
+                timeout_stderr = timeout_error.stderr or ""
+                if isinstance(timeout_stdout, bytes):
+                    timeout_stdout = timeout_stdout.decode("utf-8", errors="replace")
+                if isinstance(timeout_stderr, bytes):
+                    timeout_stderr = timeout_stderr.decode("utf-8", errors="replace")
+                reject_credential_leak(
+                    workspace,
+                    timeout_stdout,
+                    timeout_stderr,
+                    credential_secrets,
+                )
+                raise AgentInvocationError("agent invocation timed out", "timeout") from timeout_error
     finally:
         schema_path.unlink(missing_ok=True)
 
+    reject_credential_leak(
+        workspace,
+        process.stdout,
+        process.stderr,
+        credential_secrets,
+    )
     status = execution_status(agent, process.stdout, process.returncode)
     if not status["model_completed"]:
         kind = status.get("error_kind") or "command"
@@ -548,7 +828,51 @@ def run_measurement_cycle(
         "request_usages": request_usages,
         "output_tokens": int(usage.output_tokens),
         "agent_seconds": round(time.perf_counter() - started, 6),
+        "credential_refresh_persisted": credential_refresh_persisted,
+        "credential_leak_scan_passed": True,
     }
+
+
+def run_measurement_cycle(
+    *,
+    agent: str,
+    model: str,
+    task: str,
+    workspace: Path,
+    cycle: int,
+    feedback: str,
+    container_image: str,
+    auth_file: Path,
+    state_file: Path | None,
+    timeout_seconds: int,
+    billing_mode: str,
+    max_budget_usd: float,
+    reasoning_effort: str | None = None,
+    persist_refreshed_credentials: bool = False,
+) -> dict:
+    """Run one cycle, serializing Claude when OAuth writeback is enabled."""
+    lock = (
+        CLAUDE_CREDENTIAL_LOCK
+        if agent == "claude" and persist_refreshed_credentials
+        else nullcontext()
+    )
+    with lock:
+        return _run_measurement_cycle_unlocked(
+            agent=agent,
+            model=model,
+            task=task,
+            workspace=workspace,
+            cycle=cycle,
+            feedback=feedback,
+            container_image=container_image,
+            auth_file=auth_file,
+            state_file=state_file,
+            timeout_seconds=timeout_seconds,
+            billing_mode=billing_mode,
+            max_budget_usd=max_budget_usd,
+            reasoning_effort=reasoning_effort,
+            persist_refreshed_credentials=persist_refreshed_credentials,
+        )
 
 
 def execution_status(agent: str, stdout: str, returncode: int) -> dict:
@@ -588,7 +912,7 @@ def run_public_tests(workspace: Path) -> dict:
     return {"passed": process.returncode == 0, "returncode": process.returncode}
 
 
-def run_smoke(
+def _run_smoke_unlocked(
     agent: str,
     task: str,
     model: str | None,
@@ -599,6 +923,7 @@ def run_smoke(
     auth_env: str | None = None,
     state_file: Path | None = None,
     billing_mode: str = "unknown",
+    persist_refreshed_credentials: bool = False,
 ) -> dict:
     validate_billing_mode(billing_mode)
     if container_image and not auth_file and not auth_env:
@@ -607,11 +932,30 @@ def run_smoke(
         raise ValueError("--auth-file must be readable")
     if auth_env and auth_env not in os.environ:
         raise ValueError(f"authentication environment variable is unset: {auth_env}")
+    if agent == "claude" and state_file is not None:
+        raise ValueError(
+            "--state-file is prohibited; sanitized Claude state is generated per call"
+        )
     if state_file and not state_file.is_file():
         raise ValueError("--state-file must be readable")
     executable = "docker" if container_image else agent
     if not shutil.which(executable):
         raise RuntimeError(f"{agent} executable not found")
+
+    credential_document = _read_private_json(auth_file) if auth_file else None
+    credential_secrets = (
+        credential_secret_values(credential_document)
+        if credential_document is not None
+        else ()
+    )
+    credential_before = None
+    if agent == "claude" and persist_refreshed_credentials:
+        if not container_image or auth_file is None:
+            raise ValueError(
+                "--persist-refreshed-credentials requires containerized Claude and --auth-file"
+            )
+        credential_before = credential_document
+        _claude_oauth(credential_before)
 
     with tempfile.TemporaryDirectory(prefix=f"loop-{agent}-{task}-") as temp_root:
         workspace = Path(temp_root) / "workspace"
@@ -628,6 +972,11 @@ def run_smoke(
             auth_copy = docker_auth_dir / auth_name
             shutil.copy2(auth_file, auth_copy)
             auth_copy.chmod(0o600)
+        runtime_state_file = (
+            prepare_sanitized_claude_runtime(Path(temp_root), docker_auth_dir)
+            if agent == "claude" and docker_auth_dir is not None
+            else state_file
+        )
         docker_auth_env_file = None
         if container_image and auth_env:
             docker_auth_env_file = Path(temp_root) / "docker-auth.env"
@@ -646,20 +995,44 @@ def run_smoke(
                 container_image,
                 None if docker_auth_dir else auth_file,
                 None if docker_auth_env_file else auth_env,
-                state_file,
+                runtime_state_file,
                 docker_auth_env_file,
                 docker_auth_dir,
             )
             if container_image
             else command_for(agent, workspace, model, max_budget_usd)
         )
-        process = subprocess.run(
-            command,
-            cwd=workspace,
-            capture_output=True,
-            text=True,
-            timeout=timeout_seconds,
-        )
+        credential_refresh_persisted = False
+        try:
+            process = subprocess.run(
+                command,
+                cwd=workspace,
+                capture_output=True,
+                text=True,
+                timeout=timeout_seconds,
+            )
+        finally:
+            if credential_before is not None:
+                credential_refresh_persisted = persist_refreshed_claude_credentials(
+                    auth_file,
+                    auth_copy,
+                    credential_before,
+                )
+            if docker_auth_dir is not None:
+                credential_after = _read_private_json(auth_copy)
+                credential_secrets = tuple(
+                    sorted(
+                        set(credential_secrets)
+                        | set(credential_secret_values(credential_after))
+                    )
+                )
+        if credential_secrets:
+            reject_credential_leak(
+                workspace,
+                process.stdout,
+                process.stderr,
+                credential_secrets,
+            )
         agent_seconds = time.perf_counter() - started
 
         public_tests = run_public_tests(workspace)
@@ -677,6 +1050,8 @@ def run_smoke(
             ),
             "task": task,
             "process_returncode": process.returncode,
+            "credential_refresh_persisted": credential_refresh_persisted,
+            "credential_leak_scan_passed": bool(credential_secrets),
             "execution": execution_status(agent, process.stdout, process.returncode),
             "isolation": "external Docker task-only mount" if container_image else "CLI sandbox",
             "public_tests": public_tests,
@@ -693,6 +1068,41 @@ def run_smoke(
         }
 
 
+def run_smoke(
+    agent: str,
+    task: str,
+    model: str | None,
+    timeout_seconds: int,
+    max_budget_usd: float,
+    container_image: str | None = None,
+    auth_file: Path | None = None,
+    auth_env: str | None = None,
+    state_file: Path | None = None,
+    billing_mode: str = "unknown",
+    persist_refreshed_credentials: bool = False,
+) -> dict:
+    """Run an adapter smoke, with the same serialized Claude refresh contract."""
+    lock = (
+        CLAUDE_CREDENTIAL_LOCK
+        if agent == "claude" and persist_refreshed_credentials
+        else nullcontext()
+    )
+    with lock:
+        return _run_smoke_unlocked(
+            agent,
+            task,
+            model,
+            timeout_seconds,
+            max_budget_usd,
+            container_image,
+            auth_file,
+            auth_env,
+            state_file,
+            billing_mode,
+            persist_refreshed_credentials,
+        )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--agent", choices=("codex", "claude"), required=True)
@@ -707,6 +1117,7 @@ def main() -> None:
     parser.add_argument("--auth-file", type=Path)
     parser.add_argument("--auth-env")
     parser.add_argument("--state-file", type=Path)
+    parser.add_argument("--persist-refreshed-credentials", action="store_true")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     output = run_smoke(
@@ -720,6 +1131,7 @@ def main() -> None:
         args.auth_env,
         args.state_file,
         billing_mode=args.billing_mode,
+        persist_refreshed_credentials=args.persist_refreshed_credentials,
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(output, indent=2, sort_keys=True) + "\n", encoding="utf-8")

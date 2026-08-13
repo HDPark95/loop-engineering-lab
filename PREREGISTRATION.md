@@ -726,3 +726,23 @@ apparatus validation and not confirmatory evidence.
   screening frame only by a private management-repository path. The complete
   nonsensitive frame and an executable selection verifier are now public; they
   reproduce the two eligible instances and the registered SHA-256 winner.
+- R23 (2026-08-13): closed a pre-freeze subscription-authentication continuity
+  defect. Claude Max access tokens can expire during a multi-hour run, while
+  concurrent refreshes from disposable copies can race on a rotating refresh
+  token and discard the only new credential. Confirmatory Claude invocations
+  are now serialized. Each receives only a disposable copy of a mode-0600,
+  runner-owned credential file; after exit, only a refresh that preserves
+  account metadata, changes the access token, and advances expiry is written
+  back atomically. The adapter also rejects user-home Claude state files and
+  generates a per-call state containing only `/workspace` trust and the
+  non-interactive permission acknowledgement; cached account, organization,
+  local-project metadata, and host paths therefore do not cross via that file.
+  The OAuth profile scope may still let the CLI query identity metadata; this is
+  a residual credential-boundary risk outside the exact-secret scan. The
+  manifest requires this mode, and the cycle log records
+  whether a refresh occurred without storing any credential. Before any
+  candidate archive or cycle log is written, the runner byte-scans stdout,
+  stderr, and the candidate tree for every exact pre- and post-call credential
+  secret; any match invalidates the attempt, and replay requires the successful
+  scan flag. No confirmatory run had started. This changes execution continuity
+  and secret hygiene, not treatment, task, outcome, or inference.
