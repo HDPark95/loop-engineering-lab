@@ -470,6 +470,27 @@ def validate_publication_evidence(
         or frozen.get("measurement_manifest_digest") != expected_manifest_digest
     ):
         fail("public preregistration ZIP does not bind the measurement manifest")
+    history_name = "public-history-audit.json"
+    history_member = f"loop-engineering-preregistration-v1/{history_name}"
+    history_record = (frozen.get("files") or {}).get(history_name)
+    try:
+        with zipfile.ZipFile(bundle_path) as archive:
+            history_payload = archive.read(history_member)
+        history = json.loads(history_payload)
+    except (OSError, KeyError, UnicodeDecodeError, json.JSONDecodeError, zipfile.BadZipFile) as exc:
+        raise ZenodoError("preregistration ZIP has no valid public history audit") from exc
+    if (
+        not isinstance(history_record, dict)
+        or history_record.get("bytes") != len(history_payload)
+        or history_record.get("sha256") != sha256_bytes(history_payload)
+        or not isinstance(history, dict)
+        or history.get("schema_version") != 1
+        or history.get("status") != "public-history-audit-passed"
+        or history.get("audited_commit")
+        != measurement_manifest.get("preregistration_commit")
+        or history.get("unexpected_findings") != 0
+    ):
+        fail("public preregistration ZIP has an invalid public history audit")
     return {
         "external_preregistration_doi": doi,
         "external_preregistration_record_id": record_id,

@@ -198,7 +198,9 @@ finalizer가 동결 commit을 결박한 뒤, 실제 agent 호출 없이 계획�
 
 첫 확증 호출 전에는 태그만으로 끝내지 않고 외부 동결 타임스탬프를 만든다. 아래
 builder는 annotated tag와 현재 HEAD, 최종 manifest, R35 입력·digest, 격리 preflight를
-다시 확인하고 단일 deterministic ZIP과 sidecar SHA-256, Zenodo metadata를 만든다.
+다시 확인하고, 태그 커밋에 결박한 public-history audit까지 재실행한 뒤 단일
+deterministic ZIP과 sidecar SHA-256, Zenodo metadata를 만든다. 공개 검증 게이트는
+ZIP 내부 audit의 크기·SHA-256·태그 커밋·0개 unexpected finding을 다시 검사한다.
 Zenodo에는 이 ZIP 하나만 별도 공개 record로 발행하며, record의 공개 UTC가 첫 cycle의
 `wall_clock_utc`보다 앞서야 한다. 결과가 들어가는 confirmatory replication record와
 DOI를 재사용하지 않는다.

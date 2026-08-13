@@ -921,3 +921,12 @@ apparatus validation and not confirmatory evidence.
   rewriting cannot silently invalidate the audit contract. This changes release
   validation, not design, sample, outcomes, or inference. No confirmatory run
   had started.
+- R42 (2026-08-14): bound the public-history audit into the externally
+  timestamped preregistration bundle before any Claude resource apparatus or
+  confirmatory outcome. The bundle builder reruns the audit at the annotated
+  tag target and includes a checksummed JSON report containing that commit,
+  scan counts, the exact reviewed exceptions, and zero unexpected findings.
+  The public-publication gate reopens the ZIP and verifies the report's bytes,
+  SHA-256, tagged commit, status, and zero-finding claim before allowing the
+  first confirmatory cycle. This changes provenance validation, not design,
+  sample, outcomes, or inference. No confirmatory run had started.

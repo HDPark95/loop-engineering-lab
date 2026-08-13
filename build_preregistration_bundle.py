@@ -12,6 +12,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+import audit_public_history
 import build_replication_bundle
 import finalize_measurement_manifest
 import replay
@@ -93,6 +94,32 @@ def validate_runtime_hashes(
         fail("runtime preparation evidence has mismatched digests: " + ", ".join(mismatches))
 
 
+def public_history_evidence(tag_target: str) -> bytes:
+    findings, counts = audit_public_history.scan(ROOT)
+    unexpected = audit_public_history.unexpected_findings(findings)
+    if unexpected:
+        fail("public history audit did not pass for the preregistration bundle")
+    report = {
+        "schema_version": 1,
+        "status": "public-history-audit-passed",
+        "audited_commit": tag_target,
+        **counts,
+        "allowed_historical_findings": [
+            {
+                "object_id": object_id,
+                "path": path,
+                "pattern": pattern,
+                "count": count,
+            }
+            for object_id, path, pattern, count in sorted(
+                audit_public_history.ALLOWED_HISTORICAL_FINDINGS
+            )
+        ],
+        "unexpected_findings": 0,
+    }
+    return (json.dumps(report, indent=2, sort_keys=True) + "\n").encode()
+
+
 def validate(args: argparse.Namespace) -> dict:
     tag_target = finalize_measurement_manifest.annotated_tag_target(ROOT, PREREG_TAG)
     if git("rev-parse", "HEAD") != tag_target:
@@ -152,6 +179,7 @@ def validate(args: argparse.Namespace) -> dict:
         "measurement-manifest.runtime.template.json": template_payload,
         "runtime-shadow-budget-evidence.json": evidence_payload,
         "isolation-preflight.json": preflight_path.read_bytes(),
+        "public-history-audit.json": public_history_evidence(tag_target),
     }
     for name, path in tracked_inputs.items():
         if name in {"runtime-template", "runtime-evidence"}:

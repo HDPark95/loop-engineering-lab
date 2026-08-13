@@ -7,6 +7,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import build_preregistration_bundle as bundle
 import finalize_measurement_manifest
@@ -63,6 +64,54 @@ class PreregistrationBundleTest(unittest.TestCase):
             path.write_text(json.dumps([]), encoding="utf-8")
             with self.assertRaisesRegex(RuntimeError, "root must be an object"):
                 bundle.json_object(path)
+
+    def test_public_history_report_binds_the_tagged_commit_and_counts(self):
+        allowed = {
+            ("a" * 40, "old/path.json", "organization-1", 1),
+        }
+        counts = {
+            "reachable_commits": 12,
+            "current_tree_blobs": 20,
+            "unique_reachable_blob_paths": 30,
+        }
+        with (
+            mock.patch.object(
+                bundle.audit_public_history,
+                "scan",
+                return_value=(["allowlisted"], counts),
+            ),
+            mock.patch.object(
+                bundle.audit_public_history,
+                "unexpected_findings",
+                return_value=[],
+            ),
+            mock.patch.object(
+                bundle.audit_public_history,
+                "ALLOWED_HISTORICAL_FINDINGS",
+                allowed,
+            ),
+        ):
+            report = json.loads(bundle.public_history_evidence("b" * 40))
+        self.assertEqual("b" * 40, report["audited_commit"])
+        self.assertEqual(12, report["reachable_commits"])
+        self.assertEqual(0, report["unexpected_findings"])
+        self.assertEqual("a" * 40, report["allowed_historical_findings"][0]["object_id"])
+
+    def test_failed_public_history_audit_blocks_the_bundle(self):
+        with (
+            mock.patch.object(
+                bundle.audit_public_history,
+                "scan",
+                return_value=(["new secret"], {}),
+            ),
+            mock.patch.object(
+                bundle.audit_public_history,
+                "unexpected_findings",
+                return_value=["new secret"],
+            ),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "public history audit"):
+                bundle.public_history_evidence("b" * 40)
 
 
 if __name__ == "__main__":

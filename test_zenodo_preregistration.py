@@ -69,7 +69,19 @@ class ZenodoPreregistrationTest(unittest.TestCase):
             "loop-engineering-preregistration-v1/"
             "preregistration-bundle-manifest.json"
         )
+        history_member = (
+            "loop-engineering-preregistration-v1/public-history-audit.json"
+        )
+        history_payload = json.dumps(
+            {
+                "schema_version": 1,
+                "status": "public-history-audit-passed",
+                "audited_commit": measurement_manifest["preregistration_commit"],
+                "unexpected_findings": 0,
+            }
+        ).encode()
         with zipfile.ZipFile(bundle, "w") as archive:
+            archive.writestr(history_member, history_payload)
             archive.writestr(
                 member,
                 json.dumps(
@@ -79,6 +91,12 @@ class ZenodoPreregistrationTest(unittest.TestCase):
                             "preregistration_commit"
                         ],
                         "measurement_manifest_digest": manifest_digest,
+                        "files": {
+                            "public-history-audit.json": {
+                                "bytes": len(history_payload),
+                                "sha256": zenodo.sha256_bytes(history_payload),
+                            }
+                        },
                     }
                 ),
             )
@@ -284,6 +302,35 @@ class ZenodoPreregistrationTest(unittest.TestCase):
             _, evidence, bundle = self.make_publication_gate(root / "second")
             bundle.write_bytes(bundle.read_bytes() + b"tampered")
             with self.assertRaisesRegex(zenodo.ZenodoError, "does not match"):
+                zenodo.validate_publication_evidence(evidence, bundle, manifest)
+
+    def test_publication_gate_rejects_an_invalid_history_audit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            manifest, evidence, bundle = self.make_publication_gate(Path(directory))
+            with zipfile.ZipFile(bundle) as archive:
+                members = {
+                    name: archive.read(name) for name in archive.namelist()
+                }
+            history_name = (
+                "loop-engineering-preregistration-v1/public-history-audit.json"
+            )
+            history = json.loads(members[history_name])
+            history["unexpected_findings"] = 1
+            members[history_name] = json.dumps(history).encode()
+            with zipfile.ZipFile(bundle, "w") as archive:
+                for name, payload in members.items():
+                    archive.writestr(name, payload)
+            document = json.loads(evidence.read_text(encoding="utf-8"))
+            payload = bundle.read_bytes()
+            document["bundle"].update(
+                {
+                    "bytes": len(payload),
+                    "sha256": zenodo.sha256_bytes(payload),
+                    "md5": zenodo.md5_bytes(payload),
+                }
+            )
+            evidence.write_text(json.dumps(document), encoding="utf-8")
+            with self.assertRaisesRegex(zenodo.ZenodoError, "history audit"):
                 zenodo.validate_publication_evidence(evidence, bundle, manifest)
 
 
