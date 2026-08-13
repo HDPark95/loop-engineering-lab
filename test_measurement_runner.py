@@ -206,6 +206,7 @@ class ManifestGateTest(unittest.TestCase):
                 "container_image": "agent-image:latest",
                 "timeout_seconds": 900,
                 "auth_file_env": "LOOP_CODEX_AUTH_FILE",
+                "persist_refreshed_credentials": True,
             }
             path = write_manifest(directory, manifest(agents=[entry]))
             with self.assertRaisesRegex(SystemExit, "sha256"):
@@ -226,6 +227,7 @@ class ManifestGateTest(unittest.TestCase):
                 "container_image": "sha256:" + "a" * 64,
                 "timeout_seconds": 900,
                 "auth_file_env": "LOOP_CODEX_AUTH_FILE",
+                "persist_refreshed_credentials": True,
             }
             data = manifest(
                 apparatus_test=False,
@@ -274,6 +276,7 @@ class ManifestGateTest(unittest.TestCase):
                     "container_image": "sha256:" + "a" * 64,
                     "timeout_seconds": 900,
                     "auth_file_env": "LOOP_CODEX_AUTH_FILE",
+                    "persist_refreshed_credentials": True,
                 },
                 {
                     "name": "claude",
@@ -306,6 +309,15 @@ class ManifestGateTest(unittest.TestCase):
                     write_manifest(Path(tmp), no_refresh_persistence)
                 )
 
+            no_codex_refresh_persistence = json.loads(json.dumps(frozen))
+            no_codex_refresh_persistence["agents"][0].pop(
+                "persist_refreshed_credentials"
+            )
+            with self.assertRaisesRegex(SystemExit, "serialized OAuth"):
+                run_measurement.load_manifest(
+                    write_manifest(Path(tmp), no_codex_refresh_persistence)
+                )
+
             external_claude_state = json.loads(json.dumps(frozen))
             external_claude_state["agents"][1]["state_file_env"] = "CLAUDE_STATE_FILE"
             with self.assertRaisesRegex(SystemExit, "external Claude state"):
@@ -333,7 +345,7 @@ class ManifestGateTest(unittest.TestCase):
 
 
 class RunnerTest(unittest.TestCase):
-    def test_serialized_claude_has_a_dedicated_worker_lane(self):
+    def test_serialized_subscription_agents_have_dedicated_worker_lanes(self):
         data = manifest(
             max_concurrent_agents=3,
             agents=[
@@ -342,9 +354,18 @@ class RunnerTest(unittest.TestCase):
                     "adapter": "claude",
                     "persist_refreshed_credentials": True,
                 },
-                {"name": "codex", "adapter": "codex"},
+                {
+                    "name": "codex",
+                    "adapter": "codex",
+                    "persist_refreshed_credentials": True,
+                },
             ],
         )
+        self.assertEqual(
+            run_measurement.worker_lane_limits(data),
+            {"claude": 1, "codex": 1},
+        )
+        data["agents"][1].pop("persist_refreshed_credentials")
         self.assertEqual(
             run_measurement.worker_lane_limits(data),
             {"claude": 1, "other": 2},

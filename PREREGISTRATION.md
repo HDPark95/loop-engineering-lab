@@ -480,8 +480,10 @@ per block before any second branch, preventing a fixed treatment cell from alway
 owning the earliest wall-clock position. The planned execution mode is authenticated
 subscription CLI prompting: incremental billed dollars are fixed at zero, while
 tokens, wall clock, plan-quota events, and API-price-equivalent shadow cost are
-recorded. Concurrency is capped at three and quota/rate-limit responses trigger
-automatic waiting rather than a billing-mode switch. A failed or unavailable
+recorded. Concurrency is capped at three; each subscription credential has one
+serialized writer lane, so Claude and Codex can run concurrently with one call
+each. Quota/rate-limit responses trigger automatic waiting rather than a
+billing-mode switch. A failed or unavailable
 agent is removed before freeze, never after its outcome is seen.
 
 ## 10. Exclusions and failure handling
@@ -760,3 +762,13 @@ apparatus validation and not confirmatory evidence.
   pre-freeze apparatus trajectory; it reads Docker and host counters but no
   model output, container content, environment, or command. No confirmatory run
   had started.
+- R25 (2026-08-13): extended serialized subscription-credential continuity to
+  Codex before freeze. The inspected ChatGPT access token expires during the
+  possible measurement window; discarding every disposable refresh could
+  strand a resumed run on expired state. Codex now has one writer lane, and
+  only a rotation that preserves the account ID and schema while advancing the
+  access-token expiry and refresh timestamp is written atomically to its
+  runner-owned mode-0600 file. Both agents still run concurrently with one lane
+  each; the registered cap of three is an upper bound, not a promised occupancy.
+  This changes execution continuity and throughput, not tasks, treatments,
+  outcomes, or inference. No confirmatory run had started.

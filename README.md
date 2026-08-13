@@ -73,7 +73,8 @@ read와 요청별 long-context 구간을 직접 반영하며, 런타임이 cache
 - alias가 아닌 두 agent의 정확한 model ID, reasoning effort, 출처와 조회시점까지
   고정한 일반·캐시·cache-write·long-context API 환산 단가
 - digest로 고정한 agent/candidate-sandbox image, 실행 timeout, 인증 파일 경로를
-  담는 환경변수 이름. Claude entry는 `persist_refreshed_credentials=true`
+  담는 환경변수 이름. 두 구독 agent entry는 모두
+  `persist_refreshed_credentials=true`
 - preregistration commit, 다섯 seed, 6 cycles, 네 task와 네 factor cell
 - block별 네 cell의 실행 순서를 SHA-256으로 고정 난수화하는 `cell_schedule_seed`
 - frozen candidate sandbox image로 실행한 isolation preflight JSON의 경로와 SHA-256
@@ -91,17 +92,18 @@ manifest가 파일 SHA-256와 image ID를 다시 대조한다.
 
     python3 preflight_isolation.py --sandbox-image sha256:<image-id> --output preflight/sandbox-isolation.json
 
-Claude의 구독 OAuth access token은 장시간 실행 중 갱신될 수 있다. 확인용 원본을
-직접 쓰지 말고 mode 0600인 runner 전용 credential file을 만들어
-`auth_file_env`가 그 경로를 가리키게 한다. Claude 호출은 refresh-token 경쟁을 막기
-위해 한 번에 하나만 실행하고 나머지 두 worker는 Codex 전용 lane으로 둔다. 각 호출은
-이 파일의 일회성 사본과 `/workspace` 신뢰·비대화형 권한 확인만 담은 최소 상태를
+Claude와 Codex의 구독 OAuth access token은 장시간 실행 중 갱신될 수 있다. 사용자
+원본을 직접 쓰지 말고 각각 mode 0600인 runner 전용 credential file을 만들어
+`auth_file_env`가 그 경로를 가리키게 한다. 두 agent 모두 refresh writer를 하나로
+제한해 agent별 한 lane에서 실행한다. 최대 동시성 상한은 3이지만 실제 agent 호출
+동시성은 Claude 1 + Codex 1이다. 각 호출은 이 파일의 일회성 사본만 보며, Claude에는
+추가로 `/workspace` 신뢰·비대화형 권한 확인만 담은 최소 상태를
 새로 생성해 마운트한다. 사용자 홈의 전체 Claude 상태 파일은 manifest와 adapter가
 거부하므로 그 파일에 캐시된 계정·조직·로컬 프로젝트 metadata와 경로는 직접
 노출되지 않는다. 단, OAuth profile scope를 통해 CLI가 조회할 수 있는 식별 metadata는
 credential 경계의 잔여위험이며 exact-secret scan의 탐지 범위가 아니다. CLI가
-토큰을 갱신했을 때 account metadata가 그대로이고 access token과 만료시점이 함께
-전진한 OAuth record만 원자적으로 전용 파일에 반영한다. 원시 token 값은 측정 로그에
+토큰을 갱신했을 때 account metadata와 스키마가 그대로이고 access token 만료와
+refresh 시각이 전진한 OAuth record만 원자적으로 각 전용 파일에 반영한다. 원시 token 값은 측정 로그에
 기록하지 않는다. 매 호출은 실행 전후 credential의 exact secret 값을 stdout, stderr와
 candidate tree에서 byte scan하고, 하나라도 나오면 archive와 cycle log 작성 전에 해당
 시도를 폐기한다. replay와 reward-hacking audit은 이 scan의 성공 플래그가 없으면 fail

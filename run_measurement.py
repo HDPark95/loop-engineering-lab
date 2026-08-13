@@ -335,7 +335,8 @@ def load_manifest(path: Path) -> dict:
                     f"agent {agent.get('name')!r} must freeze reasoning_effort"
                 )
             if (
-                adapter == "claude"
+                adapter in {"codex", "claude"}
+                and manifest.get("billing_mode") == "subscription"
                 and not manifest.get("apparatus_test", False)
                 and agent.get("persist_refreshed_credentials") is not True
             ):
@@ -467,16 +468,26 @@ def scheduled_trajectories(keys: list[TrajectoryKey], manifest: dict) -> list[Tr
 
 
 def worker_lane_limits(manifest: dict) -> dict[str, int]:
-    """Reserve one worker for serialized Claude without starving other agents."""
+    """Give every rotating subscription credential exactly one writer lane."""
     concurrency = int(manifest["max_concurrent_agents"])
-    serialized_claude = any(
-        entry.get("adapter", entry.get("name")) == "claude"
-        and entry.get("persist_refreshed_credentials") is True
+    serialized = sorted(
+        {
+            entry.get("adapter", entry.get("name"))
+            for entry in manifest["agents"]
+            if entry.get("persist_refreshed_credentials") is True
+        }
+    )
+    if not serialized or concurrency < 2:
+        return {"shared": concurrency}
+    limits = {adapter: 1 for adapter in serialized}
+    nonserialized = any(
+        entry.get("adapter", entry.get("name")) not in limits
         for entry in manifest["agents"]
     )
-    if serialized_claude and concurrency >= 2:
-        return {"claude": 1, "other": concurrency - 1}
-    return {"shared": concurrency}
+    remaining = concurrency - len(limits)
+    if nonserialized and remaining > 0:
+        limits["other"] = remaining
+    return limits
 
 
 def common_attempt_states(
@@ -1725,15 +1736,12 @@ def main() -> int:
                 shared_pool = stack.enter_context(
                     ThreadPoolExecutor(max_workers=lane_limits["shared"])
                 )
-                claude_pool = shared_pool
-                other_pool = shared_pool
+                pools = {"shared": shared_pool}
             else:
-                claude_pool = stack.enter_context(
-                    ThreadPoolExecutor(max_workers=lane_limits["claude"])
-                )
-                other_pool = stack.enter_context(
-                    ThreadPoolExecutor(max_workers=lane_limits["other"])
-                )
+                pools = {
+                    lane: stack.enter_context(ThreadPoolExecutor(max_workers=limit))
+                    for lane, limit in lane_limits.items()
+                }
             futures = {}
             if not budget.reserve(total_shadow_estimate):
                 stopped_for_budget.extend(key.token() for key in todo)
@@ -1742,7 +1750,9 @@ def main() -> int:
                 attempt_id = attempt_ids[group]
                 entry = agents_by_name[key.agent]
                 adapter = entry.get("adapter", entry.get("name"))
-                pool = claude_pool if adapter == "claude" else other_pool
+                pool = pools.get("shared") or pools.get(adapter) or pools.get("other")
+                if pool is None:
+                    raise RuntimeError(f"no worker lane is available for adapter {adapter!r}")
                 futures[
                     pool.submit(
                         run_trajectory,

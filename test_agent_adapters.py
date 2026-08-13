@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Unit tests for command construction and aggregate usage parsing."""
 
+import base64
 import json
 import os
 import subprocess
@@ -32,13 +33,27 @@ def claude_credentials(
     }
 
 
-def codex_credentials() -> dict:
+def test_jwt(expiry: int, marker: str) -> str:
+    header = base64.urlsafe_b64encode(b'{"alg":"RS256"}').decode().rstrip("=")
+    payload = base64.urlsafe_b64encode(
+        json.dumps({"exp": expiry, "marker": marker}).encode()
+    ).decode().rstrip("=")
+    return f"{header}.{payload}.test-signature-{marker}"
+
+
+def codex_credentials(
+    access_expiry: int = 1000,
+    marker: str = "before",
+    last_refresh: str = "2026-08-10T00:00:00Z",
+) -> dict:
     return {
+        "OPENAI_API_KEY": None,
         "auth_mode": "chatgpt",
+        "last_refresh": last_refresh,
         "tokens": {
-            "access_token": "codex-access-token-for-tests",
-            "refresh_token": "codex-refresh-token-for-tests",
-            "id_token": "codex-id-token-for-tests",
+            "access_token": test_jwt(access_expiry, marker),
+            "refresh_token": f"codex-refresh-token-for-tests-{marker}",
+            "id_token": f"codex-id-token-for-tests-{marker}",
             "account_id": "account-metadata",
         },
     }
@@ -83,6 +98,53 @@ class AdapterTest(unittest.TestCase):
             self.assertEqual(written["claudeAiOauth"], refreshed["claudeAiOauth"])
             self.assertEqual(written["unrelated"], {"preserve": True})
             self.assertEqual(source.stat().st_mode & 0o777, 0o600)
+
+    def test_validated_codex_refresh_updates_only_rotating_state(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "source.json"
+            disposable = Path(tmp) / "disposable.json"
+            before = codex_credentials()
+            source.write_text(json.dumps(before), encoding="utf-8")
+            source.chmod(0o600)
+            refreshed = codex_credentials(
+                access_expiry=2000,
+                marker="after",
+                last_refresh="2026-08-11T00:00:00Z",
+            )
+            disposable.write_text(json.dumps(refreshed), encoding="utf-8")
+            disposable.chmod(0o600)
+
+            self.assertTrue(
+                agent_adapters.persist_refreshed_codex_credentials(
+                    source, disposable, before
+                )
+            )
+            self.assertEqual(json.loads(source.read_text(encoding="utf-8")), refreshed)
+            self.assertEqual(source.stat().st_mode & 0o777, 0o600)
+
+    def test_invalid_codex_refresh_is_rejected_without_overwrite(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "source.json"
+            disposable = Path(tmp) / "disposable.json"
+            before = codex_credentials()
+            source.write_text(json.dumps(before), encoding="utf-8")
+            source.chmod(0o600)
+            invalid = codex_credentials(
+                access_expiry=2000,
+                marker="after",
+                last_refresh="2026-08-11T00:00:00Z",
+            )
+            invalid["tokens"]["account_id"] = "different-account"
+            disposable.write_text(json.dumps(invalid), encoding="utf-8")
+            disposable.chmod(0o600)
+
+            with self.assertRaisesRegex(
+                agent_adapters.AgentInvocationError, "account metadata"
+            ):
+                agent_adapters.persist_refreshed_codex_credentials(
+                    source, disposable, before
+                )
+            self.assertEqual(json.loads(source.read_text(encoding="utf-8")), before)
 
     def test_invalid_claude_refresh_is_rejected_without_overwrite(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -134,6 +196,52 @@ class AdapterTest(unittest.TestCase):
         arguments = {
             "agent": "claude",
             "model": "claude-test",
+            "task": "s1",
+            "workspace": Path("/tmp/work"),
+            "cycle": 1,
+            "feedback": "",
+            "container_image": "sha256:" + "a" * 64,
+            "auth_file": Path("/tmp/auth"),
+            "state_file": None,
+            "timeout_seconds": 1,
+            "billing_mode": "subscription",
+            "max_budget_usd": 1.0,
+            "persist_refreshed_credentials": True,
+        }
+        with mock.patch.object(
+            agent_adapters, "_run_measurement_cycle_unlocked", side_effect=fake_cycle
+        ):
+            threads = [
+                threading.Thread(
+                    target=agent_adapters.run_measurement_cycle,
+                    kwargs=arguments,
+                )
+                for _ in range(2)
+            ]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+        self.assertEqual(maximum, 1)
+
+    def test_confirmatory_codex_invocations_are_serialized(self):
+        active = 0
+        maximum = 0
+        state_lock = threading.Lock()
+
+        def fake_cycle(**_kwargs):
+            nonlocal active, maximum
+            with state_lock:
+                active += 1
+                maximum = max(maximum, active)
+            time.sleep(0.05)
+            with state_lock:
+                active -= 1
+            return {}
+
+        arguments = {
+            "agent": "codex",
+            "model": "gpt-test",
             "task": "s1",
             "workspace": Path("/tmp/work"),
             "cycle": 1,
@@ -545,6 +653,77 @@ class AdapterTest(unittest.TestCase):
                 "access-after-token-test",
             )
 
+    def test_measurement_cycle_persists_a_valid_codex_rotation(self):
+        report = {"improved": False, "confidence": 0.7, "evidence": "no change"}
+        stdout = json.dumps(
+            {
+                "protocol": "codex-app-server-v2",
+                "self_report": report,
+                "model_served": "gpt-test",
+                "reasoning_effort_served": "medium",
+                "usage": {
+                    "input_tokens": 30,
+                    "cached_input_tokens": 4,
+                    "output_tokens": 8,
+                },
+            }
+        )
+        completed = mock.Mock(returncode=0, stdout=stdout, stderr="")
+
+        def rotate(command, **_kwargs):
+            auth_mount = next(
+                value
+                for value in command
+                if isinstance(value, str) and "dst=/tmp/.codex" in value
+            )
+            auth_dir = Path(auth_mount.split("src=", 1)[1].split(",dst=", 1)[0])
+            copied = auth_dir / "auth.json"
+            copied.write_text(
+                json.dumps(
+                    codex_credentials(
+                        access_expiry=2000,
+                        marker="after",
+                        last_refresh="2026-08-11T00:00:00Z",
+                    )
+                ),
+                encoding="utf-8",
+            )
+            copied.chmod(0o600)
+            return completed
+
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp) / "workspace"
+            workspace.mkdir()
+            auth = Path(tmp) / "auth.json"
+            auth.write_text(json.dumps(codex_credentials()), encoding="utf-8")
+            auth.chmod(0o600)
+            with (
+                mock.patch.object(
+                    agent_adapters.shutil, "which", return_value="/usr/bin/docker"
+                ),
+                mock.patch.object(agent_adapters.subprocess, "run", side_effect=rotate),
+            ):
+                result = agent_adapters.run_measurement_cycle(
+                    agent="codex",
+                    model="gpt-test",
+                    task="s1",
+                    workspace=workspace,
+                    cycle=1,
+                    feedback="",
+                    container_image="sha256:" + "a" * 64,
+                    auth_file=auth,
+                    state_file=None,
+                    timeout_seconds=10,
+                    billing_mode="subscription",
+                    max_budget_usd=1.0,
+                    reasoning_effort="medium",
+                    persist_refreshed_credentials=True,
+                )
+            self.assertTrue(result["credential_refresh_persisted"])
+            written = json.loads(auth.read_text(encoding="utf-8"))
+            self.assertEqual(written["last_refresh"], "2026-08-11T00:00:00Z")
+            self.assertEqual(written["tokens"]["account_id"], "account-metadata")
+
     def test_measurement_cycle_removes_schema_when_auth_copy_fails(self):
         with tempfile.TemporaryDirectory() as tmp:
             workspace = Path(tmp) / "workspace"
@@ -617,6 +796,54 @@ class AdapterTest(unittest.TestCase):
                 agent_adapters.DOCKER_CLEANUP_TIMEOUT_SECONDS,
             )
             self.assertFalse((workspace / ".loop-verdict-schema.json").exists())
+
+    def test_smoke_timeout_cleanup_is_bounded(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            auth = Path(tmp) / "auth.json"
+            auth.write_text(json.dumps(codex_credentials()), encoding="utf-8")
+            auth.chmod(0o600)
+            timeout = subprocess.TimeoutExpired("docker", 10)
+
+            def make_workspace(_task, workspace):
+                workspace.mkdir()
+
+            with (
+                mock.patch.object(
+                    agent_adapters.shutil, "which", return_value="/usr/bin/docker"
+                ),
+                mock.patch.object(
+                    agent_adapters.se_experiment,
+                    "copy_seed",
+                    side_effect=make_workspace,
+                ),
+                mock.patch.object(
+                    agent_adapters.se_experiment,
+                    "run_oracle",
+                    return_value=({"score": 0.0}, 0.0),
+                ),
+                mock.patch.object(
+                    agent_adapters.subprocess,
+                    "run",
+                    side_effect=[timeout, subprocess.TimeoutExpired("docker rm", 5)],
+                ) as run,
+                self.assertRaisesRegex(
+                    agent_adapters.AgentInvocationError, "agent invocation timed out"
+                ),
+            ):
+                agent_adapters.run_smoke(
+                    "codex",
+                    "s1",
+                    "gpt-test",
+                    10,
+                    1.0,
+                    container_image="image@sha256:" + "a" * 64,
+                    auth_file=auth,
+                    billing_mode="subscription",
+                )
+            self.assertEqual(
+                run.call_args_list[-1].kwargs["timeout"],
+                agent_adapters.DOCKER_CLEANUP_TIMEOUT_SECONDS,
+            )
 
     def test_container_can_forward_auth_environment_by_name(self):
         command = agent_adapters.container_command_for(

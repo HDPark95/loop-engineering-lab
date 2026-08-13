@@ -10,7 +10,9 @@ smokes are apparatus checks, not confirmatory observations.
 from __future__ import annotations
 
 import argparse
+import base64
 from contextlib import nullcontext
+from datetime import datetime
 import hashlib
 import json
 import os
@@ -27,6 +29,7 @@ import se_experiment
 APP_SERVER_CLIENT_SOURCE = Path(__file__).resolve().parent / "codex_app_server_client.py"
 DOCKER_CLEANUP_TIMEOUT_SECONDS = 5
 CLAUDE_CREDENTIAL_LOCK = threading.Lock()
+CODEX_CREDENTIAL_LOCK = threading.Lock()
 SECRET_KEY_MARKERS = ("token", "api_key", "apikey", "secret")
 SANITIZED_CLAUDE_STATE = {
     "hasCompletedOnboarding": True,
@@ -124,6 +127,58 @@ def _claude_oauth(document: dict) -> dict:
             "authentication",
         )
     return oauth
+
+
+def _parse_utc_timestamp(value: object, field: str) -> datetime:
+    if not isinstance(value, str) or not value:
+        raise AgentInvocationError(f"authentication state has invalid {field}", "authentication")
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise AgentInvocationError(
+            f"authentication state has invalid {field}", "authentication"
+        ) from exc
+    if parsed.tzinfo is None:
+        raise AgentInvocationError(f"authentication state has invalid {field}", "authentication")
+    return parsed
+
+
+def _jwt_expiry(token: object) -> int:
+    if not isinstance(token, str) or token.count(".") != 2:
+        raise AgentInvocationError("Codex access token is not a JWT", "authentication")
+    payload = token.split(".")[1]
+    try:
+        decoded = base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4))
+        claims = json.loads(decoded)
+    except (ValueError, json.JSONDecodeError) as exc:
+        raise AgentInvocationError(
+            "Codex access token has invalid JWT claims", "authentication"
+        ) from exc
+    expiry = claims.get("exp") if isinstance(claims, dict) else None
+    if not isinstance(expiry, int) or isinstance(expiry, bool) or expiry <= 0:
+        raise AgentInvocationError(
+            "Codex access token has invalid expiry", "authentication"
+        )
+    return expiry
+
+
+def _codex_chatgpt(document: dict) -> dict:
+    if document.get("auth_mode") != "chatgpt":
+        raise AgentInvocationError(
+            "Codex authentication state is not ChatGPT subscription auth",
+            "authentication",
+        )
+    tokens = document.get("tokens")
+    if not isinstance(tokens, dict):
+        raise AgentInvocationError("Codex authentication state has no tokens", "authentication")
+    for field in ("access_token", "refresh_token", "id_token", "account_id"):
+        if not isinstance(tokens.get(field), str) or not tokens[field]:
+            raise AgentInvocationError(
+                f"Codex authentication state has invalid {field}", "authentication"
+            )
+    _jwt_expiry(tokens["access_token"])
+    _parse_utc_timestamp(document.get("last_refresh"), "last_refresh")
+    return tokens
 
 
 def credential_secret_values(document: dict) -> tuple[str, ...]:
@@ -273,6 +328,69 @@ def persist_refreshed_claude_credentials(
             "authentication",
         )
     current_document["claudeAiOauth"] = after
+    _atomic_private_json_write(source, current_document)
+    return True
+
+
+def persist_refreshed_codex_credentials(
+    source: Path,
+    disposable_copy: Path,
+    before_document: dict,
+) -> bool:
+    """Persist only a structurally valid ChatGPT OAuth rotation from Codex."""
+    before = _codex_chatgpt(before_document)
+    after_document = _read_private_json(disposable_copy)
+    after = _codex_chatgpt(after_document)
+    if after_document == before_document:
+        return False
+
+    if set(after_document) != set(before_document) or any(
+        after_document[field] != before_document[field]
+        for field in set(before_document) - {"tokens", "last_refresh"}
+    ):
+        raise AgentInvocationError(
+            "Codex credential refresh changed account metadata or schema",
+            "authentication",
+        )
+    if set(after) != set(before) or after["account_id"] != before["account_id"]:
+        raise AgentInvocationError(
+            "Codex credential refresh changed account metadata or schema",
+            "authentication",
+        )
+    if after["access_token"] == before["access_token"]:
+        raise AgentInvocationError(
+            "Codex credential state changed without a new access token",
+            "authentication",
+        )
+    if _jwt_expiry(after["access_token"]) <= _jwt_expiry(before["access_token"]):
+        raise AgentInvocationError(
+            "Codex credential refresh did not advance token expiry",
+            "authentication",
+        )
+    if _parse_utc_timestamp(
+        after_document["last_refresh"], "last_refresh"
+    ) <= _parse_utc_timestamp(before_document["last_refresh"], "last_refresh"):
+        raise AgentInvocationError(
+            "Codex credential refresh did not advance refresh time",
+            "authentication",
+        )
+
+    current_document = _read_private_json(source)
+    current = _codex_chatgpt(current_document)
+    if current_document != before_document:
+        if current_document == after_document:
+            return True
+        raise AgentInvocationError(
+            "Codex credential source changed during a serialized invocation",
+            "authentication",
+        )
+    if current != before:
+        raise AgentInvocationError(
+            "Codex credential source changed during a serialized invocation",
+            "authentication",
+        )
+    current_document["tokens"] = after
+    current_document["last_refresh"] = after_document["last_refresh"]
     _atomic_private_json_write(source, current_document)
     return True
 
@@ -654,9 +772,12 @@ def _run_measurement_cycle_unlocked(
     credential_document = _read_private_json(auth_file)
     credential_secrets = credential_secret_values(credential_document)
     credential_before = None
-    if agent == "claude" and persist_refreshed_credentials:
+    if persist_refreshed_credentials:
         credential_before = credential_document
-        _claude_oauth(credential_before)
+        if agent == "claude":
+            _claude_oauth(credential_before)
+        else:
+            _codex_chatgpt(credential_before)
 
     schema_path = workspace / ".loop-verdict-schema.json"
     schema_path.write_text(json.dumps(VERDICT_SCHEMA, separators=(",", ":")), encoding="utf-8")
@@ -707,10 +828,13 @@ def _run_measurement_cycle_unlocked(
                 timeout_error = exc
             finally:
                 if credential_before is not None:
-                    credential_refresh_persisted = persist_refreshed_claude_credentials(
-                        auth_file,
-                        auth_copy,
-                        credential_before,
+                    persister = (
+                        persist_refreshed_claude_credentials
+                        if agent == "claude"
+                        else persist_refreshed_codex_credentials
+                    )
+                    credential_refresh_persisted = persister(
+                        auth_file, auth_copy, credential_before
                     )
                 credential_after = _read_private_json(auth_copy)
                 credential_secrets = tuple(
@@ -850,12 +974,12 @@ def run_measurement_cycle(
     reasoning_effort: str | None = None,
     persist_refreshed_credentials: bool = False,
 ) -> dict:
-    """Run one cycle, serializing Claude when OAuth writeback is enabled."""
-    lock = (
-        CLAUDE_CREDENTIAL_LOCK
-        if agent == "claude" and persist_refreshed_credentials
-        else nullcontext()
-    )
+    """Run one cycle with one refresh writer per subscription credential."""
+    credential_locks = {
+        "claude": CLAUDE_CREDENTIAL_LOCK,
+        "codex": CODEX_CREDENTIAL_LOCK,
+    }
+    lock = credential_locks[agent] if persist_refreshed_credentials else nullcontext()
     with lock:
         return _run_measurement_cycle_unlocked(
             agent=agent,
@@ -949,13 +1073,16 @@ def _run_smoke_unlocked(
         else ()
     )
     credential_before = None
-    if agent == "claude" and persist_refreshed_credentials:
+    if persist_refreshed_credentials:
         if not container_image or auth_file is None:
             raise ValueError(
-                "--persist-refreshed-credentials requires containerized Claude and --auth-file"
+                "--persist-refreshed-credentials requires a containerized agent and --auth-file"
             )
         credential_before = credential_document
-        _claude_oauth(credential_before)
+        if agent == "claude":
+            _claude_oauth(credential_before)
+        else:
+            _codex_chatgpt(credential_before)
 
     with tempfile.TemporaryDirectory(prefix=f"loop-{agent}-{task}-") as temp_root:
         workspace = Path(temp_root) / "workspace"
@@ -986,6 +1113,11 @@ def _run_smoke_unlocked(
             docker_auth_env_file.chmod(0o600)
 
         started = time.perf_counter()
+        container_name = (
+            f"loop-smoke-{agent}-{os.getpid()}-{time.time_ns()}"
+            if container_image
+            else None
+        )
         command = (
             container_command_for(
                 agent,
@@ -998,11 +1130,13 @@ def _run_smoke_unlocked(
                 runtime_state_file,
                 docker_auth_env_file,
                 docker_auth_dir,
+                container_name=container_name,
             )
             if container_image
             else command_for(agent, workspace, model, max_budget_usd)
         )
         credential_refresh_persisted = False
+        timeout_error = None
         try:
             process = subprocess.run(
                 command,
@@ -1011,12 +1145,19 @@ def _run_smoke_unlocked(
                 text=True,
                 timeout=timeout_seconds,
             )
+        except subprocess.TimeoutExpired as exc:
+            if container_name is not None:
+                _bounded_docker_cleanup(container_name)
+            timeout_error = exc
         finally:
             if credential_before is not None:
-                credential_refresh_persisted = persist_refreshed_claude_credentials(
-                    auth_file,
-                    auth_copy,
-                    credential_before,
+                persister = (
+                    persist_refreshed_claude_credentials
+                    if agent == "claude"
+                    else persist_refreshed_codex_credentials
+                )
+                credential_refresh_persisted = persister(
+                    auth_file, auth_copy, credential_before
                 )
             if docker_auth_dir is not None:
                 credential_after = _read_private_json(auth_copy)
@@ -1026,6 +1167,21 @@ def _run_smoke_unlocked(
                         | set(credential_secret_values(credential_after))
                     )
                 )
+        if timeout_error is not None:
+            timeout_stdout = timeout_error.stdout or ""
+            timeout_stderr = timeout_error.stderr or ""
+            if isinstance(timeout_stdout, bytes):
+                timeout_stdout = timeout_stdout.decode("utf-8", errors="replace")
+            if isinstance(timeout_stderr, bytes):
+                timeout_stderr = timeout_stderr.decode("utf-8", errors="replace")
+            if credential_secrets:
+                reject_credential_leak(
+                    workspace,
+                    timeout_stdout,
+                    timeout_stderr,
+                    credential_secrets,
+                )
+            raise AgentInvocationError("agent invocation timed out", "timeout") from timeout_error
         if credential_secrets:
             reject_credential_leak(
                 workspace,
@@ -1081,12 +1237,12 @@ def run_smoke(
     billing_mode: str = "unknown",
     persist_refreshed_credentials: bool = False,
 ) -> dict:
-    """Run an adapter smoke, with the same serialized Claude refresh contract."""
-    lock = (
-        CLAUDE_CREDENTIAL_LOCK
-        if agent == "claude" and persist_refreshed_credentials
-        else nullcontext()
-    )
+    """Run an adapter smoke with one refresh writer per subscription credential."""
+    credential_locks = {
+        "claude": CLAUDE_CREDENTIAL_LOCK,
+        "codex": CODEX_CREDENTIAL_LOCK,
+    }
+    lock = credential_locks[agent] if persist_refreshed_credentials else nullcontext()
     with lock:
         return _run_smoke_unlocked(
             agent,
