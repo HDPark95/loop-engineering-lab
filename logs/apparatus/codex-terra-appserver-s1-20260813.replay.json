@@ -1,0 +1,47 @@
+{
+  "by_cell": {
+    "s1|codex|grounded-numeric": {
+      "api_equivalent_usd": 1.119533,
+      "delivered_gain_median": 0.75,
+      "delivered_gain_values": [
+        0.75
+      ],
+      "false_rejection_rate_median": 0.0,
+      "gain_per_1k_tokens": 0.001765,
+      "gain_per_api_equivalent_usd": 0.669922,
+      "gain_per_incremental_billed_usd": null,
+      "incremental_billed_usd": 0.0,
+      "mirage_rate_is_structural": false,
+      "mirage_rate_median": 0.0,
+      "outcome_is_hob": true,
+      "regression_acceptance_rate_median": 0.0,
+      "trajectories": 1
+    }
+  },
+  "cycle_records": 6,
+  "integrity": {
+    "abandoned_trajectories": [],
+    "canary_leak_trajectories": [],
+    "clean": true,
+    "incomplete_trajectories": [],
+    "invalid_oracle_trajectories": [],
+    "manifest_digests": [
+      "e522a23a562cd7b44605df4c3cbcf86b996950d3a0bff0263c93e4ff146260a9"
+    ],
+    "missing_trajectory_records": 0,
+    "mixed_or_missing_manifest_digest": false,
+    "mixed_or_missing_preregistration_commit": false,
+    "model_identity_mismatch_trajectories": [],
+    "preregistration_commits": [
+      "9bf7f3d487cc3f22bd8efca12314b7b133c5e599"
+    ],
+    "recovered_abandoned_trajectories": [],
+    "ungraded_trajectories": [],
+    "unparsable_log_lines": [],
+    "unrecovered_abandoned_trajectories": []
+  },
+  "note": "Primary quantity is delivered_gain on HO-B. mirage_rate is structural only for legacy pre-split grounded logs; confirmatory rows carry delta_hob and are empirical outcomes.",
+  "schema_version": 2,
+  "source_log": "logs/apparatus/codex-terra-appserver-s1-20260813.cycles.jsonl",
+  "trajectories": 1
+}
