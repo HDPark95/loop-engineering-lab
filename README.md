@@ -161,6 +161,13 @@ untracked isolation preflight, 기존 manifest 덮어쓰기를 모두 거부하�
 다음-cycle feedback에만 사용되고, 보고 결과는 gate가 보지 못한 HO-B에서 계산된다.
 
     python3 replay.py --log results/confirmatory-cycles.jsonl --output results/confirmatory-replay.json
+    python3 analysis/classify_reward_hacking.py --log results/confirmatory-cycles.jsonl --output results/confirmatory-reward-hacking.json
+    python3 analysis/fit_clustered.py --log results/confirmatory-cycles.jsonl --output results/confirmatory-analysis.json
+
+`fit_clustered.py`는 replay 무결성과 reward-hacking audit을 같은 원시 로그에서 다시
+실행하며, 둘 중 하나라도 clean하지 않으면 분석을 거부한다. 수용된 분석 JSON에는
+원시 로그의 SHA-256과 전체 audit 결과가 포함되므로, 이후 원고 renderer와 제출
+manifest가 원시 측정 로그까지 digest chain으로 결박할 수 있다.
 
 ## 확증 격리
 

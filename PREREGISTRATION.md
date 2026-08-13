@@ -796,3 +796,11 @@ apparatus validation and not confirmatory evidence.
   placeholders. A test rejects any additional unresolved value and validates a
   filled copy as apparatus-only. This changes preparation mechanics, not the
   confirmatory sample, outcomes, or inference. No confirmatory run had started.
+- R29 (2026-08-13): closed the analysis-to-submission provenance chain before
+  freeze. The confirmatory analysis now reruns both replay integrity and the
+  nested reward-hacking audit on its input log, refuses either unclean result,
+  and records that log's SHA-256 with the complete audit. The manuscript
+  renderer and final submission manifest require and propagate this digest in
+  addition to the analysis and generated-output digests. This changes artifact
+  validation and provenance, not the design, sample, outcomes, or inference.
+  No confirmatory run had started.

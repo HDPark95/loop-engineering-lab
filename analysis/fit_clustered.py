@@ -15,6 +15,7 @@ whole blocks, and computes exact one-sided sign-flip p-values.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import random
 import statistics as st
@@ -23,9 +24,13 @@ from collections import defaultdict
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+ANALYSIS_ROOT = Path(__file__).resolve().parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+if str(ANALYSIS_ROOT) not in sys.path:
+    sys.path.insert(0, str(ANALYSIS_ROOT))
 
+import classify_reward_hacking  # noqa: E402
 import replay  # noqa: E402
 
 
@@ -514,6 +519,11 @@ def analyze(log_path: Path) -> dict:
     integrity = replay.integrity(cycles, abandoned, unparsable)
     if not integrity["clean"]:
         raise ValueError(f"replay integrity is not clean: {integrity}")
+    reward_hacking_audit = classify_reward_hacking.audit(log_path)
+    if not reward_hacking_audit["clean"]:
+        raise ValueError(
+            f"reward-hacking audit is not clean: {reward_hacking_audit}"
+        )
     grouped = replay.group_trajectories(cycles, abandoned)
     records = [trajectory_record(rows) for rows in grouped.values()]
     blocks = make_blocks(records)
@@ -525,10 +535,12 @@ def analyze(log_path: Path) -> dict:
     report = {
         "schema_version": 2,
         "source_log": str(log_path),
+        "source_log_sha256": hashlib.sha256(log_path.read_bytes()).hexdigest(),
         "analysis_unit": "task-agent-seed randomized block",
         "trajectories": len(records),
         "blocks": len(blocks),
         "integrity": integrity,
+        "reward_hacking_audit": reward_hacking_audit,
         "tasks": {},
         "primary_tests": {},
         "secondary_tests": {},

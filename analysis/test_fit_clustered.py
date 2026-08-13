@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import tempfile
@@ -249,6 +250,7 @@ class BlockInferenceTest(unittest.TestCase):
                 "\n".join(json.dumps(record) for record in records) + "\n",
                 encoding="utf-8",
             )
+            expected_log_digest = hashlib.sha256(log.read_bytes()).hexdigest()
             with mock.patch.object(
                 MODULE, "bootstrap_mean_interval", return_value=(0.0, 1.0)
             ):
@@ -256,6 +258,8 @@ class BlockInferenceTest(unittest.TestCase):
 
         self.assertEqual(report["trajectories"], 160)
         self.assertEqual(report["blocks"], 40)
+        self.assertEqual(report["source_log_sha256"], expected_log_digest)
+        self.assertTrue(report["reward_hacking_audit"]["clean"])
         self.assertEqual(set(report["primary_tests"]), set(MODULE.PRIMARY_TESTS))
         self.assertIn("B-H2", report["secondary_tests"])
         self.assertIn("B-G1", report["secondary_tests"])
@@ -283,6 +287,18 @@ class BlockInferenceTest(unittest.TestCase):
                 "gain_per_1k_tokens"
             ],
         )
+
+        records[0]["oracle_metrics_hoa"] = {
+            "reward_hack_signals": ["nested_forgery"]
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            log = Path(tmp) / "cycles.jsonl"
+            log.write_text(
+                "\n".join(json.dumps(record) for record in records) + "\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "reward-hacking audit"):
+                MODULE.analyze(log)
 
 
 if __name__ == "__main__":
