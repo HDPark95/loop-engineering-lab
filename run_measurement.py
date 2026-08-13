@@ -760,6 +760,13 @@ def run_trajectory(
                 "model_requested": key.model,
                 "model_served": outcome.get("model_served"),
                 "model_identity_matches": outcome.get("model_served") == key.model,
+                "model_identity_evidence": (
+                    "runtime_cli_output" if outcome.get("model_served") else "unreported"
+                ),
+                "confirmatory_eligible": bool(
+                    not manifest.get("apparatus_test", False)
+                    and outcome.get("model_served") == key.model
+                ),
                 "candidate_digest": outcome.get("candidate_digest"),
                 "shared_execution_id": shared_execution_id,
                 "cost_allocation_fraction": cost_share,
@@ -793,7 +800,10 @@ def run_trajectory(
                         "cost_estimate_exceeded": True,
                     },
                 )
-            if not usage_record["model_identity_matches"]:
+            if (
+                not usage_record["model_identity_matches"]
+                and not manifest.get("apparatus_test", False)
+            ):
                 cause = RuntimeError(
                     "runtime did not report the exact immutable model requested by the manifest"
                 )

@@ -383,6 +383,61 @@ class RunnerTest(unittest.TestCase):
             self.assertEqual(failure["incremental_billed_usd"], 0.0)
             self.assertIn("oracle broke", failure["error"])
 
+    def test_apparatus_run_records_unreported_model_without_claiming_confirmatory_data(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            data = manifest(
+                agents=[{
+                    "name": "unreported",
+                    "model": "unreported-v1",
+                    "usd_per_1k_input": 0.003,
+                    "usd_per_1k_output": 0.015,
+                }],
+                seeds=[1],
+                cells=["grounded-numeric"],
+                cycles=1,
+                max_concurrent_agents=1,
+            )
+            path = write_manifest(directory, data)
+            log = directory / "cycles.jsonl"
+
+            def unreported_driver(model, task, workspace, cycle, seed, manifest, feedback=""):
+                return {
+                    "claim_improved": False,
+                    "self_report": {
+                        "improved": False,
+                        "confidence": 0.9,
+                        "evidence": "apparatus-only model identity test",
+                    },
+                    "model_served": None,
+                    "candidate_digest": run_measurement.digest_of(workspace),
+                    "input_tokens": 10,
+                    "output_tokens": 5,
+                    "agent_seconds": 0.01,
+                }
+
+            oracle = ({"score": 0.5, "metrics": {}, "valid": True}, 0.01)
+            argv = [
+                "run_measurement.py", "--manifest", str(path),
+                "--log", str(log), "--run-id", "apparatus-unreported",
+            ]
+            with (
+                mock.patch.object(sys, "argv", argv),
+                mock.patch.dict(run_measurement.DRIVERS, {"unreported": unreported_driver}),
+                mock.patch.object(
+                    run_measurement.se_experiment, "run_oracle", return_value=oracle
+                ),
+                mock.patch("sys.stdout", new=io.StringIO()),
+                mock.patch("sys.stderr", new=io.StringIO()),
+            ):
+                self.assertEqual(run_measurement.main(), 0)
+
+            record = json.loads(log.read_text(encoding="utf-8").splitlines()[0])
+            self.assertFalse(record["model_identity_matches"])
+            self.assertEqual(record["model_identity_evidence"], "unreported")
+            self.assertFalse(record["confirmatory_eligible"])
+            self.assertFalse(replay.integrity([record], [], [])["clean"])
+
     def test_missing_served_model_is_an_integrity_failure(self):
         cycle = {
             "trajectory": "t",
