@@ -741,7 +741,11 @@ class ReplayTest(unittest.TestCase):
                 self.assertEqual(cell["incremental_billed_usd"], 0.0, key)
                 self.assertIsNone(cell["gain_per_incremental_billed_usd"], key)
                 self.assertTrue(cell["outcome_is_hob"], key)
-                self.assertFalse(cell["mirage_rate_is_structural"], key)
+                self.assertEqual(
+                    cell["mirage_rate_is_structural"],
+                    key.split("|")[-1].startswith("grounded"),
+                    key,
+                )
 
     def test_a_grounded_cell_gates_only_on_hoa(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -825,6 +829,31 @@ class ReplayTest(unittest.TestCase):
             },
         ]
         metrics = replay.trajectory_metrics(cycles)
+        self.assertAlmostEqual(metrics["harmful_acceptance_incidence"], 1 / 6, places=6)
+        self.assertAlmostEqual(metrics["false_rejection_incidence"], 1 / 6, places=6)
+
+    def test_gate_mirage_and_outcome_regression_use_different_halves(self):
+        cycles = [
+            {
+                "cycle": 1,
+                "cycles_planned": 6,
+                "oracle_delta": 0.0,
+                "delta_hoa": 0.1,
+                "delta_hob": 0.0,
+                "accepted": True,
+            },
+            {
+                "cycle": 2,
+                "cycles_planned": 6,
+                "oracle_delta": 0.2,
+                "delta_hoa": -0.1,
+                "delta_hob": 0.2,
+                "accepted": False,
+            },
+        ]
+        metrics = replay.trajectory_metrics(cycles)
+        self.assertEqual(metrics["mirage_rate"], 0.0)
+        self.assertEqual(metrics["regression_acceptance_rate"], 1.0)
         self.assertAlmostEqual(metrics["harmful_acceptance_incidence"], 1 / 6, places=6)
         self.assertAlmostEqual(metrics["false_rejection_incidence"], 1 / 6, places=6)
 

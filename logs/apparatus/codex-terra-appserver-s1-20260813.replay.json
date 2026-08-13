@@ -6,12 +6,14 @@
       "delivered_gain_values": [
         0.75
       ],
+      "false_rejection_incidence_median": 0.0,
       "false_rejection_rate_median": 0.0,
       "gain_per_1k_tokens": 0.001765,
       "gain_per_api_equivalent_usd": 0.669922,
       "gain_per_incremental_billed_usd": null,
+      "harmful_acceptance_incidence_median": 0.0,
       "incremental_billed_usd": 0.0,
-      "mirage_rate_is_structural": false,
+      "mirage_rate_is_structural": true,
       "mirage_rate_median": 0.0,
       "outcome_is_hob": true,
       "regression_acceptance_rate_median": 0.0,
@@ -28,6 +30,7 @@
     "manifest_digests": [
       "e522a23a562cd7b44605df4c3cbcf86b996950d3a0bff0263c93e4ff146260a9"
     ],
+    "missing_candidate_archive_trajectories": [],
     "missing_trajectory_records": 0,
     "mixed_or_missing_manifest_digest": false,
     "mixed_or_missing_preregistration_commit": false,
@@ -36,11 +39,12 @@
       "9bf7f3d487cc3f22bd8efca12314b7b133c5e599"
     ],
     "recovered_abandoned_trajectories": [],
+    "reward_hack_signal_trajectories": [],
     "ungraded_trajectories": [],
     "unparsable_log_lines": [],
     "unrecovered_abandoned_trajectories": []
   },
-  "note": "Primary quantity is delivered_gain on HO-B. mirage_rate is structural only for legacy pre-split grounded logs; confirmatory rows carry delta_hob and are empirical outcomes.",
+  "note": "Primary quantity is delivered_gain on HO-B. mirage_rate uses the gate half HO-A and is structural in grounded cells; regression acceptance uses the outcome half HO-B.",
   "schema_version": 2,
   "source_log": "logs/apparatus/codex-terra-appserver-s1-20260813.cycles.jsonl",
   "trajectories": 1

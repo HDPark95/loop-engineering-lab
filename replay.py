@@ -73,13 +73,15 @@ def group_trajectories(
 def trajectory_metrics(rows: list[dict]) -> dict:
     graded = [r for r in rows if r.get("oracle_delta") is not None]
     accepted = [r for r in graded if r.get("accepted")]
-    positive = [r for r in graded if r["oracle_delta"] > 0]
+    gate_delta = lambda row: row.get("delta_hoa", row["oracle_delta"])
+    outcome_delta = lambda row: row.get("delta_hob", row["oracle_delta"])
+    positive = [r for r in graded if outcome_delta(r) > 0]
     rejected = [r for r in graded if not r.get("accepted")]
     baseline = rows[0].get("baseline_score")
     final = rows[-1].get("deployed_score")
     planned = rows[0].get("cycles_planned")
     denominator = planned if isinstance(planned, int) and planned > 0 else len(rows)
-    first_positive = next((r["cycle"] for r in graded if r["oracle_delta"] > 0), None)
+    first_positive = next((r["cycle"] for r in graded if outcome_delta(r) > 0), None)
     return {
         # Primary: what the loop actually delivered.
         "delivered_gain": (
@@ -89,12 +91,12 @@ def trajectory_metrics(rows: list[dict]) -> dict:
         "baseline_score": baseline,
         # Descriptive. Structural in the grounded arms; see the module docstring.
         "mirage_rate": (
-            round(sum(1 for r in accepted if r["oracle_delta"] <= 0) / len(accepted), 6)
+            round(sum(1 for r in accepted if gate_delta(r) <= 0) / len(accepted), 6)
             if accepted
             else None
         ),
         "regression_acceptance_rate": (
-            round(sum(1 for r in accepted if r["oracle_delta"] <= 0) / len(accepted), 6)
+            round(sum(1 for r in accepted if outcome_delta(r) <= 0) / len(accepted), 6)
             if accepted
             else None
         ),
@@ -102,7 +104,7 @@ def trajectory_metrics(rows: list[dict]) -> dict:
         # no positive-delta cycles contributes zero instead of disappearing.
         "harmful_acceptance_incidence": (
             round(
-                sum(1 for r in graded if r.get("accepted") and r["oracle_delta"] <= 0)
+                sum(1 for r in graded if r.get("accepted") and outcome_delta(r) <= 0)
                 / denominator,
                 6,
             )
@@ -110,13 +112,13 @@ def trajectory_metrics(rows: list[dict]) -> dict:
             else None
         ),
         "false_rejection_rate": (
-            round(sum(1 for r in rejected if r["oracle_delta"] > 0) / len(positive), 6)
+            round(sum(1 for r in rejected if outcome_delta(r) > 0) / len(positive), 6)
             if positive
             else None
         ),
         "false_rejection_incidence": (
             round(
-                sum(1 for r in graded if not r.get("accepted") and r["oracle_delta"] > 0)
+                sum(1 for r in graded if not r.get("accepted") and outcome_delta(r) > 0)
                 / denominator,
                 6,
             )
@@ -301,7 +303,7 @@ def by_cell(grouped: dict[str, list[dict]]) -> dict:
                 if false_rejection_incidences
                 else None
             ),
-            "mirage_rate_is_structural": grounded and not outcome_is_hob,
+            "mirage_rate_is_structural": grounded,
             "outcome_is_hob": outcome_is_hob,
             "gain_per_1k_tokens": (
                 round(sum(gains) / (tokens / 1000.0), 6) if gains and tokens else None
@@ -338,9 +340,9 @@ def main() -> int:
         "integrity": integrity(cycles, abandoned, unparsable),
         "by_cell": by_cell(grouped),
         "note": (
-            "Primary quantity is delivered_gain on HO-B. mirage_rate is structural "
-            "only for legacy pre-split grounded logs; confirmatory rows carry "
-            "delta_hob and are empirical outcomes."
+            "Primary quantity is delivered_gain on HO-B. mirage_rate uses the "
+            "gate half HO-A and is structural in grounded cells; regression "
+            "acceptance uses the outcome half HO-B."
         ),
     }
     text = json.dumps(report, indent=2, sort_keys=True)

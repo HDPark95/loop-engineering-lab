@@ -13,7 +13,7 @@
       "gain_per_incremental_billed_usd": null,
       "harmful_acceptance_incidence_median": 0.0,
       "incremental_billed_usd": 0.0,
-      "mirage_rate_is_structural": false,
+      "mirage_rate_is_structural": true,
       "mirage_rate_median": 0.0,
       "outcome_is_hob": true,
       "regression_acceptance_rate_median": 0.0,
@@ -44,7 +44,7 @@
     "unparsable_log_lines": [],
     "unrecovered_abandoned_trajectories": []
   },
-  "note": "Primary quantity is delivered_gain on HO-B. mirage_rate is structural only for legacy pre-split grounded logs; confirmatory rows carry delta_hob and are empirical outcomes.",
+  "note": "Primary quantity is delivered_gain on HO-B. mirage_rate uses the gate half HO-A and is structural in grounded cells; regression acceptance uses the outcome half HO-B.",
   "schema_version": 2,
   "source_log": "logs/apparatus/codex-terra-appserver-s1repo-publictests-20260813.cycles.jsonl",
   "trajectories": 1
