@@ -81,6 +81,16 @@ App Server 호출은 기존 ChatGPT 구독 인증을 사용하므로 추가 API 
 
     python3 run_measurement.py --manifest measurement-manifest.json --log results/confirmatory-cycles.jsonl --run-id confirmatory-01 --plan-only
 
+동결은 자기 참조를 피하기 위해 두 단계로 한다. 정확한 모델·단가·이미지 digest를
+모두 채운 tracked template의 `preregistration_commit`에는
+`__PREREGISTRATION_FREEZE_COMMIT__`만 둔다. 그 template과 코드 전체를 커밋 F로
+만들고 annotated tag `prereg-v1`을 F에 붙인 뒤, 깨끗한 F worktree에서 아래 명령이
+실제 manifest를 생성한다. 도구는 lightweight tag, 이동한 HEAD, untracked template,
+기존 manifest 덮어쓰기를 모두 거부하고 생성 전에 `run_measurement.load_manifest`로
+전체 확증 grid를 검증한다.
+
+    python3 finalize_measurement_manifest.py --template measurement-manifest.template.json --output measurement-manifest.json --tag prereg-v1
+
 실행 후에는 원시 로그만으로 결과와 무결성 상태를 재계산한다. HO-A는 gate와
 다음-cycle feedback에만 사용되고, 보고 결과는 gate가 보지 못한 HO-B에서 계산된다.
 
