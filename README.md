@@ -97,6 +97,9 @@ manifest가 파일 SHA-256와 image ID를 다시 대조한다.
 구독 쿼터 응답은 agent별 단일 writer lane에서 한 시간 간격으로 최대 168회 재확인한다.
 따라서 한 agent가 주간 reset을 기다리는 동안 다른 agent lane은 계속 실행하며, 짧은
 retry 소진 때문에 대기 중인 전체 block을 연속 폐기하지 않는다.
+8월 15일 pre-freeze Claude 6-cycle resource trajectory도
+`logs/apparatus/claude-resource-20260815.manifest.template.json`에 미리 고정돼 있다.
+exact model과 그 모델의 공식 입력·출력 shadow 단가 세 값만 확인 후 채운다.
 
     python3 preflight_isolation.py --sandbox-image sha256:<image-id> --output preflight/sandbox-isolation.json
 

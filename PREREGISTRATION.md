@@ -789,3 +789,10 @@ apparatus validation and not confirmatory evidence.
   changes billing mode or invokes an API key. Tests require at least a full
   seven-day horizon. This changes failure handling and elapsed time, not tasks,
   treatments, outcomes, or inference. No confirmatory run had started.
+- R28 (2026-08-13): added the pre-freeze Claude resource-apparatus manifest
+  template. Its task, cell, seed, six-cycle horizon, images, credential-write
+  contract, archive, timeout, and quota handling are fixed; only the runtime
+  exact model and its official base input/output shadow rates remain explicit
+  placeholders. A test rejects any additional unresolved value and validates a
+  filled copy as apparatus-only. This changes preparation mechanics, not the
+  confirmatory sample, outcomes, or inference. No confirmatory run had started.

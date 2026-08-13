@@ -15,6 +15,9 @@ import run_measurement
 
 ROOT = Path(__file__).resolve().parent
 TEMPLATE = ROOT / "measurement-manifest.template.json"
+CLAUDE_RESOURCE_TEMPLATE = (
+    ROOT / "logs" / "apparatus" / "claude-resource-20260815.manifest.template.json"
+)
 
 
 class FinalizeManifestTest(unittest.TestCase):
@@ -51,6 +54,29 @@ class FinalizeManifestTest(unittest.TestCase):
                 "$.estimated_api_equivalent_usd_per_trajectory",
             ],
         )
+
+    def test_claude_resource_template_has_only_three_runtime_values(self):
+        template = json.loads(CLAUDE_RESOURCE_TEMPLATE.read_text(encoding="utf-8"))
+        self.assertEqual(
+            finalizer.unresolved_value_sentinels(template),
+            [
+                "$.agents[0].model",
+                "$.agents[0].usd_per_1k_input",
+                "$.agents[0].usd_per_1k_output",
+            ],
+        )
+        template["agents"][0].update(
+            {
+                "model": "claude-test-2026-08-15",
+                "usd_per_1k_input": 0.003,
+                "usd_per_1k_output": 0.015,
+            }
+        )
+        self.assertEqual(finalizer.unresolved_value_sentinels(template), [])
+        with tempfile.TemporaryDirectory() as directory:
+            manifest_path = Path(directory) / "apparatus.json"
+            manifest_path.write_text(json.dumps(template), encoding="utf-8")
+            self.assertEqual(run_measurement.load_manifest(manifest_path), template)
 
     def test_filled_template_is_a_complete_confirmatory_manifest(self):
         template = json.loads(TEMPLATE.read_text(encoding="utf-8"))
