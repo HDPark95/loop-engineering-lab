@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import json
 import importlib.util
+import os
 import subprocess
 import sys
 import tempfile
@@ -46,6 +47,7 @@ if str(ROOT / "se_tasks") not in sys.path:
     sys.path.insert(0, str(ROOT / "se_tasks"))
 
 from _sandbox.harness import run_calls  # noqa: E402
+from _sandbox import harness  # noqa: E402
 
 
 def load_oracle(path: Path, name: str):
@@ -247,6 +249,37 @@ class S3OracleTest(unittest.TestCase):
         findings = survey_from_inside("service.py", "handle")
         self.assertEqual(findings["reachable"], {})
         self.assertEqual(findings["readable"], [])
+
+    def test_fifo_candidate_is_rejected_before_copying(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            os.mkfifo(directory / "blocked-pipe")
+            outcome = run_calls(directory, "service", "handle", [])
+        self.assertFalse(outcome["ok"])
+        self.assertEqual(outcome["load_error"], "UnsupportedCandidateFile")
+        self.assertEqual(outcome["unsupported_path"], "blocked-pipe")
+
+    def test_blocked_docker_cleanup_does_not_skip_process_group_kill(self):
+        process = mock.Mock(pid=12345)
+        process.communicate.side_effect = [
+            subprocess.TimeoutExpired(["docker", "run"], 1),
+            ("", ""),
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            (directory / "service.py").write_text("def handle(x): return x", encoding="utf-8")
+            with (
+                mock.patch.object(harness.subprocess, "Popen", return_value=process),
+                mock.patch.object(
+                    harness.subprocess,
+                    "run",
+                    side_effect=subprocess.TimeoutExpired(["docker", "cleanup"], 5),
+                ),
+                mock.patch.object(harness.os, "killpg") as killpg,
+                self.assertRaises(harness.SandboxTimeout),
+            ):
+                harness.run_calls(directory, "service", "handle", [], timeout=1)
+        killpg.assert_called_once_with(12345, harness.signal.SIGKILL)
 
     def test_hoa_and_hob_workloads_are_disjoint_and_seeded(self):
         s3_oracle = load_oracle(S3_ORACLE, "s3_oracle_for_split_test")

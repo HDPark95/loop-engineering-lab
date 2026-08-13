@@ -25,6 +25,7 @@ from __future__ import annotations
 import json
 import os
 import signal
+import stat
 import shutil
 import subprocess
 import sys
@@ -46,12 +47,43 @@ SANDBOX_PREFIX = "loop-eng-sandbox-"
 # operational failure of the trajectory, not a score of zero, so a slow
 # candidate is never silently graded as a bad one.
 DEFAULT_TIMEOUT_SECONDS = 60
+DOCKER_CLEANUP_TIMEOUT_SECONDS = 5
 
 RECORD_PREFIX = "@@LOOP-ENG-RESULT@@ "
 
 
 class SandboxTimeout(RuntimeError):
     pass
+
+
+def _unsupported_candidate_entry(candidate_dir: Path) -> Path | None:
+    """Return the first special filesystem entry that copytree must not touch."""
+    for directory, directory_names, file_names in os.walk(
+        candidate_dir, followlinks=False
+    ):
+        for name in [*directory_names, *file_names]:
+            path = Path(directory) / name
+            try:
+                mode = path.lstat().st_mode
+            except OSError:
+                return path
+            if not (stat.S_ISDIR(mode) or stat.S_ISREG(mode) or stat.S_ISLNK(mode)):
+                return path
+    return None
+
+
+def _bounded_docker_cleanup(command: list[str]) -> None:
+    """Best-effort Docker cleanup that cannot hang the oracle process."""
+    try:
+        subprocess.run(
+            command,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+            timeout=DOCKER_CLEANUP_TIMEOUT_SECONDS,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        pass
 
 
 def _parse_records(stdout: str) -> dict:
@@ -87,6 +119,18 @@ def run_calls(
     reaps descendants. A trusted wrapper process measures its single child.
     """
     payload = json.dumps({"module": module, "callable": callable_name, "calls": calls, "unpack": unpack})
+    unsupported = _unsupported_candidate_entry(candidate_dir)
+    if unsupported is not None:
+        try:
+            relative = unsupported.relative_to(candidate_dir).as_posix()
+        except ValueError:
+            relative = unsupported.name
+        return {
+            "ok": False,
+            "load_error": "UnsupportedCandidateFile",
+            "unsupported_path": relative,
+            "measured_cpu_seconds": None,
+        }
 
     with tempfile.TemporaryDirectory(prefix=SANDBOX_PREFIX) as sandbox:
         root = Path(sandbox)
@@ -132,12 +176,7 @@ def run_calls(
         try:
             stdout, stderr = process.communicate(payload, timeout=timeout)
         except subprocess.TimeoutExpired as exc:
-            subprocess.run(
-                ["docker", "kill", container_name],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                check=False,
-            )
+            _bounded_docker_cleanup(["docker", "kill", container_name])
             try:
                 os.killpg(process.pid, signal.SIGKILL)
             except ProcessLookupError:
@@ -145,12 +184,7 @@ def run_calls(
             process.communicate()
             raise SandboxTimeout(f"candidate exceeded {timeout}s") from exc
         finally:
-            subprocess.run(
-                ["docker", "rm", "-f", container_name],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                check=False,
-            )
+            _bounded_docker_cleanup(["docker", "rm", "-f", container_name])
 
     if process.returncode != 0:
         return {

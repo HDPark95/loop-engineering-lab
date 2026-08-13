@@ -79,6 +79,10 @@ class TrajectoryRunError(RuntimeError):
         self.failure_record = failure_record
 
 
+class SharedCycleOneError(RuntimeError):
+    """A shared cycle-one invocation failed before usage could be recorded."""
+
+
 @dataclass(frozen=True)
 class TrajectoryKey:
     task: str
@@ -560,7 +564,9 @@ def real_agent_driver(
     feedback: str = "",
     agent: str = "",
 ) -> dict:
-    entry = next(item for item in manifest["agents"] if item["name"] == agent)
+    entry = next((item for item in manifest["agents"] if item["name"] == agent), None)
+    if entry is None:
+        raise RuntimeError(f"manifest has no agent entry named {agent!r}")
     adapter = entry.get("adapter", agent)
     auth_env_name = entry["auth_file_env"]
     auth_value = os.environ.get(auth_env_name)
@@ -717,9 +723,12 @@ def run_trajectory(
         for cycle in range(1, cycles + 1):
             candidate_dir = Path(workspace_root) / f"candidate-{cycle}"
             if cycle == 1:
-                common_path, outcome, shared_execution_id, cost_owner = common_first_cycle.get(
-                    key, driver, manifest
-                )
+                try:
+                    common_path, outcome, shared_execution_id, cost_owner = (
+                        common_first_cycle.get(key, driver, manifest)
+                    )
+                except Exception as exc:
+                    raise SharedCycleOneError(str(exc)) from exc
                 shutil.copytree(common_path, candidate_dir, symlinks=True)
                 cost_share = 1.0 / common_consumers
             else:
@@ -798,6 +807,7 @@ def run_trajectory(
                     {
                         **usage_record,
                         "cost_estimate_exceeded": True,
+                        "shared_cycle_one_failure": cycle == 1,
                     },
                 )
             if (
@@ -807,16 +817,25 @@ def run_trajectory(
                 cause = RuntimeError(
                     "runtime did not report the exact immutable model requested by the manifest"
                 )
-                raise TrajectoryRunError(cause, usage_record)
+                raise TrajectoryRunError(
+                    cause,
+                    {**usage_record, "shared_cycle_one_failure": cycle == 1},
+                )
 
             try:
                 if cycle == 1:
-                    (
-                        oracle_a_result,
-                        oracle_a_seconds,
-                        oracle_b_result,
-                        oracle_b_seconds,
-                    ) = common_first_cycle.grade_cycle_one(key, candidate_dir)
+                    try:
+                        (
+                            oracle_a_result,
+                            oracle_a_seconds,
+                            oracle_b_result,
+                            oracle_b_seconds,
+                        ) = common_first_cycle.grade_cycle_one(key, candidate_dir)
+                    except Exception as exc:
+                        raise TrajectoryRunError(
+                            exc,
+                            {**usage_record, "shared_cycle_one_failure": True},
+                        ) from exc
                     oracle_time_share = cost_share
                 else:
                     oracle_a_result, oracle_a_seconds = se_experiment.run_oracle(
@@ -978,7 +997,7 @@ def main() -> int:
         group: f"{args.run_id}:{uuid.uuid4().hex}" for group in common_members
     }
     common_first_cycle = CommonFirstCycleCache()
-    failed_groups: set[tuple[str, str, str, int]] = set()
+    failed_shared_cycle_one_groups: set[tuple[str, str, str, int]] = set()
     individually_abandoned: set[str] = set()
 
     try:
@@ -1010,7 +1029,8 @@ def main() -> int:
                     result = future.result()
                 except TrajectoryRunError as exc:
                     abandoned_attempts += 1
-                    failed_groups.add(group)
+                    if exc.failure_record.get("shared_cycle_one_failure"):
+                        failed_shared_cycle_one_groups.add(group)
                     individually_abandoned.add(key.token())
                     log.write(
                         {
@@ -1023,7 +1043,8 @@ def main() -> int:
                     continue
                 except Exception as exc:  # noqa: BLE001 - one trajectory must not end the run
                     abandoned_attempts += 1
-                    failed_groups.add(group)
+                    if isinstance(exc, SharedCycleOneError):
+                        failed_shared_cycle_one_groups.add(group)
                     individually_abandoned.add(key.token())
                     log.write(
                         {
@@ -1044,7 +1065,7 @@ def main() -> int:
                 finally:
                     budget.release(reservation)
                 print(json.dumps(result, sort_keys=True))
-            for group in failed_groups:
+            for group in failed_shared_cycle_one_groups:
                 for key in common_members[group]:
                     if key.token() in individually_abandoned:
                         continue

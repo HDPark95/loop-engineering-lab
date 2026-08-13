@@ -514,6 +514,81 @@ class RunnerTest(unittest.TestCase):
             self.assertEqual(len({record["candidate_digest"] for record in first}), 1)
             self.assertAlmostEqual(sum(record["cost_allocation_fraction"] for record in first), 1.0)
 
+    def test_cycle_two_failure_does_not_abandon_peer_trajectories(self):
+        calls = []
+
+        def driver(model, task, workspace, cycle, seed, manifest, feedback=""):
+            calls.append(cycle)
+            return {
+                "claim_improved": False,
+                "self_report": {
+                    "improved": False,
+                    "confidence": 0.8,
+                    "evidence": "cycle two peer isolation test",
+                },
+                "model_served": model,
+                "candidate_digest": run_measurement.digest_of(workspace),
+                "input_tokens": 10,
+                "output_tokens": 5,
+                "agent_seconds": 0.01,
+            }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            cells = [cell.name for cell in run_measurement.se_experiment.CELLS]
+            data = manifest(
+                agents=[{
+                    "name": "peer-test",
+                    "model": "peer-test-v1",
+                    "usd_per_1k_input": 0.003,
+                    "usd_per_1k_output": 0.015,
+                }],
+                cells=cells,
+                seeds=[1],
+                cycles=2,
+            )
+            path = write_manifest(directory, data)
+            log = directory / "cycles.jsonl"
+            oracle = ({"score": 0.5, "metrics": {}, "valid": True}, 0.01)
+            cycle_two_calls = 0
+
+            def oracle_with_one_late_failure(*args, **kwargs):
+                nonlocal cycle_two_calls
+                candidate = Path(args[1])
+                if candidate.name == "candidate-2":
+                    cycle_two_calls += 1
+                    if cycle_two_calls == 1:
+                        raise RuntimeError("one cycle-two oracle failed")
+                return oracle
+
+            argv = [
+                "run_measurement.py", "--manifest", str(path),
+                "--log", str(log), "--run-id", "late-failure",
+            ]
+            with (
+                mock.patch.object(sys, "argv", argv),
+                mock.patch.dict(run_measurement.DRIVERS, {"peer-test": driver}),
+                mock.patch.object(
+                    run_measurement.se_experiment,
+                    "run_oracle",
+                    side_effect=oracle_with_one_late_failure,
+                ),
+                mock.patch("sys.stdout", new=io.StringIO()),
+                mock.patch("sys.stderr", new=io.StringIO()),
+            ):
+                self.assertEqual(run_measurement.main(), 4)
+
+            records = [json.loads(line) for line in log.read_text().splitlines()]
+            abandoned = [record for record in records if record.get("abandoned")]
+            self.assertEqual(len(abandoned), 1)
+            self.assertNotIn("bundle_abandoned", abandoned[0])
+            completed = {
+                record["trajectory"]
+                for record in records
+                if record.get("cycle") == 2 and not record.get("abandoned")
+            }
+            self.assertEqual(len(completed), len(cells) - 1)
+
 
 class ReplayTest(unittest.TestCase):
     def test_every_reported_number_comes_from_the_log(self):
@@ -571,6 +646,14 @@ class ReplayTest(unittest.TestCase):
             self.assertFalse(report["clean"])
             self.assertEqual(report["canary_leak_trajectories"], ["t1"])
             self.assertEqual(report["abandoned_trajectories"], ["t2"])
+
+    def test_missing_trajectory_rows_are_integrity_defects_not_crashes(self):
+        cycles = [{"schema_version": 2, "cycle": 1, "oracle_delta": 0.0}]
+        grouped = replay.group_trajectories(cycles)
+        report = replay.integrity(cycles, [], [])
+        self.assertEqual(grouped, {})
+        self.assertEqual(report["missing_trajectory_records"], 1)
+        self.assertFalse(report["clean"])
 
     def test_unparsable_and_ungraded_records_are_not_measurements(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -59,6 +59,8 @@ def group_trajectories(
         attempt_identity(record) for record in (abandoned or []) if record.get("trajectory")
     }
     for record in cycles:
+        if not record.get("trajectory"):
+            continue
         trajectory, attempt = attempt_identity(record)
         if (trajectory, attempt) in abandoned_identities:
             continue
@@ -124,10 +126,15 @@ def trajectory_metrics(rows: list[dict]) -> dict:
 
 
 def integrity(cycles: list[dict], abandoned: list[dict], unparsable: list[int]) -> dict:
-    leaks = [r["trajectory"] for r in cycles if r.get("canary_leak")]
+    missing_trajectory_records = sum(
+        1 for record in [*cycles, *abandoned] if not record.get("trajectory")
+    )
+    identified_cycles = [record for record in cycles if record.get("trajectory")]
+    identified_abandoned = [record for record in abandoned if record.get("trajectory")]
+    leaks = [r["trajectory"] for r in identified_cycles if r.get("canary_leak")]
     mismatches = [
         r["trajectory"]
-        for r in cycles
+        for r in identified_cycles
         if r.get("model_identity_matches") is False
         or (
             r.get("schema_version", 0) >= 2
@@ -137,9 +144,17 @@ def integrity(cycles: list[dict], abandoned: list[dict], unparsable: list[int]) 
             )
         )
     ]
-    invalid_oracles = [r["trajectory"] for r in cycles if r.get("oracle_valid") is False]
-    ungraded = [r["trajectory"] for r in cycles if r.get("oracle_delta") is None]
-    schema_two_rows = [r for r in [*cycles, *abandoned] if r.get("schema_version", 0) >= 2]
+    invalid_oracles = [
+        r["trajectory"] for r in identified_cycles if r.get("oracle_valid") is False
+    ]
+    ungraded = [
+        r["trajectory"] for r in identified_cycles if r.get("oracle_delta") is None
+    ]
+    schema_two_rows = [
+        r
+        for r in [*identified_cycles, *identified_abandoned]
+        if r.get("schema_version", 0) >= 2
+    ]
     manifest_digests = {r.get("manifest_digest") for r in schema_two_rows}
     preregistration_commits = {r.get("preregistration_commit") for r in schema_two_rows}
     manifest_mixed = len(manifest_digests) > 1 or None in manifest_digests
@@ -148,7 +163,7 @@ def integrity(cycles: list[dict], abandoned: list[dict], unparsable: list[int]) 
     )
     incomplete = []
     completed_tokens = set()
-    grouped = group_trajectories(cycles, abandoned)
+    grouped = group_trajectories(identified_cycles, identified_abandoned)
     for rows in grouped.values():
         planned = rows[0].get("cycles_planned")
         if isinstance(planned, int):
@@ -156,7 +171,7 @@ def integrity(cycles: list[dict], abandoned: list[dict], unparsable: list[int]) 
                 completed_tokens.add(rows[0]["trajectory"])
             else:
                 incomplete.append(rows[0]["trajectory"])
-    abandoned_tokens = {r["trajectory"] for r in abandoned}
+    abandoned_tokens = {r["trajectory"] for r in identified_abandoned}
     recovered_abandoned = abandoned_tokens & completed_tokens
     unrecovered_abandoned = abandoned_tokens - completed_tokens
     return {
@@ -175,6 +190,7 @@ def integrity(cycles: list[dict], abandoned: list[dict], unparsable: list[int]) 
         ),
         "mixed_or_missing_preregistration_commit": preregistration_mixed,
         "unparsable_log_lines": unparsable,
+        "missing_trajectory_records": missing_trajectory_records,
         "clean": not any(
             (
                 leaks,
@@ -186,6 +202,7 @@ def integrity(cycles: list[dict], abandoned: list[dict], unparsable: list[int]) 
                 manifest_mixed,
                 preregistration_mixed,
                 unparsable,
+                missing_trajectory_records,
             )
         ),
     }

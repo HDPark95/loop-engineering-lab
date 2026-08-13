@@ -79,7 +79,10 @@ def run_oracle(
         check=True,
         capture_output=True,
         text=True,
-        timeout=60,
+        # S3 performs nine serialized sandbox evaluations, each with its own
+        # 60-second candidate boundary. The parent must outlive those child
+        # boundaries so it cannot truncate a valid slow-or-timeout result.
+        timeout=600 if task == "s3" else 60,
     )
     elapsed = time.perf_counter() - started
     result = json.loads(process.stdout)

@@ -374,46 +374,47 @@ def run_measurement_cycle(
 
     schema_path = workspace / ".loop-verdict-schema.json"
     schema_path.write_text(json.dumps(VERDICT_SCHEMA, separators=(",", ":")), encoding="utf-8")
-    container_name = f"loop-measurement-{agent}-{os.getpid()}-{time.time_ns()}"
-    started = time.perf_counter()
-    with tempfile.TemporaryDirectory(prefix=f"loop-{agent}-auth-") as auth_root:
-        auth_dir = Path(auth_root)
-        auth_dir.chmod(0o700)
-        auth_name = "auth.json" if agent == "codex" else ".credentials.json"
-        auth_copy = auth_dir / auth_name
-        shutil.copy2(auth_file, auth_copy)
-        auth_copy.chmod(0o600)
-        command = container_command_for(
-            agent,
-            workspace,
-            model,
-            max_budget_usd,
-            container_image,
-            state_file=state_file,
-            auth_dir=auth_dir,
-            prompt=measurement_prompt(task, cycle, feedback),
-            verdict_schema_path=(
-                "/workspace/.loop-verdict-schema.json" if agent == "codex" else None
-            ),
-            verdict_schema=VERDICT_SCHEMA if agent == "claude" else None,
-            container_name=container_name,
-            billing_mode=billing_mode,
-        )
-        try:
-            process = subprocess.run(
-                command,
-                cwd=workspace,
-                capture_output=True,
-                text=True,
-                timeout=timeout_seconds,
+    try:
+        container_name = f"loop-measurement-{agent}-{os.getpid()}-{time.time_ns()}"
+        started = time.perf_counter()
+        with tempfile.TemporaryDirectory(prefix=f"loop-{agent}-auth-") as auth_root:
+            auth_dir = Path(auth_root)
+            auth_dir.chmod(0o700)
+            auth_name = "auth.json" if agent == "codex" else ".credentials.json"
+            auth_copy = auth_dir / auth_name
+            shutil.copy2(auth_file, auth_copy)
+            auth_copy.chmod(0o600)
+            command = container_command_for(
+                agent,
+                workspace,
+                model,
+                max_budget_usd,
+                container_image,
+                state_file=state_file,
+                auth_dir=auth_dir,
+                prompt=measurement_prompt(task, cycle, feedback),
+                verdict_schema_path=(
+                    "/workspace/.loop-verdict-schema.json" if agent == "codex" else None
+                ),
+                verdict_schema=VERDICT_SCHEMA if agent == "claude" else None,
+                container_name=container_name,
+                billing_mode=billing_mode,
             )
-        except subprocess.TimeoutExpired as exc:
-            subprocess.run(
-                ["docker", "rm", "-f", container_name], capture_output=True, text=True
-            )
-            raise AgentInvocationError("agent invocation timed out", "timeout") from exc
-        finally:
-            schema_path.unlink(missing_ok=True)
+            try:
+                process = subprocess.run(
+                    command,
+                    cwd=workspace,
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout_seconds,
+                )
+            except subprocess.TimeoutExpired as exc:
+                subprocess.run(
+                    ["docker", "rm", "-f", container_name], capture_output=True, text=True
+                )
+                raise AgentInvocationError("agent invocation timed out", "timeout") from exc
+    finally:
+        schema_path.unlink(missing_ok=True)
 
     status = execution_status(agent, process.stdout, process.returncode)
     if not status["model_completed"]:

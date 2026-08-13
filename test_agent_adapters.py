@@ -156,7 +156,12 @@ class AdapterTest(unittest.TestCase):
             workspace.mkdir()
             auth = Path(tmp) / "auth.json"
             auth.write_text("{}", encoding="utf-8")
-            with mock.patch.object(agent_adapters.subprocess, "run", return_value=completed):
+            with (
+                mock.patch.object(
+                    agent_adapters.shutil, "which", return_value="/usr/bin/docker"
+                ),
+                mock.patch.object(agent_adapters.subprocess, "run", return_value=completed),
+            ):
                 result = agent_adapters.run_measurement_cycle(
                     agent="claude",
                     model="claude-test-20260801",
@@ -174,6 +179,37 @@ class AdapterTest(unittest.TestCase):
             self.assertEqual(result["self_report"], report)
             self.assertEqual(result["model_served"], "claude-test-20260801")
             self.assertEqual((result["input_tokens"], result["output_tokens"]), (30, 8))
+            self.assertFalse((workspace / ".loop-verdict-schema.json").exists())
+
+    def test_measurement_cycle_removes_schema_when_auth_copy_fails(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp) / "workspace"
+            workspace.mkdir()
+            auth = Path(tmp) / "auth.json"
+            auth.write_text("{}", encoding="utf-8")
+            with (
+                mock.patch.object(
+                    agent_adapters.shutil, "which", return_value="/usr/bin/docker"
+                ),
+                mock.patch.object(
+                    agent_adapters.shutil, "copy2", side_effect=OSError("copy failed")
+                ),
+                self.assertRaisesRegex(OSError, "copy failed"),
+            ):
+                agent_adapters.run_measurement_cycle(
+                    agent="codex",
+                    model="gpt-test",
+                    task="s1",
+                    workspace=workspace,
+                    cycle=1,
+                    feedback="",
+                    container_image="image@sha256:" + "a" * 64,
+                    auth_file=auth,
+                    state_file=None,
+                    timeout_seconds=10,
+                    billing_mode="subscription",
+                    max_budget_usd=1.0,
+                )
             self.assertFalse((workspace / ".loop-verdict-schema.json").exists())
 
     def test_container_can_forward_auth_environment_by_name(self):
