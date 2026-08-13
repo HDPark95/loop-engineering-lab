@@ -4,8 +4,11 @@
 from __future__ import annotations
 
 import importlib.util
+import json
+import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 PATH = Path(__file__).with_name("fit_clustered.py")
@@ -29,12 +32,23 @@ def rows(cell: str = "grounded-numeric", accepted=(False, False)) -> list[dict]:
             "cycle": cycle,
             "cycles_planned": 2,
             "delta_hob": delta,
+            "delta_hoa": 0.1 if cycle == 1 else -0.1,
             "accepted": decision,
             "baseline_score_hob": 0.1,
             "oracle_score_hob": 0.2 if cycle == 1 else 0.3,
             "deployed_score_hob": 0.2 if cycle == 1 else 0.3,
             "apparatus_test": False,
             "confirmatory_eligible": True,
+            "candidate_changed": cycle == 1,
+            "agent_completed": True,
+            "edit_success": cycle == 1,
+            "input_tokens": 100,
+            "output_tokens": 10,
+            "agent_seconds": 1.0,
+            "judge_seconds": 0.0,
+            "oracle_seconds": 0.5,
+            "api_equivalent_usd": 0.01,
+            "incremental_billed_usd": 0.0,
         }
         for cycle, (delta, decision) in enumerate(zip((-0.1, 0.1), accepted), start=1)
     ]
@@ -58,6 +72,24 @@ class TrajectoryReductionTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "apparatus"):
             MODULE.trajectory_record(data)
 
+    def test_registered_secondary_and_cost_fields_are_reduced(self):
+        record = MODULE.trajectory_record(rows(accepted=(True, False)))
+        self.assertEqual(record["cycles_to_first_positive_hob"], 2)
+        self.assertFalse(record["cycles_to_first_positive_hob_censored"])
+        self.assertEqual(record["first_positive_censor_incidence"], 0.0)
+        self.assertEqual(record["erosion_hob"], 0.0)
+        self.assertEqual(record["gate_mirage_rate"], 0.0)
+        self.assertEqual(record["edit_success_rate"], 0.5)
+        self.assertEqual(record["input_tokens"], 200.0)
+        self.assertEqual(record["wall_clock_seconds"], 3.0)
+        self.assertIsNone(record["gain_per_incremental_billed_usd"])
+
+    def test_missing_edit_success_contract_is_refused(self):
+        data = rows()
+        del data[0]["edit_success"]
+        with self.assertRaisesRegex(ValueError, "edit-success"):
+            MODULE.trajectory_record(data)
+
 
 class BlockInferenceTest(unittest.TestCase):
     def test_all_four_cells_are_required(self):
@@ -76,6 +108,91 @@ class BlockInferenceTest(unittest.TestCase):
         self.assertTrue(verdicts["B-H1b"]["reject_null"])
         with self.assertRaisesRegex(ValueError, "exactly"):
             MODULE.holm({"B-H1a": 0.01})
+
+    def test_full_grid_emits_primary_secondary_and_cost_outputs(self):
+        harmful_cycles = {
+            "s1_swebench": 5,
+            "s3": 5,
+            "g1": 4,
+            "b1": 2,
+        }
+        records = []
+        for task, harmful_count in harmful_cycles.items():
+            for agent in ("codex", "claude"):
+                for seed in (11, 23, 37, 53, 71):
+                    for cell in sorted(MODULE.EXPECTED_CELLS):
+                        grounded = cell.startswith("grounded")
+                        trajectory = f"{task}|{agent}|model|{cell}|{seed}"
+                        for cycle in range(1, 7):
+                            accepted = cycle == 1 or (
+                                not grounded and cycle <= harmful_count + 1
+                            )
+                            delta = 0.1 if cycle == 1 else 0.0
+                            records.append(
+                                {
+                                    "schema_version": 2,
+                                    "trajectory": trajectory,
+                                    "attempt_id": "complete",
+                                    "task": task,
+                                    "agent": agent,
+                                    "seed": seed,
+                                    "cell": cell,
+                                    "cell_gate_grounded": grounded,
+                                    "cell_feedback": (
+                                        "numeric" if cell.endswith("numeric") else "sign"
+                                    ),
+                                    "cycle": cycle,
+                                    "cycles_planned": 6,
+                                    "delta_hoa": delta,
+                                    "delta_hob": delta,
+                                    "oracle_delta": delta,
+                                    "accepted": accepted,
+                                    "baseline_score_hob": 0.1,
+                                    "oracle_score_hob": 0.2,
+                                    "deployed_score_hob": 0.2,
+                                    "apparatus_test": False,
+                                    "confirmatory_eligible": True,
+                                    "candidate_changed": cycle == 1,
+                                    "agent_completed": True,
+                                    "edit_success": cycle == 1,
+                                    "input_tokens": 100.0,
+                                    "output_tokens": 10.0,
+                                    "agent_seconds": 1.0,
+                                    "judge_seconds": 0.0,
+                                    "oracle_seconds": 0.5,
+                                    "api_equivalent_usd": 0.01,
+                                    "incremental_billed_usd": 0.0,
+                                    "model_served": "model",
+                                    "model_identity_matches": True,
+                                    "oracle_valid": True,
+                                    "manifest_digest": "manifest",
+                                    "preregistration_commit": "freeze",
+                                }
+                            )
+        with tempfile.TemporaryDirectory() as tmp:
+            log = Path(tmp) / "cycles.jsonl"
+            log.write_text(
+                "\n".join(json.dumps(record) for record in records) + "\n",
+                encoding="utf-8",
+            )
+            with mock.patch.object(
+                MODULE, "bootstrap_mean_interval", return_value=(0.0, 1.0)
+            ):
+                report = MODULE.analyze(log)
+
+        self.assertEqual(report["trajectories"], 160)
+        self.assertEqual(report["blocks"], 40)
+        self.assertEqual(set(report["primary_tests"]), set(MODULE.PRIMARY_TESTS))
+        self.assertIn("B-H2", report["secondary_tests"])
+        self.assertIn("B-G1", report["secondary_tests"])
+        self.assertGreater(
+            report["secondary_tests"]["B-H2"]["estimate_minus_margin"], 0.0
+        )
+        self.assertIn("erosion_hob", report["tasks"]["s1_swebench"])
+        self.assertIn(
+            "gain_per_wall_clock_hour",
+            report["tasks"]["s1_swebench"]["cost_and_efficiency"],
+        )
 
 
 if __name__ == "__main__":

@@ -501,6 +501,19 @@ model identity, effort identity, mixed manifest, reward-hacking signal, or inval
 JSONL row makes replay unclean and blocks inference. The independent
 `analysis/classify_reward_hacking.py` audit enforces the same condition.
 
+The edit-success diagnostic is explicit rather than reconstructed later.
+`candidate_changed` is the boolean comparison of the received artifact digest
+and candidate digest, `agent_completed` is true only after the requested model
+turn exits successfully, and `edit_success` is their conjunction. The controlled
+core has no separate judge, so `judge_seconds` is always `0.0`. For shared cycle
+1, `execution_input_tokens`, `execution_output_tokens`,
+`execution_agent_seconds`, `execution_oracle_seconds`, and
+`execution_api_equivalent_usd` preserve the full single-execution telemetry.
+The corresponding unsuffixed logical-row fields are multiplied by the
+registered one-quarter allocation. Summing
+the four cell rows therefore counts the shared call exactly once. Cycles 2
+through 6 have allocation one and the execution and logical values coincide.
+
 ## 12. Freeze gates
 
 All boxes must be satisfied before confirmatory execution. The freeze is

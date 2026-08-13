@@ -295,6 +295,11 @@ class RunnerTest(unittest.TestCase):
             self.assertTrue(all(r["model_identity_matches"] for r in records))
             self.assertTrue(all(r["billing_mode"] == "subscription" for r in records))
             self.assertTrue(all(r["incremental_billed_usd"] == 0.0 for r in records))
+            self.assertTrue(all(r["agent_completed"] for r in records))
+            self.assertTrue(
+                all(r["edit_success"] == r["candidate_changed"] for r in records)
+            )
+            self.assertTrue(all(r["judge_seconds"] == 0.0 for r in records))
             self.assertTrue(any(r["api_equivalent_usd"] > 0.0 for r in records))
 
     def test_resume_does_not_redo_completed_trajectories(self):
@@ -620,6 +625,13 @@ class RunnerTest(unittest.TestCase):
             self.assertEqual(len({record["shared_execution_id"] for record in first}), 1)
             self.assertEqual(len({record["candidate_digest"] for record in first}), 1)
             self.assertAlmostEqual(sum(record["cost_allocation_fraction"] for record in first), 1.0)
+            self.assertEqual(sum(record["input_tokens"] for record in first), 100.0)
+            self.assertEqual(sum(record["output_tokens"] for record in first), 50.0)
+            self.assertAlmostEqual(sum(record["agent_seconds"] for record in first), 0.01)
+            self.assertAlmostEqual(sum(record["oracle_seconds"] for record in first), 0.02)
+            self.assertTrue(
+                all(record["execution_oracle_seconds"] == 0.02 for record in first)
+            )
 
     def test_cycle_two_failure_does_not_abandon_peer_trajectories(self):
         calls = []
@@ -876,6 +888,63 @@ class ReplayTest(unittest.TestCase):
         report = replay.integrity(cycles, [], [])
         self.assertEqual(report["missing_candidate_archive_trajectories"], ["t1"])
         self.assertFalse(report["clean"])
+
+    def test_schema_four_confirmatory_row_without_allocation_contract_is_unclean(self):
+        cycles = [
+            {
+                "schema_version": 4,
+                "trajectory": "t1",
+                "attempt_id": "a",
+                "cycle": 1,
+                "cycles_planned": 1,
+                "oracle_delta": 0.0,
+                "apparatus_test": False,
+                "model_served": "model-v1",
+                "model_identity_matches": True,
+                "manifest_digest": "m",
+                "preregistration_commit": "p",
+                "candidate_archive_manifest_sha256": "archive",
+            }
+        ]
+        report = replay.integrity(cycles, [], [])
+        self.assertEqual(report["invalid_measurement_contract_trajectories"], ["t1"])
+        self.assertFalse(report["clean"])
+
+    def test_schema_four_allocation_contract_is_replay_clean(self):
+        cycles = [
+            {
+                "schema_version": 4,
+                "trajectory": "t1",
+                "attempt_id": "a",
+                "cycle": 1,
+                "cycles_planned": 1,
+                "oracle_delta": 0.0,
+                "apparatus_test": False,
+                "model_served": "model-v1",
+                "model_identity_matches": True,
+                "manifest_digest": "m",
+                "preregistration_commit": "p",
+                "candidate_archive_manifest_sha256": "archive",
+                "cost_allocation_fraction": 0.25,
+                "candidate_changed": True,
+                "agent_completed": True,
+                "edit_success": True,
+                "execution_input_tokens": 100,
+                "execution_output_tokens": 20,
+                "execution_agent_seconds": 4.0,
+                "execution_oracle_seconds": 2.0,
+                "execution_api_equivalent_usd": 1.0,
+                "input_tokens": 25.0,
+                "output_tokens": 5.0,
+                "agent_seconds": 1.0,
+                "oracle_seconds": 0.5,
+                "judge_seconds": 0.0,
+                "api_equivalent_usd": 0.25,
+            }
+        ]
+        report = replay.integrity(cycles, [], [])
+        self.assertEqual(report["invalid_measurement_contract_trajectories"], [])
+        self.assertTrue(report["clean"])
 
     def test_abandoned_attempt_rows_are_excluded_from_cell_statistics(self):
         cycles = [

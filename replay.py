@@ -181,6 +181,58 @@ def integrity(cycles: list[dict], abandoned: list[dict], unparsable: list[int]) 
     reward_hacks = [
         r["trajectory"] for r in identified_cycles if r.get("reward_hack_signals")
     ]
+    invalid_measurement_contracts = []
+    for row in identified_cycles:
+        if row.get("schema_version", 0) < 4 or row.get("apparatus_test"):
+            continue
+        fraction = row.get("cost_allocation_fraction")
+        candidate_changed = row.get("candidate_changed")
+        agent_completed = row.get("agent_completed")
+        edit_success = row.get("edit_success")
+        numeric_fields = (
+            "execution_input_tokens",
+            "execution_output_tokens",
+            "execution_agent_seconds",
+            "execution_api_equivalent_usd",
+            "execution_oracle_seconds",
+            "input_tokens",
+            "output_tokens",
+            "agent_seconds",
+            "judge_seconds",
+            "api_equivalent_usd",
+            "oracle_seconds",
+        )
+        valid = bool(
+            isinstance(fraction, (int, float))
+            and not isinstance(fraction, bool)
+            and 0.0 < float(fraction) <= 1.0
+            and isinstance(candidate_changed, bool)
+            and isinstance(agent_completed, bool)
+            and isinstance(edit_success, bool)
+            and edit_success == (candidate_changed and agent_completed)
+            and all(
+                isinstance(row.get(field), (int, float))
+                and not isinstance(row.get(field), bool)
+                and float(row[field]) >= 0.0
+                for field in numeric_fields
+            )
+            and float(row.get("judge_seconds")) == 0.0
+        )
+        if valid:
+            allocations = (
+                ("input_tokens", "execution_input_tokens"),
+                ("output_tokens", "execution_output_tokens"),
+                ("agent_seconds", "execution_agent_seconds"),
+                ("api_equivalent_usd", "execution_api_equivalent_usd"),
+                ("oracle_seconds", "execution_oracle_seconds"),
+            )
+            valid = all(
+                abs(float(row[logical]) - float(row[execution]) * float(fraction))
+                <= 1e-5
+                for logical, execution in allocations
+            )
+        if not valid:
+            invalid_measurement_contracts.append(row["trajectory"])
     ungraded = [
         r["trajectory"] for r in identified_cycles if r.get("oracle_delta") is None
     ]
@@ -217,6 +269,9 @@ def integrity(cycles: list[dict], abandoned: list[dict], unparsable: list[int]) 
         "invalid_oracle_trajectories": sorted(set(invalid_oracles)),
         "missing_candidate_archive_trajectories": sorted(set(missing_archives)),
         "reward_hack_signal_trajectories": sorted(set(reward_hacks)),
+        "invalid_measurement_contract_trajectories": sorted(
+            set(invalid_measurement_contracts)
+        ),
         "ungraded_trajectories": sorted(set(ungraded)),
         "incomplete_trajectories": sorted(set(incomplete)),
         "manifest_digests": sorted(value for value in manifest_digests if value),
@@ -235,6 +290,7 @@ def integrity(cycles: list[dict], abandoned: list[dict], unparsable: list[int]) 
                 invalid_oracles,
                 missing_archives,
                 reward_hacks,
+                invalid_measurement_contracts,
                 ungraded,
                 incomplete,
                 manifest_mixed,

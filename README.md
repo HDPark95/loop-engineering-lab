@@ -11,8 +11,9 @@ SE 특별호용 개정 설계와 동결 조건은 [PREREGISTRATION.md](PREREGIST
 
 - `analysis/aidev_pilot.py`: AIDev 10,000-PR 탐색적 타당성 분석. 원문이나
   식별자를 내보내지 않고 집계만 쓴다.
-- `se_tasks/s1_defect_repair`: 공개 테스트와 held-out 회귀 테스트를 분리한
-  결함 수정 과제.
+- `se_tasks/s1_swebench`: digest로 고정한 실제 Django 저장소와 공식
+  SWE-bench 평가 이미지에서 공개 코드와 숨은 회귀 테스트를 분리한 S1.
+- `se_tasks/s1_defect_repair`: runner 단위검증에만 쓰는 소형 S1 장치 과제.
 - `se_tasks/s3_production_ops`: 오류율, 부모가 커널에서 받아온 CPU 시간,
   재시작 횟수를 재는 운영 과제. 모든 응답은 오라클이 따로 계산한 정답과
   대조하고, 처리 비용은 같은 실행에서 함께 측정한 참조 구현 대비 비율로
@@ -54,7 +55,7 @@ telemetry일 뿐 실행 한도가 아니다. 실제 달러 ceiling은 `billing_m
 - alias가 아닌 두 agent의 정확한 model ID, reasoning effort, API 환산 단가
 - digest로 고정한 agent/oracle container image, 실행 timeout, 인증 파일 경로를
   담는 환경변수 이름
-- preregistration commit, 10개 seed, 6 cycles, 두 task와 네 factor cell
+- preregistration commit, 다섯 seed, 6 cycles, 네 task와 네 factor cell
 - trajectory별 최대 API 환산 추정치. 이는 초과 계측을 탐지하는 보수적 상한이며
   구독 실행의 실제 청구액이 아니다.
 

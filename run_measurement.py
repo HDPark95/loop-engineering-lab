@@ -56,7 +56,7 @@ import agent_adapters
 import se_experiment
 
 ROOT = Path(__file__).resolve().parent
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 # Founder-approved lane rule: at most three agent processes at once. Quota or
 # rate-limit responses wait and retry; they never trigger a switch to API billing.
@@ -838,6 +838,7 @@ def run_trajectory(
         feedback = ""
 
         for cycle in range(1, cycles + 1):
+            received_digest = digest_of(deployed)
             candidate_dir = Path(workspace_root) / f"candidate-{cycle}"
             if cycle == 1:
                 try:
@@ -908,18 +909,27 @@ def run_trajectory(
                     )
                 ),
                 "candidate_digest": outcome.get("candidate_digest"),
+                "candidate_changed": outcome.get("candidate_digest") != received_digest,
+                "agent_completed": True,
+                "edit_success": outcome.get("candidate_digest") != received_digest,
                 "shared_execution_id": shared_execution_id,
                 "cost_allocation_fraction": cost_share,
                 "execution_api_equivalent_usd": round(execution_shadow_usd, 6),
+                "execution_input_tokens": outcome["input_tokens"],
+                "execution_output_tokens": outcome["output_tokens"],
+                "execution_agent_seconds": outcome.get("agent_seconds"),
                 "claim_improved": outcome.get("claim_improved"),
                 "claim_confidence": outcome.get("claim_confidence"),
                 "claim_evidence": outcome.get("claim_evidence"),
                 "claim_parsed": outcome.get("claim_parsed", False),
                 "self_report": outcome.get("self_report"),
                 "judge_verdict": outcome.get("judge_verdict"),
-                "input_tokens": outcome["input_tokens"],
-                "output_tokens": outcome["output_tokens"],
-                "agent_seconds": outcome.get("agent_seconds"),
+                "input_tokens": round(outcome["input_tokens"] * cost_share, 6),
+                "output_tokens": round(outcome["output_tokens"] * cost_share, 6),
+                "agent_seconds": round(
+                    (outcome.get("agent_seconds") or 0.0) * cost_share, 6
+                ),
+                "judge_seconds": 0.0,
                 "billing_mode": manifest["billing_mode"],
                 "execution_mode": manifest["execution_mode"],
                 "apparatus_test": bool(manifest.get("apparatus_test", False)),
@@ -1045,6 +1055,9 @@ def run_trajectory(
                         ),
                         "oracle_valid": bool(
                             oracle_a_result.get("valid") and oracle_b_result.get("valid")
+                        ),
+                        "execution_oracle_seconds": round(
+                            oracle_a_seconds + oracle_b_seconds, 6
                         ),
                         "oracle_seconds": round(
                             (oracle_a_seconds + oracle_b_seconds) * oracle_time_share, 6
