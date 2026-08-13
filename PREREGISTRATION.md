@@ -8,15 +8,16 @@ evidence and are not promoted retrospectively.
 This revision was prepared for the Agentic Software Engineering special-issue
 study after the original manuscript received an out-of-scope decision because
 its connection to software engineering was too weak. It moves the controlled
-tasks to defect repair and production operations, adds a field-observation
-layer, separates gate grounding from oracle information, and mechanizes cost.
+tasks to defect repair and production operations, separates gate grounding
+from oracle information, and mechanizes cost. AIDev is retained only as an
+exploratory instrument diagnostic and supplies no confirmatory claim.
 
 ## 1. Research questions
 
-- RQ-A1: How often do coding-agent PR bodies explicitly claim completion or
+- Exploratory RQ-A1: How often do coding-agent PR bodies explicitly claim completion or
   verification, and how are those claims associated with independently
   observable review outcomes?
-- RQ-A2: Within agent and task strata, do explicit claims distinguish merged
+- Exploratory RQ-A2: Within agent and task strata, do explicit claims distinguish merged
   from closed-unmerged PRs or predict changes-requested reviews?
 - RQ-B1: Does a gate grounded in a held-out software outcome reject
   no-improvement cycles more accurately than an ungrounded gate?
@@ -25,8 +26,8 @@ layer, separates gate grounding from oracle information, and mechanizes cost.
 - RQ-B3: Does the grounding effect persist across defect repair, production
   operations, and the original generalization task, while disappearing on a
   transcript-verifiable bounded task?
-- RQ-C1: At what token, time, and dollar cost does grounded gating cease to
-  improve delivered outcome per budget?
+- RQ-C1: At what token, time, and API-price-equivalent shadow cost does grounded
+  gating cease to improve delivered outcome per budget?
 
 ## 2. Mapping from the original registration
 
@@ -40,44 +41,38 @@ layer, separates gate grounding from oracle information, and mechanizes cost.
 | T1 signup funnel | G1 generalization arm | Retained as non-SE generalization evidence, not the main task |
 | B1 structural specification | B1 boundary control | Retained |
 
-## 3. Field layer A: AIDev
+## 3. Exploratory field diagnostic A: AIDev
 
 ### 3.1 Source and pilot separation
 
 The source is the public CC BY 4.0 dataset `hao-li/AIDev`, frozen at revision
 `68ed5f4b80d27a9e057fc57567f38bd322ac73ec`. The enriched AIDev-pop tables
 contain 33,596 agent PRs and 6,618 human-comparison PRs. The deterministic
-10,000-PR feasibility sample and its observed aggregates are exploratory and
-will not be reused as a confirmatory test set.
-
-The confirmatory agent set is the remaining 23,596 enriched PRs after excluding
-the SHA-256-ranked pilot sample. The claim classifier is frozen before outcomes
-on that set are queried.
+10,000-PR feasibility sample and all analyses in this section are exploratory.
+There is no confirmatory AIDev set, and no field result enters the multiplicity
+family in Section 8.
 
 ### 3.2 Claim construct
 
-The unit is a PR. The primary exposure is an explicit completion or verification
-assertion in the PR body. Titles alone do not qualify. Before freezing:
+The unit is a PR. The instrument attempts to detect an explicit completion or
+verification assertion in the PR body; titles alone do not qualify. A blinded
+400-PR packet was labeled independently by Claude and Codex using different
+prompt wordings. These are machine labels, not human annotations or independent
+ground truth. The first lexical classifier measured precision 0.913 and recall
+0.640. Replacement variants raised recall but precision plateaued between 0.726
+and 0.787 across disjoint packets and rule variants, below the previously
+proposed 0.80 threshold.
 
-1. Draw 400 PRs from the exploratory sample, stratified by agent and preliminary
-   lexical claim status.
-2. Have two annotators independently label completion claim, verification claim,
-   assertion strength, and unclassifiable language.
-3. Freeze written guidelines and a deterministic classifier only if both claim
-   presence precision and recall are at least 0.80 against adjudicated labels.
-4. If either threshold fails, replace the lexical classifier and repeat on a new
-   400-PR exploratory subset. No confirmatory outcomes may be inspected during
-   this iteration.
-
-Non-English PR bodies are a prespecified subgroup. If a language has fewer than
-100 confirmatory PRs with validated coding coverage, it is reported but excluded
-from claim-outcome estimation.
+Because the construct remains ambiguous and no independent human ground truth
+was collected, classifier iteration stops here. The observed labels and
+classifier outputs are preserved as instrument diagnostics. They are not used
+to estimate a confirmatory claim-outcome association, and no human annotator is
+required for the controlled study to proceed.
 
 ### 3.3 Outcomes
 
-Primary field outcome: merged versus closed-unmerged among resolved PRs.
-
-Secondary outcomes:
+Exploratory field outcomes include merged versus closed-unmerged among resolved
+PRs and:
 
 - any `CHANGES_REQUESTED` review;
 - any review;
@@ -89,16 +84,16 @@ Post-merge revert is excluded from the frozen field analysis. The released
 tables do not timestamp commit events or link a later revert PR to the earlier
 merged PR. It can be added only through a separately preregistered mining pass.
 
-### 3.4 Field estimands
+### 3.4 Exploratory summaries
 
-Report claim prevalence and outcome rates by agent and task type. The primary
-association is a common odds ratio stratified by agent x task type, with every
-stratum table published. Also report risk differences within each agent and
-task type. The unadjusted pooled difference is descriptive only because the
-feasibility pilot found large agent-template heterogeneity.
+Report instrument-positive prevalence and outcome rates by agent and task type
+as descriptive diagnostics. Any odds ratio or risk difference is explicitly
+exploratory and instrument-limited. The feasibility pilot found large
+agent-template heterogeneity, so no pooled or stratified association is used as
+evidence that agent claims are informative or uninformative.
 
-Human PRs are a secondary benchmark. No agent-versus-human causal effect is
-claimed unless repository and task-type overlap is established and reported.
+Human PR aggregates are contextual only. No agent-versus-human or claim-outcome
+causal effect is claimed.
 
 ## 4. Controlled layer B: SE tasks and oracle isolation
 
@@ -213,26 +208,21 @@ whose construct is the information content of an agent's completion claim, that
 variable was measuring something else, and its zero variance was arithmetic
 rather than evidence.
 
-Edit success is retained as a covariate (§7). Eliciting the verdict also aligns
-the two layers: the field layer's exposure is an explicit completion assertion
-in a PR body, so the controlled layer must measure an explicit assertion too if
-the two are to be the same construct. If the elicited verdict turns out to vary,
-B-H1 becomes a stronger result than the pilot's; if it does not vary, the claim
-that self-report is uninformative is finally being made about a variable that
-had the opportunity to be informative.
+Edit success is retained as a covariate (§7). Eliciting the verdict ensures that
+the controlled exposure is an actual agent judgment rather than an edit-success
+proxy. The exploratory AIDev diagnostic motivated this construct check, but the
+controlled inference does not depend on the field classifier.
 
 ## 6. Confirmatory hypotheses and thresholds
 
 Every quantity below is computed on HO-B, the oracle half no gate reads (§4.1).
 Revised at R8 and R10; the superseded wording is in §13.
 
-**Confirmatory primary family (exactly three tests, Holm-corrected, §8):**
+**Confirmatory primary family (exactly two tests, Holm-corrected, §8):**
 
 - B-H1a: on S1, the ungrounded-minus-grounded difference in **regression
   acceptance rate** on HO-B is at least 0.20, averaged over the feedback factor.
 - B-H1b: the same on S3.
-- A-H1: in the confirmatory AIDev set, the agent- and task-stratified common
-  odds ratio between an explicit completion claim and a merge differs from 1.
 
 Regression acceptance rate is the share of accepted cycles whose HO-B delta is
 at most zero. It replaces the mirage rate as the primary dependent variable
@@ -364,9 +354,8 @@ intervals narrowed by about a factor of 1.58.
 - Trajectory-level outcomes (final delivered HO-B score, erosion, cycles to
   first positive delta) are analysed with the trajectory as the row. Final
   delivered score is an ANCOVA on the cycle-1 covariate of §4.2.
-- The field layer's common odds ratio is Mantel-Haenszel over agent x task-type
-  strata with a Breslow-Day homogeneity check, and repository-clustered
-  intervals.
+- AIDev summaries are exploratory instrument diagnostics and are not included
+  in confirmatory models or intervals.
 - **No interval anywhere in this study is computed treating cycles as
   independent.** The pooled conditional acceptance rates that `analyze.py`
   already emits are relabelled in the released output as descriptive only, not
@@ -376,17 +365,16 @@ intervals narrowed by about a factor of 1.58.
 
 ### 8.2 Alpha, families, and multiplicity
 
-The confirmatory primary family contains exactly three tests, listed in §6:
-B-H1a (S1), B-H1b (S3), and A-H1 (field). Family-wise error is controlled at
-0.05 by Holm, and the family is gated in a fixed sequence, so that a later test
-is read only if the earlier ones pass:
+The confirmatory primary family contains exactly two tests, listed in §6:
+B-H1a (S1) and B-H1b (S3). Family-wise error is controlled at 0.05 by Holm.
+The registered decision sequence for the two primary claims is:
 
-    B-H1a  ->  B-H1b  ->  B-H2  ->  B-HA1
+    B-H1a  ->  B-H1b
 
 Everything else in §6 is secondary, reported with intervals, and never used to
 support a confirmatory claim. This matters because the untrimmed test count is
 at least fifteen once B-H1 is evaluated per task, B-HA1 per task, C-H1 per cost
-denominator, and the field layer per outcome; at a nominal five percent each,
+denominator, and exploratory field summaries per outcome; at a nominal five percent each,
 the probability of at least one false positive under a global null would exceed
 one half. C-H1 is descriptive with no threshold and enters no family. G1 is
 excluded from the confirmatory family; keeping a non-SE task in the primary
@@ -433,10 +421,14 @@ The minimum confirmatory core is:
 - five seeds per task-agent-cell;
 - six cycles per trajectory.
 
-This is 160 trajectories and 960 cycles. Agent identities, exact model versions,
-prices, prompts, and seeds are written into this document immediately before
-freeze. A failed or unavailable agent is removed before freeze, never after its
-outcome is seen.
+This is 160 trajectories and 960 cycles. Agent identities, immutable model
+versions, prompts, seeds, and API-equivalent shadow prices are written into this
+document immediately before freeze. The planned execution mode is authenticated
+subscription CLI prompting: incremental billed dollars are fixed at zero, while
+tokens, wall clock, plan-quota events, and API-price-equivalent shadow cost are
+recorded. Concurrency is capped at three and quota/rate-limit responses trigger
+automatic waiting rather than a billing-mode switch. A failed or unavailable
+agent is removed before freeze, never after its outcome is seen.
 
 ## 10. Exclusions and failure handling
 
@@ -447,29 +439,29 @@ outcome is seen.
 - Oracle crash: no gate decision; repair before any affected cell resumes and
   record an amendment.
 - Unparseable ungrounded judge verdict: reject by default.
-- Open field PR: exclude from the resolved-PR primary outcome but include in
-  coverage counts.
-- Missing PR body: no claim; report missingness by agent.
+- Open or missing-body field records are handled only in the exploratory AIDev
+  summaries and cannot exclude or invalidate a controlled trajectory.
 
 ## 11. Mechanized outputs
 
 Every run writes append-only JSONL containing configuration, task, agent,
 model, seed, factor cell, candidate hash, claim/judge decision, oracle result,
-deployed score, canary result, and cost fields. Aggregate scripts consume only
-those logs and the frozen AIDev tables. Raw field text is not republished; only
-aggregate results and classifier validation counts enter this repository.
+deployed score, canary result, and cost fields. Confirmatory aggregate scripts
+consume only those controlled-run logs. Separate exploratory scripts consume
+the AIDev tables. Raw field text is not republished; only aggregate diagnostics
+and classifier validation counts enter this repository.
 
 ## 12. Freeze gates
 
 All boxes must be satisfied in one commit before confirmatory execution:
 
-- [ ] two-annotator claim coding reaches the 0.80 precision/recall thresholds;
-- [ ] confirmatory AIDev IDs are locked without outcome inspection;
 - [x] S1 and S3 public tests, held-out oracles, and canaries are versioned;
 - [x] container mount and network proofs pass on the measurement host;
 - [x] two agent adapters pass the same protocol smoke test;
-- [ ] model identifiers, prices, seeds, and the 960-cycle budget are filled in;
-- [ ] cost ceiling is approved;
+- [ ] model identifiers, prompts, seeds, API-equivalent shadow prices, and the
+  960-cycle budget are filled in;
+- [ ] subscription billing mode, zero incremental billing, concurrency cap of
+  three, and quota/rate-limit auto-wait are verified in the run manifest;
 - [ ] this commit hash is recorded in the manuscript and run manifest;
 - [ ] the HO-A/HO-B oracle split of §4.1 is implemented, versioned, and shown by
   test to keep HO-B unreachable from every gate;
@@ -515,7 +507,7 @@ apparatus validation and not confirmatory evidence.
   pilot, 35.0 of the 36.3-point final gap was present before any gate decision.
 - R10 (2026-08-10): added the inference plan (S8): trajectory as the unit,
   mixed models for cycle-level outcomes, alpha 0.05 controlled by Holm over a
-  primary family of exactly three tests under fixed-sequence gating, and a
+  primary family then containing three tests under fixed-sequence gating, and a
   power table with a registered simulator. The former equivalence form of B-H2
   is replaced by an attenuation contrast plus B-H2b, because at the planned size
   the equivalence interval is wider than its own margin and the pilot had
@@ -533,8 +525,8 @@ apparatus validation and not confirmatory evidence.
   rule's fault and not label noise. v2 matches the assertion form and leaves the
   object free. On the development packet it reads precision 0.874 and recall
   0.927. Validation runs on a second 400-PR packet drawn disjoint from the first
-  by `--exclude-packet`, and the registered gate still requires two human
-  annotators; machine annotation is development evidence, not the gate.
+  by `--exclude-packet`. At that revision the gate still required two human
+  annotators; R16 later removed the field hypothesis and this requirement.
 - R13 (2026-08-10): registered `analysis/power_sim.py` and
   `analysis/fit_clustered.py`, and corrected section 8.3, where the RQ-B2
   two-cell contrast had been tabulated at 20 trajectories two-sided when it is
@@ -548,8 +540,8 @@ apparatus validation and not confirmatory evidence.
   permits another replacement, and repeating it until a packet passes would be
   fitting the instrument to the annotation noise, which is the behaviour this
   study exists to measure. We therefore stop iterating on the lexical rule and
-  record the plateau. The decision on what replaces it is pending and is a design
-  decision, not a threshold decision: the registered 0.80 stands.
+  record the plateau. R16 resolves the then-pending design decision by stopping
+  iteration and treating AIDev only as an exploratory instrument diagnostic.
 - R15 (2026-08-10): the validation packet is stratified by agent and by the
   classifier's own preliminary verdict, so raw packet precision and recall
   estimate the packet rather than the corpus. Stratum weights on the second packet
@@ -558,3 +550,12 @@ apparatus validation and not confirmatory evidence.
   reported inverse-probability weighted to the frame, with the raw packet figures
   alongside. This corrects an estimation defect in the registered procedure, not a
   threshold.
+- R16 (2026-08-13): the founder fixed the measurement mode to authenticated
+  subscription CLI prompting. Incremental billed cost is therefore zero;
+  API-price-equivalent cost remains a shadow telemetry field, and concurrency
+  is capped at three with automatic quota/rate-limit waiting. AIDev is demoted
+  to an exploratory instrument diagnostic because its 400-item labels were
+  produced by two language models rather than independent human ground truth
+  and replacement classifiers did not clear the proposed validation threshold.
+  A-H1 and the human-annotation/AIDev-ID freeze gates are removed. The
+  confirmatory core remains 160 trajectories and 960 cycles.

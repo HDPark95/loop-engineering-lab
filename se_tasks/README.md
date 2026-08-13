@@ -82,8 +82,11 @@ status, aggregate scores, changed file names, timing, tokens, billing mode,
 CLI-reported API-price-equivalent cost, and incremental billed cost. It
 discards model text and source contents. Alias or session-default model
 selections are acceptable only for an
-apparatus smoke. Confirmatory runs require an immutable model identifier and a
-frozen total cost ceiling in the preregistration.
+apparatus smoke. Confirmatory runs require immutable model identifiers, frozen
+prompts and seeds, and the 960-logical-cycle budget in the preregistration. The
+execution mode is subscription authentication with zero incremental billing;
+API-price-equivalent shadow cost, quota events, and rate-limit waits remain
+mechanized telemetry rather than a spending-approval gate.
 
 When the host cannot create a nested CLI sandbox, pass `--container-image` plus
 either `--auth-file` or `--auth-env`. The adapter then uses the agent image as
