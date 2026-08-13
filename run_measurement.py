@@ -21,10 +21,11 @@ its first cycle, and the abandoned records stay in the log. At six cycles per
 trajectory the waste is bounded and the alternative is a silent correctness
 hazard.
 
-**A budget ceiling checked before each trajectory, not after.** A grid that
-overruns its ceiling halfway leaves a partial design, which is worse than not
-starting. The runner stops cleanly on the boundary and says how much of the grid
-is missing.
+**Billing and shadow cost stay separate.** Subscription-authenticated prompt
+runs incur zero incremental billing. They still record API-price-equivalent
+shadow cost for cross-agent comparison, but that estimate is not a spending
+gate. An actual dollar ceiling applies only when a manifest explicitly selects
+API billing.
 
 Model identity is recorded twice: what the manifest asked for and what the
 runtime reported serving. An alias resolves to different weights on different
@@ -50,12 +51,19 @@ from pathlib import Path
 import se_experiment
 
 ROOT = Path(__file__).resolve().parent
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
-# Founder-approved lane rule: at most three agent processes at once. Interactive
-# work and the automation fleet share one account, so an unbounded fan-out takes
-# both down with it. This is a hard cap, not a default.
+# Founder-approved lane rule: at most three agent processes at once. Quota or
+# rate-limit responses wait and retry; they never trigger a switch to API billing.
 MAX_CONCURRENT_AGENTS = 3
+
+
+class QuotaLimitError(RuntimeError):
+    """Adapter signal for a quota or rate-limit response."""
+
+    def __init__(self, message: str, retry_after_seconds: float | None = None) -> None:
+        super().__init__(message)
+        self.retry_after_seconds = retry_after_seconds
 
 
 @dataclass(frozen=True)
@@ -88,7 +96,19 @@ def load_manifest(path: Path) -> dict:
     manifest = json.loads(path.read_text(encoding="utf-8"))
     missing = [
         field
-        for field in ("tasks", "agents", "cells", "seeds", "cycles", "cost_ceiling_usd", "preregistration_commit")
+        for field in (
+            "tasks",
+            "agents",
+            "cells",
+            "seeds",
+            "cycles",
+            "billing_mode",
+            "execution_mode",
+            "max_concurrent_agents",
+            "quota_wait_seconds",
+            "quota_max_retries",
+            "preregistration_commit",
+        )
         if field not in manifest
     ]
     if missing:
@@ -106,7 +126,23 @@ def load_manifest(path: Path) -> dict:
                 "confirmatory run."
             )
         if "usd_per_1k_input" not in agent or "usd_per_1k_output" not in agent:
-            raise SystemExit(f"agent {agent.get('name')!r} has no price entry")
+            raise SystemExit(f"agent {agent.get('name')!r} has no API-equivalent shadow price entry")
+
+    if manifest["billing_mode"] not in {"subscription", "api"}:
+        raise SystemExit("billing_mode must be 'subscription' or 'api'")
+    if manifest["execution_mode"] != "prompt":
+        raise SystemExit("the frozen execution_mode for this study is 'prompt'")
+    concurrency = int(manifest["max_concurrent_agents"])
+    if concurrency < 1 or concurrency > MAX_CONCURRENT_AGENTS:
+        raise SystemExit(f"max_concurrent_agents must be between 1 and {MAX_CONCURRENT_AGENTS}")
+    if float(manifest["quota_wait_seconds"]) < 0 or int(manifest["quota_max_retries"]) < 0:
+        raise SystemExit("quota wait and retry settings must be non-negative")
+    if manifest["billing_mode"] == "api" and "cost_ceiling_usd" not in manifest:
+        raise SystemExit("API billing mode requires cost_ceiling_usd")
+    if manifest["billing_mode"] == "subscription" and float(
+        manifest.get("incremental_billed_usd", 0.0)
+    ) != 0.0:
+        raise SystemExit("subscription billing mode must record zero incremental_billed_usd")
 
     if not manifest["preregistration_commit"]:
         raise SystemExit(
@@ -181,25 +217,36 @@ class CycleLog:
 
 
 class Budget:
-    """Cumulative spend with a ceiling checked before each trajectory starts."""
+    """Track shadow and billed cost; only API billing has a dollar ceiling."""
 
-    def __init__(self, ceiling_usd: float) -> None:
+    def __init__(self, billing_mode: str, ceiling_usd: float | None) -> None:
+        self.billing_mode = billing_mode
         self.ceiling = ceiling_usd
-        self._spent = 0.0
+        self._shadow_spent = 0.0
+        self._billed_spent = 0.0
         self._lock = threading.Lock()
 
-    def add(self, usd: float) -> None:
+    def add(self, shadow_usd: float) -> None:
         with self._lock:
-            self._spent += usd
+            self._shadow_spent += shadow_usd
+            if self.billing_mode == "api":
+                self._billed_spent += shadow_usd
 
     @property
-    def spent(self) -> float:
+    def shadow_spent(self) -> float:
         with self._lock:
-            return self._spent
+            return self._shadow_spent
 
-    def can_start(self, estimate_usd: float) -> bool:
+    @property
+    def billed_spent(self) -> float:
         with self._lock:
-            return self._spent + estimate_usd <= self.ceiling
+            return self._billed_spent
+
+    def can_start(self, shadow_estimate_usd: float) -> bool:
+        with self._lock:
+            if self.billing_mode == "subscription":
+                return True
+            return self._billed_spent + shadow_estimate_usd <= float(self.ceiling)
 
 
 def scripted_driver(model: str, task: str, workspace: Path, cycle: int, seed: int, manifest: dict) -> dict:
@@ -249,6 +296,27 @@ def driver_for(agent: str):
     return DRIVERS.get(agent, real_agent_driver)
 
 
+def invoke_with_quota_wait(driver, manifest: dict, sleep_fn=time.sleep, **kwargs) -> dict:
+    """Retry an adapter quota response without changing the billing mode."""
+    retries = int(manifest["quota_max_retries"])
+    default_wait = float(manifest["quota_wait_seconds"])
+    waits: list[float] = []
+    for attempt in range(retries + 1):
+        try:
+            outcome = driver(manifest=manifest, **kwargs)
+            outcome["quota_wait_events"] = len(waits)
+            outcome["quota_wait_seconds"] = round(sum(waits), 3)
+            return outcome
+        except QuotaLimitError as exc:
+            if attempt == retries:
+                raise
+            delay = default_wait if exc.retry_after_seconds is None else float(exc.retry_after_seconds)
+            delay = max(0.0, delay)
+            waits.append(delay)
+            sleep_fn(delay)
+    raise AssertionError("quota retry loop exhausted without returning or raising")
+
+
 def digest_of(root: Path) -> str:
     hasher = hashlib.sha256()
     for path in sorted(p for p in root.rglob("*") if p.is_file()):
@@ -294,13 +362,14 @@ def run_trajectory(
         for cycle in range(1, cycles + 1):
             candidate_dir = Path(workspace_root) / f"candidate-{cycle}"
             shutil.copytree(deployed, candidate_dir)
-            outcome = driver(
+            outcome = invoke_with_quota_wait(
+                driver,
+                manifest,
                 model=key.model,
                 task=key.task,
                 workspace=candidate_dir,
                 cycle=cycle,
                 seed=key.seed,
-                manifest=manifest,
             )
             oracle_result, oracle_seconds = se_experiment.run_oracle(key.task, candidate_dir)
             oracle = oracle_result["score"]
@@ -312,9 +381,10 @@ def run_trajectory(
                 shutil.rmtree(deployed)
                 shutil.copytree(candidate_dir, deployed)
                 deployed_score = oracle
-            usd = price_of(agent_entry, outcome["input_tokens"], outcome["output_tokens"])
-            trajectory_cost += usd
-            budget.add(usd)
+            shadow_usd = price_of(agent_entry, outcome["input_tokens"], outcome["output_tokens"])
+            incremental_billed_usd = shadow_usd if manifest["billing_mode"] == "api" else 0.0
+            trajectory_cost += shadow_usd
+            budget.add(shadow_usd)
 
             log.write(
                 {
@@ -345,14 +415,22 @@ def run_trajectory(
                     "output_tokens": outcome["output_tokens"],
                     "agent_seconds": outcome.get("agent_seconds"),
                     "oracle_seconds": round(oracle_seconds, 6),
-                    "usd": round(usd, 6),
+                    "billing_mode": manifest["billing_mode"],
+                    "execution_mode": manifest["execution_mode"],
+                    "api_equivalent_usd": round(shadow_usd, 6),
+                    "incremental_billed_usd": round(incremental_billed_usd, 6),
+                    "quota_wait_events": outcome.get("quota_wait_events", 0),
+                    "quota_wait_seconds": outcome.get("quota_wait_seconds", 0.0),
                     "wall_clock_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                 }
             )
 
     return {
         "trajectory": key.token(),
-        "cost_usd": round(trajectory_cost, 6),
+        "api_equivalent_usd": round(trajectory_cost, 6),
+        "incremental_billed_usd": (
+            round(trajectory_cost, 6) if manifest["billing_mode"] == "api" else 0.0
+        ),
         "seconds": round(time.time() - started, 3),
     }
 
@@ -375,9 +453,18 @@ def main() -> int:
     done = completed_trajectories(args.log, cycles)
     todo = [key for key in everything if key.token() not in done]
 
-    estimate_per_trajectory = float(manifest.get("estimated_usd_per_trajectory", 0.0))
-    total_estimate = estimate_per_trajectory * len(todo)
-    ceiling = float(manifest["cost_ceiling_usd"])
+    estimate_per_trajectory = float(
+        manifest.get(
+            "estimated_api_equivalent_usd_per_trajectory",
+            manifest.get("estimated_usd_per_trajectory", 0.0),
+        )
+    )
+    total_shadow_estimate = estimate_per_trajectory * len(todo)
+    billing_mode = manifest["billing_mode"]
+    total_billed_estimate = total_shadow_estimate if billing_mode == "api" else 0.0
+    ceiling = float(manifest["cost_ceiling_usd"]) if billing_mode == "api" else None
+    within_ceiling = ceiling is None or total_billed_estimate <= ceiling
+    concurrency = int(manifest["max_concurrent_agents"])
 
     print(
         json.dumps(
@@ -388,10 +475,15 @@ def main() -> int:
                 "trajectories_complete": len(done),
                 "trajectories_remaining": len(todo),
                 "cycles_per_trajectory": cycles,
-                "estimated_usd_remaining": round(total_estimate, 2),
+                "billing_mode": billing_mode,
+                "execution_mode": manifest["execution_mode"],
+                "estimated_api_equivalent_usd_remaining": round(total_shadow_estimate, 2),
+                "estimated_incremental_billed_usd_remaining": round(total_billed_estimate, 2),
                 "cost_ceiling_usd": ceiling,
-                "within_ceiling": total_estimate <= ceiling,
-                "max_concurrent_agents": MAX_CONCURRENT_AGENTS,
+                "within_ceiling": within_ceiling,
+                "max_concurrent_agents": concurrency,
+                "quota_wait_seconds": float(manifest["quota_wait_seconds"]),
+                "quota_max_retries": int(manifest["quota_max_retries"]),
             },
             indent=2,
             sort_keys=True,
@@ -399,7 +491,7 @@ def main() -> int:
     )
     if args.plan_only:
         return 0
-    if total_estimate > ceiling:
+    if not within_ceiling:
         print(
             "refusing to start: the remaining grid is estimated above the ceiling. "
             "Raise the ceiling deliberately or cut the grid; do not discover this "
@@ -409,11 +501,11 @@ def main() -> int:
         return 2
 
     log = CycleLog(args.log)
-    budget = Budget(ceiling)
+    budget = Budget(billing_mode, ceiling)
     agents_by_name = {entry["name"]: entry for entry in manifest["agents"]}
     stopped_for_budget = []
 
-    with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_AGENTS) as pool:
+    with ThreadPoolExecutor(max_workers=concurrency) as pool:
         futures = {}
         for key in todo:
             if not budget.can_start(estimate_per_trajectory):
@@ -452,7 +544,9 @@ def main() -> int:
 
     summary = {
         "run_id": args.run_id,
-        "spent_usd": round(budget.spent, 4),
+        "billing_mode": billing_mode,
+        "api_equivalent_usd": round(budget.shadow_spent, 4),
+        "incremental_billed_usd": round(budget.billed_spent, 4),
         "cost_ceiling_usd": ceiling,
         "trajectories_not_started_for_budget": len(stopped_for_budget),
     }

@@ -89,7 +89,18 @@ def trajectory_metrics(rows: list[dict]) -> dict:
         "cycles": len(rows),
         "input_tokens": sum(r.get("input_tokens") or 0 for r in rows),
         "output_tokens": sum(r.get("output_tokens") or 0 for r in rows),
-        "usd": round(sum(r.get("usd") or 0.0 for r in rows), 6),
+        "api_equivalent_usd": round(
+            sum(
+                r.get("api_equivalent_usd")
+                if r.get("api_equivalent_usd") is not None
+                else (r.get("usd") or 0.0)
+                for r in rows
+            ),
+            6,
+        ),
+        "incremental_billed_usd": round(
+            sum(r.get("incremental_billed_usd") or 0.0 for r in rows), 6
+        ),
         "agent_seconds": round(sum(r.get("agent_seconds") or 0.0 for r in rows), 3),
     }
 
@@ -117,7 +128,8 @@ def by_cell(grouped: dict[str, list[dict]]) -> dict:
     for (task, agent, cell), metrics in sorted(cells.items()):
         gains = [m["delivered_gain"] for m in metrics if m["delivered_gain"] is not None]
         mirages = [m["mirage_rate"] for m in metrics if m["mirage_rate"] is not None]
-        usd = sum(m["usd"] for m in metrics)
+        api_equivalent_usd = sum(m["api_equivalent_usd"] for m in metrics)
+        incremental_billed_usd = sum(m["incremental_billed_usd"] for m in metrics)
         tokens = sum(m["input_tokens"] + m["output_tokens"] for m in metrics)
         grounded = cell.startswith("grounded")
         out[f"{task}|{agent}|{cell}"] = {
@@ -132,8 +144,18 @@ def by_cell(grouped: dict[str, list[dict]]) -> dict:
             "gain_per_1k_tokens": (
                 round(sum(gains) / (tokens / 1000.0), 6) if gains and tokens else None
             ),
-            "gain_per_usd": round(sum(gains) / usd, 6) if gains and usd else None,
-            "usd": round(usd, 6),
+            "gain_per_api_equivalent_usd": (
+                round(sum(gains) / api_equivalent_usd, 6)
+                if gains and api_equivalent_usd
+                else None
+            ),
+            "gain_per_incremental_billed_usd": (
+                round(sum(gains) / incremental_billed_usd, 6)
+                if gains and incremental_billed_usd
+                else None
+            ),
+            "api_equivalent_usd": round(api_equivalent_usd, 6),
+            "incremental_billed_usd": round(incremental_billed_usd, 6),
         }
     return out
 
@@ -147,7 +169,7 @@ def main() -> int:
     cycles, abandoned = load(args.log)
     grouped = group_trajectories(cycles)
     report = {
-        "schema_version": 1,
+        "schema_version": 2,
         "source_log": str(args.log),
         "cycle_records": len(cycles),
         "trajectories": len(grouped),

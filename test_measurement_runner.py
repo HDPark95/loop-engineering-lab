@@ -40,8 +40,13 @@ def manifest(**overrides) -> dict:
         "cells": ["grounded-numeric", "ungrounded-numeric"],
         "seeds": [1, 2],
         "cycles": 2,
-        "cost_ceiling_usd": 10.0,
-        "estimated_usd_per_trajectory": 0.01,
+        "billing_mode": "subscription",
+        "execution_mode": "prompt",
+        "incremental_billed_usd": 0.0,
+        "max_concurrent_agents": 3,
+        "quota_wait_seconds": 60,
+        "quota_max_retries": 4,
+        "estimated_api_equivalent_usd_per_trajectory": 0.01,
         "preregistration_commit": "0" * 40,
     }
     base.update(overrides)
@@ -97,6 +102,20 @@ class ManifestGateTest(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 run_measurement.load_manifest(path)
 
+    def test_subscription_mode_rejects_nonzero_incremental_billing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = write_manifest(Path(tmp), manifest(incremental_billed_usd=1.0))
+            with self.assertRaises(SystemExit) as caught:
+                run_measurement.load_manifest(path)
+            self.assertIn("zero incremental", str(caught.exception))
+
+    def test_prompt_mode_and_concurrency_cap_are_frozen(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for override in ({"execution_mode": "api"}, {"max_concurrent_agents": 4}):
+                path = write_manifest(Path(tmp), manifest(**override))
+                with self.assertRaises(SystemExit):
+                    run_measurement.load_manifest(path)
+
 
 class RunnerTest(unittest.TestCase):
     def test_a_full_run_writes_one_record_per_cycle(self):
@@ -113,6 +132,9 @@ class RunnerTest(unittest.TestCase):
             self.assertEqual(len(records), expected)
             self.assertTrue(all(r["preregistration_commit"] == "0" * 40 for r in records))
             self.assertTrue(all(r["model_identity_matches"] for r in records))
+            self.assertTrue(all(r["billing_mode"] == "subscription" for r in records))
+            self.assertTrue(all(r["incremental_billed_usd"] == 0.0 for r in records))
+            self.assertTrue(any(r["api_equivalent_usd"] > 0.0 for r in records))
 
     def test_resume_does_not_redo_completed_trajectories(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -160,7 +182,11 @@ class RunnerTest(unittest.TestCase):
             directory = Path(tmp)
             # Ceiling below the estimate for the whole grid: refuse to start
             # rather than deliver a partial design.
-            data = manifest(cost_ceiling_usd=0.005, estimated_usd_per_trajectory=0.01)
+            data = manifest(
+                billing_mode="api",
+                cost_ceiling_usd=0.005,
+                estimated_api_equivalent_usd_per_trajectory=0.01,
+            )
             path = write_manifest(directory, data)
             log = directory / "cycles.jsonl"
             result = run_cli(path, log, "run-d")
@@ -178,7 +204,29 @@ class RunnerTest(unittest.TestCase):
             plan = json.loads(result.stdout)
             self.assertEqual(plan["trajectories_total"], 4)
             self.assertEqual(plan["max_concurrent_agents"], 3)
+            self.assertEqual(plan["billing_mode"], "subscription")
+            self.assertEqual(plan["estimated_incremental_billed_usd_remaining"], 0.0)
             self.assertFalse(log.exists())
+
+    def test_quota_response_waits_and_retries_without_switching_billing(self):
+        calls = []
+        sleeps = []
+
+        def flaky_driver(**kwargs):
+            calls.append(kwargs["manifest"]["billing_mode"])
+            if len(calls) == 1:
+                raise run_measurement.QuotaLimitError("429", retry_after_seconds=2.5)
+            return {"claim_improved": True}
+
+        outcome = run_measurement.invoke_with_quota_wait(
+            flaky_driver,
+            manifest(),
+            sleep_fn=sleeps.append,
+        )
+        self.assertEqual(calls, ["subscription", "subscription"])
+        self.assertEqual(sleeps, [2.5])
+        self.assertEqual(outcome["quota_wait_events"], 1)
+        self.assertEqual(outcome["quota_wait_seconds"], 2.5)
 
 
 class ReplayTest(unittest.TestCase):
@@ -196,6 +244,9 @@ class ReplayTest(unittest.TestCase):
             self.assertTrue(replay.integrity(cycles, abandoned)["clean"])
             for key, cell in report.items():
                 self.assertIsNotNone(cell["delivered_gain_median"], key)
+                self.assertGreater(cell["api_equivalent_usd"], 0.0, key)
+                self.assertEqual(cell["incremental_billed_usd"], 0.0, key)
+                self.assertIsNone(cell["gain_per_incremental_billed_usd"], key)
                 # "ungrounded" contains "grounded", so the cell name has to be
                 # split out rather than matched as a substring.
                 cell_name = key.split("|")[-1]
