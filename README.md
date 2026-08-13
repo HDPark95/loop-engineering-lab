@@ -291,6 +291,30 @@ logical rows, 동일 manifest/tag/log digest, clean replay/audit/analysis를 다
       --preregistration-bundle release/loop-engineering-preregistration-v1/loop-engineering-preregistration-v1.zip \
       --output-dir release/loop-engineering-confirmatory-v1
 
+같은 fail-closed client는 post-outcome replication record에도 별도 role과 상태를 사용한다.
+먼저 로컬 요청만 만들고, production 승인을 받은 뒤 draft를 생성해 DOI를 예약한다. 이
+예약 DOI를 원고·Title Page·cover letter에 결박하고 최종 제출 일습을 검증한 뒤에만,
+별도의 publish 승인 아래 정확한 record ID와 ZIP SHA-256으로 발행한다.
+
+    python3 zenodo_preregistration.py prepare-replication \
+      --bundle-dir release/loop-engineering-confirmatory-v1 \
+      --publication-date <YYYY-MM-DD> \
+      --output release/loop-engineering-confirmatory-v1/zenodo-request.json
+
+    python3 zenodo_preregistration.py create-draft \
+      --request release/loop-engineering-confirmatory-v1/zenodo-request.json \
+      --bundle release/loop-engineering-confirmatory-v1/loop-engineering-confirmatory-v1.zip \
+      --output release/loop-engineering-confirmatory-v1/zenodo-draft-receipt.json \
+      --confirm-production zenodo.org
+
+    python3 zenodo_preregistration.py publish \
+      --request release/loop-engineering-confirmatory-v1/zenodo-request.json \
+      --receipt release/loop-engineering-confirmatory-v1/zenodo-draft-receipt.json \
+      --bundle release/loop-engineering-confirmatory-v1/loop-engineering-confirmatory-v1.zip \
+      --output release/loop-engineering-confirmatory-v1/zenodo-public-evidence.json \
+      --confirm-record-id <reserved-record-id> \
+      --confirm-bundle-sha256 <final-zip-sha256>
+
 출력 directory에는 Zenodo에 단일 파일로 올릴 deterministic
 `loop-engineering-confirmatory-v1.zip`, 그 sidecar SHA-256, API/UI 입력용 metadata가
 생긴다. ZIP 내부에는 source/candidate tarball, 외부 사전등록 공개 증거,

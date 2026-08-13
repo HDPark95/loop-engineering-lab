@@ -26,6 +26,16 @@ ROOT = Path(__file__).resolve().parent
 API = "https://zenodo.org/api"
 BUNDLE_NAME = "loop-engineering-preregistration-v1.zip"
 METADATA_NAME = "zenodo-deposition-metadata.json"
+REPLICATION_BUNDLE_NAME = "loop-engineering-confirmatory-v1.zip"
+RECORD_ROLE = "pre-outcome preregistration timestamp"
+REPLICATION_RECORD_ROLE = "post-outcome confirmatory replication artifact"
+PUBLIC_STATUS = "public-preregistration-verified"
+REPLICATION_PUBLIC_STATUS = "public-replication-verified"
+DRAFT_STATUS = "draft-uploaded-doi-reserved-not-published"
+PUBLIC_STATUSES = {
+    RECORD_ROLE: PUBLIC_STATUS,
+    REPLICATION_RECORD_ROLE: REPLICATION_PUBLIC_STATUS,
+}
 DOI_RE = re.compile(r"^10\.5281/zenodo\.\d+$")
 RELATIONS = {
     "isSupplementTo": "issupplementto",
@@ -120,13 +130,20 @@ def identifier_scheme(identifier: str) -> str:
     fail(f"unsupported related identifier: {identifier}")
 
 
-def invenio_payload(metadata: dict, date: str) -> dict:
+def invenio_payload(
+    metadata: dict,
+    date: str,
+    expected_version: str | None = None,
+) -> dict:
+    version = metadata.get("version")
     if (
         metadata.get("upload_type") != "software"
         or metadata.get("access_right") != "open"
-        or metadata.get("version") != "prereg-v1"
+        or not isinstance(version, str)
+        or not version
+        or (expected_version is not None and version != expected_version)
     ):
-        fail("preregistration metadata must be open software version prereg-v1")
+        fail("release metadata must be open software with the expected version")
     relations = []
     for item in metadata.get("related_identifiers", []):
         relation = RELATIONS.get(item.get("relation"))
@@ -151,7 +168,7 @@ def invenio_payload(metadata: dict, date: str) -> dict:
         "languages": [{"id": metadata["language"]}],
         "subjects": [{"subject": item} for item in metadata.get("keywords", [])],
         "related_identifiers": relations,
-        "version": metadata["version"],
+        "version": version,
     }
     return {
         "access": {"record": "public", "files": "public"},
@@ -160,25 +177,56 @@ def invenio_payload(metadata: dict, date: str) -> dict:
     }
 
 
-def prepare_request(bundle_dir: Path, date: str) -> dict:
-    bundle = bundle_dir / BUNDLE_NAME
+def prepare_release_request(
+    bundle_dir: Path,
+    date: str,
+    bundle_name: str,
+    record_role: str,
+    public_status: str,
+    expected_version: str,
+) -> dict:
+    bundle = bundle_dir / bundle_name
     metadata_path = bundle_dir / METADATA_NAME
     if not bundle.is_file() or not metadata_path.is_file():
-        fail("bundle directory lacks the preregistration ZIP or Zenodo metadata")
+        fail("bundle directory lacks the expected ZIP or Zenodo metadata")
     payload = bundle.read_bytes()
     metadata = load_object(metadata_path)
     return {
         "schema_version": 1,
-        "record_role": "pre-outcome preregistration timestamp",
+        "record_role": record_role,
+        "draft_status": DRAFT_STATUS,
+        "public_status": public_status,
         "api": API,
         "bundle": {
-            "name": BUNDLE_NAME,
+            "name": bundle_name,
             "bytes": len(payload),
             "sha256": sha256_bytes(payload),
             "md5": md5_bytes(payload),
         },
-        "record_payload": invenio_payload(metadata, date),
+        "record_payload": invenio_payload(metadata, date, expected_version),
     }
+
+
+def prepare_request(bundle_dir: Path, date: str) -> dict:
+    return prepare_release_request(
+        bundle_dir,
+        date,
+        BUNDLE_NAME,
+        RECORD_ROLE,
+        PUBLIC_STATUS,
+        "prereg-v1",
+    )
+
+
+def prepare_replication_request(bundle_dir: Path, date: str) -> dict:
+    return prepare_release_request(
+        bundle_dir,
+        date,
+        REPLICATION_BUNDLE_NAME,
+        REPLICATION_RECORD_ROLE,
+        REPLICATION_PUBLIC_STATUS,
+        "1.0.0",
+    )
 
 
 def token() -> str:
@@ -236,6 +284,13 @@ def call_bytes(url: str, bearer: str | None = None) -> bytes:
 def request_bundle(request: dict, bundle: Path) -> bytes:
     if request.get("schema_version") != 1:
         fail("Zenodo request must use schema 1")
+    if (
+        request.get("draft_status") != DRAFT_STATUS
+        or PUBLIC_STATUSES.get(request.get("record_role"))
+        != request.get("public_status")
+        or not isinstance(request.get("record_payload"), dict)
+    ):
+        fail("Zenodo request has the wrong release-role contract")
     expected = request.get("bundle")
     payload = bundle.read_bytes()
     if not isinstance(expected, dict) or (
@@ -282,6 +337,7 @@ def verify_file_metadata(entry: dict, request: dict) -> None:
 
 def create_draft(request: dict, bundle: Path) -> dict:
     payload = request_bundle(request, bundle)
+    bundle_name = request["bundle"]["name"]
     bearer = token()
     record = call_json("POST", f"{API}/records", bearer, request["record_payload"])
     record_id = record.get("id")
@@ -293,8 +349,8 @@ def create_draft(request: dict, bundle: Path) -> dict:
         )
         doi = extract_doi(reserved)
         files_url = f"{API}/records/{record_id}/draft/files"
-        call_json("POST", files_url, bearer, [{"key": BUNDLE_NAME}])
-        quoted = urllib.parse.quote(BUNDLE_NAME, safe="")
+        call_json("POST", files_url, bearer, [{"key": bundle_name}])
+        quoted = urllib.parse.quote(bundle_name, safe="")
         file_url = f"{files_url}/{quoted}"
         call_json("PUT", f"{file_url}/content", bearer, raw=payload)
         committed = call_json("POST", f"{file_url}/commit", bearer, {})
@@ -308,7 +364,8 @@ def create_draft(request: dict, bundle: Path) -> dict:
         ) from exc
     return {
         "schema_version": 1,
-        "status": "draft-uploaded-doi-reserved-not-published",
+        "status": request.get("draft_status"),
+        "record_role": request.get("record_role"),
         "record_id": record_id,
         "reserved_doi": doi,
         "draft_url": f"https://zenodo.org/uploads/{record_id}",
@@ -319,7 +376,12 @@ def create_draft(request: dict, bundle: Path) -> dict:
 
 def validate_receipt(request: dict, receipt: dict, bundle: Path) -> tuple[str, str]:
     request_bundle(request, bundle)
-    if receipt.get("schema_version") != 1 or receipt.get("bundle") != request["bundle"]:
+    if (
+        receipt.get("schema_version") != 1
+        or receipt.get("status") != request.get("draft_status")
+        or receipt.get("record_role") != request.get("record_role")
+        or receipt.get("bundle") != request["bundle"]
+    ):
         fail("draft receipt does not match the prepared request")
     record_id = receipt.get("record_id")
     doi = receipt.get("reserved_doi")
@@ -345,8 +407,8 @@ def validate_publication_evidence(
         fail("public preregistration evidence must be a JSON object")
     if (
         evidence.get("schema_version") != 1
-        or evidence.get("status") != "public-preregistration-verified"
-        or evidence.get("record_role") != "pre-outcome preregistration timestamp"
+        or evidence.get("status") != PUBLIC_STATUS
+        or evidence.get("record_role") != RECORD_ROLE
     ):
         fail("public preregistration evidence has the wrong contract")
     record_id = evidence.get("record_id")
@@ -434,11 +496,12 @@ def confirm_publication(
 def verify_remote_file(record_id: str, request: dict, bearer: str | None, draft: bool) -> None:
     suffix = "/draft/files" if draft else "/files"
     listing = call_json("GET", f"{API}/records/{record_id}{suffix}", bearer)
-    entry = file_entry(listing, BUNDLE_NAME)
+    bundle_name = request["bundle"]["name"]
+    entry = file_entry(listing, bundle_name)
     verify_file_metadata(entry, request)
     content_url = entry.get("links", {}).get("content")
     if not isinstance(content_url, str):
-        quoted = urllib.parse.quote(BUNDLE_NAME, safe="")
+        quoted = urllib.parse.quote(bundle_name, safe="")
         content_url = f"{API}/records/{record_id}{suffix}/{quoted}/content"
     if content_url.startswith("/"):
         content_url = "https://zenodo.org" + content_url
@@ -477,7 +540,7 @@ def verify_public(
     verify_remote_file(record_id, request, None, draft=False)
     return {
         "schema_version": 1,
-        "status": "public-preregistration-verified",
+        "status": request.get("public_status"),
         "record_role": request["record_role"],
         "record_id": record_id,
         "doi": expected_doi,
@@ -500,6 +563,13 @@ def main() -> int:
     prepare.add_argument("--bundle-dir", type=Path, required=True)
     prepare.add_argument("--publication-date", type=publication_date, required=True)
     prepare.add_argument("--output", type=Path, required=True)
+
+    prepare_replication = subparsers.add_parser("prepare-replication")
+    prepare_replication.add_argument("--bundle-dir", type=Path, required=True)
+    prepare_replication.add_argument(
+        "--publication-date", type=publication_date, required=True
+    )
+    prepare_replication.add_argument("--output", type=Path, required=True)
 
     create = subparsers.add_parser("create-draft")
     create.add_argument("--request", type=Path, required=True)
@@ -525,6 +595,10 @@ def main() -> int:
     try:
         if args.command == "prepare":
             result = prepare_request(args.bundle_dir, args.publication_date)
+        elif args.command == "prepare-replication":
+            result = prepare_replication_request(
+                args.bundle_dir, args.publication_date
+            )
         elif args.command == "create-draft":
             result = create_draft(load_object(args.request), args.bundle)
         elif args.command == "publish":

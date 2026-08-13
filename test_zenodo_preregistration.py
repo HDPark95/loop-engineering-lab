@@ -125,6 +125,26 @@ class ZenodoPreregistrationTest(unittest.TestCase):
                 ["issupplementto", "isderivedfrom"],
             )
 
+    def test_replication_request_uses_a_distinct_role_and_bundle(self):
+        with tempfile.TemporaryDirectory() as directory:
+            bundle_dir = Path(directory)
+            (bundle_dir / zenodo.REPLICATION_BUNDLE_NAME).write_bytes(b"final zip")
+            (bundle_dir / zenodo.METADATA_NAME).write_text(
+                json.dumps(METADATA | {"version": "1.0.0"}), encoding="utf-8"
+            )
+            request = zenodo.prepare_replication_request(
+                bundle_dir, "2026-08-20"
+            )
+            self.assertEqual(
+                request["record_role"], zenodo.REPLICATION_RECORD_ROLE
+            )
+            self.assertEqual(
+                request["public_status"], zenodo.REPLICATION_PUBLIC_STATUS
+            )
+            self.assertEqual(
+                request["bundle"]["name"], zenodo.REPLICATION_BUNDLE_NAME
+            )
+
     def test_changed_bundle_is_rejected_before_network_use(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -169,6 +189,8 @@ class ZenodoPreregistrationTest(unittest.TestCase):
             request = zenodo.prepare_request(bundle_dir, "2026-08-15")
             receipt = {
                 "schema_version": 1,
+                "status": request["draft_status"],
+                "record_role": request["record_role"],
                 "record_id": "12345678",
                 "reserved_doi": "10.5281/zenodo.12345678",
                 "bundle": request["bundle"],
@@ -204,6 +226,8 @@ class ZenodoPreregistrationTest(unittest.TestCase):
             request = zenodo.prepare_request(bundle_dir, "2026-08-15")
             receipt = {
                 "schema_version": 1,
+                "status": request["draft_status"],
+                "record_role": request["record_role"],
                 "record_id": "12345678",
                 "reserved_doi": "10.5281/zenodo.12345678",
                 "bundle": request["bundle"],

@@ -893,3 +893,12 @@ apparatus validation and not confirmatory evidence.
   includes the public evidence. This changes timestamp enforcement and
   provenance, not design, sample, outcomes, or inference. No confirmatory run
   had started.
+- R39 (2026-08-14): extended the same fail-closed release client to the
+  post-outcome replication record before any confirmatory outcome. The local
+  preparation selects a distinct record role, status, metadata, and final
+  confirmatory ZIP. Draft creation still requires explicit production
+  confirmation; publication still requires the exact reserved record ID and
+  final ZIP SHA-256, and succeeds only after the public file is redownloaded
+  and verified. This removes a manual upload gap while keeping preregistration,
+  preprint, and post-outcome records distinct. It changes release mechanics,
+  not design, sample, outcomes, or inference. No confirmatory run had started.
