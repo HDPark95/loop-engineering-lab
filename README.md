@@ -41,6 +41,32 @@ SE 장치 스모크 검증:
     python3 agent_adapters.py --agent codex --task s1 --billing-mode subscription --container-image loop-eng-se-lab-agent:latest --auth-file "$CODEX_AUTH_FILE" --output results/codex_adapter_smoke.json
     python3 agent_adapters.py --agent claude --task s1 --model sonnet --billing-mode subscription --container-image loop-eng-se-lab-agent:latest --auth-file "$CLAUDE_AUTH_FILE" --state-file "$CLAUDE_STATE_FILE" --max-budget-usd 0.25 --output results/claude_adapter_smoke.json
 
+### 본 측정 러너
+
+`run_measurement.py`는 동결된 manifest를 받아 trajectory 단위로 재개하고,
+cycle 원시 기록을 append-only JSONL로 남긴다. 구독 prompt 실행에서는
+`incremental_billed_usd`가 항상 0이며, 토큰 기반 API 환산액은 비교용 shadow
+telemetry일 뿐 실행 한도가 아니다. 실제 달러 ceiling은 `billing_mode=api`일 때만
+작동한다.
+
+본 측정 전에는 manifest에 다음을 모두 채워야 한다.
+
+- alias가 아닌 두 agent의 정확한 model ID와 API 환산 단가
+- digest로 고정한 agent/oracle container image, 실행 timeout, 인증 파일 경로를
+  담는 환경변수 이름
+- preregistration commit, 10개 seed, 6 cycles, 두 task와 네 factor cell
+- trajectory별 최대 API 환산 추정치. 이는 초과 계측을 탐지하는 보수적 상한이며
+  구독 실행의 실제 청구액이 아니다.
+
+먼저 호출 없이 계획을 확인한다.
+
+    python3 run_measurement.py --manifest measurement-manifest.json --log results/confirmatory-cycles.jsonl --run-id confirmatory-01 --plan-only
+
+실행 후에는 원시 로그만으로 결과와 무결성 상태를 재계산한다. HO-A는 gate와
+다음-cycle feedback에만 사용되고, 보고 결과는 gate가 보지 못한 HO-B에서 계산된다.
+
+    python3 replay.py --log results/confirmatory-cycles.jsonl --output results/confirmatory-replay.json
+
 ## 격리 (실측으로 증명, 가정 아님)
 
 논문의 핵심 주장은 "에이전트가 오라클을 게이밍할 수 없다"이다. 이를 파일시스템 관행이 아니라 실제 컨테이너 격리로 보장한다.

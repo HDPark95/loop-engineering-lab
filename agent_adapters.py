@@ -29,6 +29,41 @@ make the smallest robust source change, and run the public tests. Do not access
 any parent or external directory. Stop after the repair and a test run.
 """
 
+VERDICT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "improved": {"type": "boolean"},
+        "confidence": {"type": "number", "minimum": 0.0, "maximum": 1.0},
+        "evidence": {"type": "string", "minLength": 1},
+    },
+    "required": ["improved", "confidence", "evidence"],
+    "additionalProperties": False,
+}
+
+
+class AgentInvocationError(RuntimeError):
+    """A non-interactive agent invocation that did not produce a measurement."""
+
+    def __init__(self, message: str, kind: str = "command") -> None:
+        super().__init__(message)
+        self.kind = kind
+
+
+def measurement_prompt(task: str, cycle: int, feedback: str) -> str:
+    feedback_block = feedback.strip() or "No prior-cycle feedback is available."
+    return f"""Repair the issue in ISSUE.md in the current isolated directory.
+Work only in the current directory. Inspect the implementation and public tests,
+make the smallest robust source change, and run the public tests. Do not access
+any parent or external directory. This is task {task}, loop cycle {cycle}.
+
+Feedback from the preceding cycle:
+{feedback_block}
+
+After the work, assess whether the current artifact is genuinely better than the
+artifact you received. Return only the structured verdict requested by the
+output schema. Evidence must contain at most 20 whitespace-separated words.
+"""
+
 
 @dataclass(frozen=True)
 class Usage:
@@ -63,11 +98,18 @@ def cost_fields(usage: Usage, billing_mode: str) -> dict:
 
 
 def file_hashes(root: Path) -> dict[str, str]:
-    return {
-        path.relative_to(root).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
-        for path in root.rglob("*")
-        if path.is_file() and "__pycache__" not in path.parts and path.suffix != ".pyc"
-    }
+    hashes = {}
+    for path in root.rglob("*"):
+        if "__pycache__" in path.parts or path.suffix == ".pyc":
+            continue
+        if path.is_symlink():
+            payload = b"SYMLINK\0" + os.readlink(path).encode()
+        elif path.is_file():
+            payload = path.read_bytes()
+        else:
+            continue
+        hashes[path.relative_to(root).as_posix()] = hashlib.sha256(payload).hexdigest()
+    return hashes
 
 
 def tree_digest(root: Path) -> str:
@@ -165,6 +207,11 @@ def container_command_for(
     state_file: Path | None = None,
     auth_env_file: Path | None = None,
     auth_dir: Path | None = None,
+    prompt: str = PROMPT,
+    verdict_schema_path: str | None = None,
+    verdict_schema: dict | None = None,
+    container_name: str | None = None,
+    billing_mode: str = "unknown",
 ) -> list[str]:
     """Build a CLI command for a container that sees only the task and auth."""
     common = [
@@ -180,6 +227,8 @@ def container_command_for(
         "--mount",
         f"type=bind,src={workspace.resolve()},dst=/workspace",
     ]
+    if container_name:
+        common[2:2] = ["--name", container_name]
     if agent == "codex":
         inner = [
             "codex",
@@ -193,6 +242,8 @@ def container_command_for(
             "--cd",
             "/workspace",
         ]
+        if verdict_schema_path:
+            inner.extend(["--output-schema", verdict_schema_path])
         target = "/tmp/.codex/auth.json"
     elif agent == "claude":
         inner = [
@@ -201,11 +252,13 @@ def container_command_for(
             "--safe-mode",
             "--no-session-persistence",
             "--dangerously-skip-permissions",
-            "--max-budget-usd",
-            str(max_budget_usd),
             "--output-format",
             "json",
         ]
+        if billing_mode != "subscription":
+            inner.extend(["--max-budget-usd", str(max_budget_usd)])
+        if verdict_schema:
+            inner.extend(["--json-schema", json.dumps(verdict_schema, separators=(",", ":"))])
         target = "/tmp/.claude/.credentials.json"
     else:
         raise ValueError(f"unsupported agent: {agent}")
@@ -229,8 +282,165 @@ def container_command_for(
         *mounts,
         image,
         *inner,
-        PROMPT,
+        prompt,
     ]
+
+
+def parse_codex_final_report(stdout: str) -> dict | None:
+    report = None
+    for line in stdout.splitlines():
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        item = event.get("item") or {}
+        if event.get("type") == "item.completed" and item.get("type") == "agent_message":
+            try:
+                candidate = json.loads(item.get("text", ""))
+            except (TypeError, json.JSONDecodeError):
+                continue
+            if isinstance(candidate, dict):
+                report = candidate
+    return report
+
+
+def parse_claude_final_report(stdout: str) -> dict | None:
+    try:
+        event = json.loads(stdout)
+    except json.JSONDecodeError:
+        return None
+    report = event.get("structured_output")
+    if isinstance(report, dict):
+        return report
+    try:
+        report = json.loads(event.get("result", ""))
+    except (TypeError, json.JSONDecodeError):
+        return None
+    return report if isinstance(report, dict) else None
+
+
+def reported_model(agent: str, stdout: str) -> str | None:
+    """Return only a model identity explicitly reported by the CLI output."""
+    if agent == "claude":
+        try:
+            event = json.loads(stdout)
+        except json.JSONDecodeError:
+            return None
+        direct = event.get("model")
+        if isinstance(direct, str) and direct:
+            return direct
+        model_usage = event.get("modelUsage") or {}
+        if isinstance(model_usage, dict) and len(model_usage) == 1:
+            return next(iter(model_usage))
+        return None
+
+    models = set()
+    for line in stdout.splitlines():
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        for source in (event, event.get("item") or {}):
+            value = source.get("model") or source.get("model_name")
+            if isinstance(value, str) and value:
+                models.add(value)
+    return next(iter(models)) if len(models) == 1 else None
+
+
+def run_measurement_cycle(
+    *,
+    agent: str,
+    model: str,
+    task: str,
+    workspace: Path,
+    cycle: int,
+    feedback: str,
+    container_image: str,
+    auth_file: Path,
+    state_file: Path | None,
+    timeout_seconds: int,
+    billing_mode: str,
+    max_budget_usd: float,
+) -> dict:
+    """Run one real prompt cycle and retain only structured aggregate output."""
+    if agent not in {"codex", "claude"}:
+        raise ValueError(f"unsupported measurement agent: {agent}")
+    if not auth_file.is_file():
+        raise AgentInvocationError(f"authentication file is unreadable: {auth_file}", "authentication")
+    if state_file is not None and not state_file.is_file():
+        raise AgentInvocationError(f"state file is unreadable: {state_file}", "authentication")
+    if not shutil.which("docker"):
+        raise AgentInvocationError("docker executable not found", "isolation")
+
+    schema_path = workspace / ".loop-verdict-schema.json"
+    schema_path.write_text(json.dumps(VERDICT_SCHEMA, separators=(",", ":")), encoding="utf-8")
+    container_name = f"loop-measurement-{agent}-{os.getpid()}-{time.time_ns()}"
+    started = time.perf_counter()
+    with tempfile.TemporaryDirectory(prefix=f"loop-{agent}-auth-") as auth_root:
+        auth_dir = Path(auth_root)
+        auth_dir.chmod(0o700)
+        auth_name = "auth.json" if agent == "codex" else ".credentials.json"
+        auth_copy = auth_dir / auth_name
+        shutil.copy2(auth_file, auth_copy)
+        auth_copy.chmod(0o600)
+        command = container_command_for(
+            agent,
+            workspace,
+            model,
+            max_budget_usd,
+            container_image,
+            state_file=state_file,
+            auth_dir=auth_dir,
+            prompt=measurement_prompt(task, cycle, feedback),
+            verdict_schema_path=(
+                "/workspace/.loop-verdict-schema.json" if agent == "codex" else None
+            ),
+            verdict_schema=VERDICT_SCHEMA if agent == "claude" else None,
+            container_name=container_name,
+            billing_mode=billing_mode,
+        )
+        try:
+            process = subprocess.run(
+                command,
+                cwd=workspace,
+                capture_output=True,
+                text=True,
+                timeout=timeout_seconds,
+            )
+        except subprocess.TimeoutExpired as exc:
+            subprocess.run(
+                ["docker", "rm", "-f", container_name], capture_output=True, text=True
+            )
+            raise AgentInvocationError("agent invocation timed out", "timeout") from exc
+        finally:
+            schema_path.unlink(missing_ok=True)
+
+    status = execution_status(agent, process.stdout, process.returncode)
+    if not status["model_completed"]:
+        kind = status.get("error_kind") or "command"
+        diagnostic = f"{process.stdout}\n{process.stderr}".lower()
+        if any(
+            marker in diagnostic
+            for marker in ("rate limit", "rate_limit", "usage limit", "quota", "status 429")
+        ):
+            kind = "quota"
+        raise AgentInvocationError(f"agent invocation failed ({kind})", kind)
+    report = (
+        parse_codex_final_report(process.stdout)
+        if agent == "codex"
+        else parse_claude_final_report(process.stdout)
+    )
+    usage = parse_codex_usage(process.stdout) if agent == "codex" else parse_claude_usage(process.stdout)
+    if usage.input_tokens is None or usage.output_tokens is None:
+        raise AgentInvocationError("agent output omitted token usage", "telemetry")
+    return {
+        "self_report": report,
+        "judge_verdict": None,
+        "model_served": reported_model(agent, process.stdout),
+        "input_tokens": int(usage.input_tokens),
+        "output_tokens": int(usage.output_tokens),
+        "agent_seconds": round(time.perf_counter() - started, 6),
+    }
 
 
 def execution_status(agent: str, stdout: str, returncode: int) -> dict:

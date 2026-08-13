@@ -63,11 +63,19 @@ TASKS = {
 }
 
 
-def run_oracle(task: str, candidate_dir: Path) -> tuple[dict, float]:
+def run_oracle(
+    task: str,
+    candidate_dir: Path,
+    half: str | None = None,
+    seed: int = 0,
+) -> tuple[dict, float]:
     oracle = TASKS[task] / "oracle.py"
     started = time.perf_counter()
+    command = [sys.executable, str(oracle), "--candidate-dir", str(candidate_dir)]
+    if half is not None:
+        command.extend(["--half", half, "--seed", str(seed)])
     process = subprocess.run(
-        [sys.executable, str(oracle), "--candidate-dir", str(candidate_dir)],
+        command,
         check=True,
         capture_output=True,
         text=True,
@@ -83,10 +91,10 @@ def run_oracle(task: str, candidate_dir: Path) -> tuple[dict, float]:
 def feedback_text(cell: FactorCell, accepted: bool, delta: float, metrics: dict) -> str:
     if cell.feedback == "numeric":
         return json.dumps(
-            {"accepted": accepted, "oracle_delta": round(delta, 6), "metrics": metrics},
+            {"oracle_delta": round(delta, 6), "metrics": metrics},
             sort_keys=True,
         )
-    return "accepted: outcome improved" if accepted else "rejected: outcome did not improve"
+    return "outcome improved" if delta > 0 else "outcome did not improve"
 
 
 def gate_decision(cell: FactorCell, claim_improved: bool, delta: float) -> bool:
@@ -221,7 +229,7 @@ def handle(request: dict) -> dict:
 
     return [
         ScriptedCandidate("cosmetic-comment", True, cosmetic),
-        ScriptedCandidate("bounded-work-handler", True, harden, 180, 90, 0.002),
+        ScriptedCandidate("linear-count-handler", True, harden, 180, 90, 0.002),
     ]
 
 

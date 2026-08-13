@@ -12,54 +12,70 @@ tool reports them instead of quietly folding them into a mean:
   model identity mismatch the runtime served something other than the manifest pin
   abandoned trajectory    a trajectory stopped partway and its records remain
 
-The primary quantity is deliberately not the mirage rate. A grounded gate accepts
-a cycle when the delta is positive, and a mirage is an accepted cycle whose delta
-is at most zero, so the grounded arms cannot produce one. Reporting that
-difference restates the acceptance rule. Delivered outcome is reported first, the
-mirage rate is reported as a descriptive statistic, and the grounded arms are
-labelled structural so nobody reads a definitional zero as a finding.
+The primary quantity is delivered outcome and regression acceptance on HO-B.
+Legacy pre-split logs label the grounded mirage rate structural. Confirmatory
+logs carry `delta_hob`, so a grounded HO-A gate can make an empirical error on
+HO-B and the outcome is no longer fixed by the gate rule.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import sys
 from collections import defaultdict
 from pathlib import Path
 from statistics import median
 
 
-def load(log_path: Path) -> tuple[list[dict], list[dict]]:
-    cycles, abandoned = [], []
+def load(log_path: Path) -> tuple[list[dict], list[dict], list[int]]:
+    """Load valid records and retain the line numbers of corrupt JSONL rows."""
+    cycles, abandoned, unparsable = [], [], []
     with log_path.open(encoding="utf-8") as handle:
-        for line in handle:
+        for number, line in enumerate(handle, start=1):
             line = line.strip()
             if not line:
                 continue
             try:
                 record = json.loads(line)
             except ValueError:
+                unparsable.append(number)
                 continue
             (abandoned if record.get("abandoned") else cycles).append(record)
-    return cycles, abandoned
+    return cycles, abandoned, unparsable
 
 
-def group_trajectories(cycles: list[dict]) -> dict[str, list[dict]]:
+def attempt_identity(record: dict) -> tuple[str, str]:
+    attempt = record.get("attempt_id") or record.get("run_id") or "legacy"
+    return record["trajectory"], attempt
+
+
+def group_trajectories(
+    cycles: list[dict], abandoned: list[dict] | None = None
+) -> dict[str, list[dict]]:
+    """Group complete attempts only; retries can never be merged or double-counted."""
     grouped: dict[str, list[dict]] = defaultdict(list)
+    abandoned_identities = {
+        attempt_identity(record) for record in (abandoned or []) if record.get("trajectory")
+    }
     for record in cycles:
-        grouped[record["trajectory"]].append(record)
+        trajectory, attempt = attempt_identity(record)
+        if (trajectory, attempt) in abandoned_identities:
+            continue
+        grouped[f"{trajectory}|attempt={attempt}"].append(record)
     for rows in grouped.values():
-        rows.sort(key=lambda r: r["cycle"])
+        rows.sort(key=lambda r: r.get("cycle", 0))
     return grouped
 
 
 def trajectory_metrics(rows: list[dict]) -> dict:
-    accepted = [r for r in rows if r.get("accepted")]
-    positive = [r for r in rows if (r.get("oracle_delta") or 0.0) > 0]
-    rejected = [r for r in rows if not r.get("accepted")]
+    graded = [r for r in rows if r.get("oracle_delta") is not None]
+    accepted = [r for r in graded if r.get("accepted")]
+    positive = [r for r in graded if r["oracle_delta"] > 0]
+    rejected = [r for r in graded if not r.get("accepted")]
     baseline = rows[0].get("baseline_score")
     final = rows[-1].get("deployed_score")
-    first_positive = next((r["cycle"] for r in rows if (r.get("oracle_delta") or 0.0) > 0), None)
+    first_positive = next((r["cycle"] for r in graded if r["oracle_delta"] > 0), None)
     return {
         # Primary: what the loop actually delivered.
         "delivered_gain": (
@@ -69,23 +85,25 @@ def trajectory_metrics(rows: list[dict]) -> dict:
         "baseline_score": baseline,
         # Descriptive. Structural in the grounded arms; see the module docstring.
         "mirage_rate": (
-            round(sum(1 for r in accepted if (r.get("oracle_delta") or 0.0) <= 0) / len(accepted), 6)
+            round(sum(1 for r in accepted if r["oracle_delta"] <= 0) / len(accepted), 6)
             if accepted
             else None
         ),
         "regression_acceptance_rate": (
-            round(sum(1 for r in accepted if (r.get("oracle_delta") or 0.0) < 0) / len(accepted), 6)
+            round(sum(1 for r in accepted if r["oracle_delta"] <= 0) / len(accepted), 6)
             if accepted
             else None
         ),
         "false_rejection_rate": (
-            round(sum(1 for r in rejected if (r.get("oracle_delta") or 0.0) > 0) / len(positive), 6)
+            round(sum(1 for r in rejected if r["oracle_delta"] > 0) / len(positive), 6)
             if positive
             else None
         ),
         "cycles_to_first_positive": first_positive,
         "right_censored": first_positive is None,
         "accepted_cycles": len(accepted),
+        "ungraded_cycles": len(rows) - len(graded),
+        "outcome_is_hob": all("delta_hob" in row for row in graded),
         "cycles": len(rows),
         "input_tokens": sum(r.get("input_tokens") or 0 for r in rows),
         "output_tokens": sum(r.get("output_tokens") or 0 for r in rows),
@@ -105,16 +123,71 @@ def trajectory_metrics(rows: list[dict]) -> dict:
     }
 
 
-def integrity(cycles: list[dict], abandoned: list[dict]) -> dict:
+def integrity(cycles: list[dict], abandoned: list[dict], unparsable: list[int]) -> dict:
     leaks = [r["trajectory"] for r in cycles if r.get("canary_leak")]
     mismatches = [
-        r["trajectory"] for r in cycles if r.get("model_identity_matches") is False
+        r["trajectory"]
+        for r in cycles
+        if r.get("model_identity_matches") is False
+        or (
+            r.get("schema_version", 0) >= 2
+            and (
+                not r.get("model_served")
+                or r.get("model_identity_matches") is not True
+            )
+        )
     ]
+    invalid_oracles = [r["trajectory"] for r in cycles if r.get("oracle_valid") is False]
+    ungraded = [r["trajectory"] for r in cycles if r.get("oracle_delta") is None]
+    schema_two_rows = [r for r in [*cycles, *abandoned] if r.get("schema_version", 0) >= 2]
+    manifest_digests = {r.get("manifest_digest") for r in schema_two_rows}
+    preregistration_commits = {r.get("preregistration_commit") for r in schema_two_rows}
+    manifest_mixed = len(manifest_digests) > 1 or None in manifest_digests
+    preregistration_mixed = (
+        len(preregistration_commits) > 1 or None in preregistration_commits
+    )
+    incomplete = []
+    completed_tokens = set()
+    grouped = group_trajectories(cycles, abandoned)
+    for rows in grouped.values():
+        planned = rows[0].get("cycles_planned")
+        if isinstance(planned, int):
+            if {r.get("cycle") for r in rows} == set(range(1, planned + 1)):
+                completed_tokens.add(rows[0]["trajectory"])
+            else:
+                incomplete.append(rows[0]["trajectory"])
+    abandoned_tokens = {r["trajectory"] for r in abandoned}
+    recovered_abandoned = abandoned_tokens & completed_tokens
+    unrecovered_abandoned = abandoned_tokens - completed_tokens
     return {
         "canary_leak_trajectories": sorted(set(leaks)),
         "model_identity_mismatch_trajectories": sorted(set(mismatches)),
-        "abandoned_trajectories": sorted({r["trajectory"] for r in abandoned}),
-        "clean": not leaks and not mismatches and not abandoned,
+        "abandoned_trajectories": sorted(abandoned_tokens),
+        "recovered_abandoned_trajectories": sorted(recovered_abandoned),
+        "unrecovered_abandoned_trajectories": sorted(unrecovered_abandoned),
+        "invalid_oracle_trajectories": sorted(set(invalid_oracles)),
+        "ungraded_trajectories": sorted(set(ungraded)),
+        "incomplete_trajectories": sorted(set(incomplete)),
+        "manifest_digests": sorted(value for value in manifest_digests if value),
+        "mixed_or_missing_manifest_digest": manifest_mixed,
+        "preregistration_commits": sorted(
+            value for value in preregistration_commits if value
+        ),
+        "mixed_or_missing_preregistration_commit": preregistration_mixed,
+        "unparsable_log_lines": unparsable,
+        "clean": not any(
+            (
+                leaks,
+                mismatches,
+                unrecovered_abandoned,
+                invalid_oracles,
+                ungraded,
+                incomplete,
+                manifest_mixed,
+                preregistration_mixed,
+                unparsable,
+            )
+        ),
     }
 
 
@@ -128,10 +201,21 @@ def by_cell(grouped: dict[str, list[dict]]) -> dict:
     for (task, agent, cell), metrics in sorted(cells.items()):
         gains = [m["delivered_gain"] for m in metrics if m["delivered_gain"] is not None]
         mirages = [m["mirage_rate"] for m in metrics if m["mirage_rate"] is not None]
+        regressions = [
+            m["regression_acceptance_rate"]
+            for m in metrics
+            if m["regression_acceptance_rate"] is not None
+        ]
+        false_rejections = [
+            m["false_rejection_rate"]
+            for m in metrics
+            if m["false_rejection_rate"] is not None
+        ]
         api_equivalent_usd = sum(m["api_equivalent_usd"] for m in metrics)
         incremental_billed_usd = sum(m["incremental_billed_usd"] for m in metrics)
         tokens = sum(m["input_tokens"] + m["output_tokens"] for m in metrics)
         grounded = cell.startswith("grounded")
+        outcome_is_hob = all(m["outcome_is_hob"] for m in metrics)
         out[f"{task}|{agent}|{cell}"] = {
             "trajectories": len(metrics),
             # Analysis unit is the trajectory. Cycles inside one trajectory share
@@ -140,7 +224,14 @@ def by_cell(grouped: dict[str, list[dict]]) -> dict:
             "delivered_gain_median": round(median(gains), 6) if gains else None,
             "delivered_gain_values": gains,
             "mirage_rate_median": round(median(mirages), 6) if mirages else None,
-            "mirage_rate_is_structural": grounded,
+            "regression_acceptance_rate_median": (
+                round(median(regressions), 6) if regressions else None
+            ),
+            "false_rejection_rate_median": (
+                round(median(false_rejections), 6) if false_rejections else None
+            ),
+            "mirage_rate_is_structural": grounded and not outcome_is_hob,
+            "outcome_is_hob": outcome_is_hob,
             "gain_per_1k_tokens": (
                 round(sum(gains) / (tokens / 1000.0), 6) if gains and tokens else None
             ),
@@ -166,19 +257,19 @@ def main() -> int:
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
 
-    cycles, abandoned = load(args.log)
-    grouped = group_trajectories(cycles)
+    cycles, abandoned, unparsable = load(args.log)
+    grouped = group_trajectories(cycles, abandoned)
     report = {
         "schema_version": 2,
         "source_log": str(args.log),
         "cycle_records": len(cycles),
         "trajectories": len(grouped),
-        "integrity": integrity(cycles, abandoned),
+        "integrity": integrity(cycles, abandoned, unparsable),
         "by_cell": by_cell(grouped),
         "note": (
-            "Primary quantity is delivered_gain. mirage_rate is descriptive and is "
-            "structurally zero wherever mirage_rate_is_structural is true, because "
-            "the gate accepts exactly the cycles the mirage definition excludes."
+            "Primary quantity is delivered_gain on HO-B. mirage_rate is structural "
+            "only for legacy pre-split grounded logs; confirmatory rows carry "
+            "delta_hob and are empirical outcomes."
         ),
     }
     text = json.dumps(report, indent=2, sort_keys=True)
@@ -192,7 +283,7 @@ def main() -> int:
         print(
             "integrity problems present; the affected trajectories must be excluded "
             "or rerun before these numbers are reported",
-            file=__import__("sys").stderr,
+            file=sys.stderr,
         )
         return 1
     return 0

@@ -107,6 +107,75 @@ class AdapterTest(unittest.TestCase):
         )
         self.assertIn("type=bind,src=/tmp/state.json,dst=/tmp/.claude.json,readonly", command)
 
+    def test_subscription_measurement_command_has_schema_without_api_budget_flag(self):
+        command = agent_adapters.container_command_for(
+            "claude",
+            Path("/tmp/work"),
+            "claude-test-20260801",
+            0.2,
+            "agent-image",
+            auth_file=Path("/tmp/auth.json"),
+            prompt="measure",
+            verdict_schema=agent_adapters.VERDICT_SCHEMA,
+            container_name="measurement-test",
+            billing_mode="subscription",
+        )
+        self.assertIn("--json-schema", command)
+        self.assertIn("measurement-test", command)
+        self.assertNotIn("--max-budget-usd", command)
+        self.assertEqual(command[-1], "measure")
+
+    def test_structured_reports_and_runtime_model_are_parsed(self):
+        report = {"improved": True, "confidence": 0.8, "evidence": "tests pass"}
+        codex_output = json.dumps({
+            "type": "item.completed",
+            "item": {"type": "agent_message", "text": json.dumps(report)},
+        })
+        self.assertEqual(agent_adapters.parse_codex_final_report(codex_output), report)
+
+        claude_output = json.dumps({
+            "structured_output": report,
+            "modelUsage": {"claude-test-20260801": {"inputTokens": 2}},
+        })
+        self.assertEqual(agent_adapters.parse_claude_final_report(claude_output), report)
+        self.assertEqual(
+            agent_adapters.reported_model("claude", claude_output),
+            "claude-test-20260801",
+        )
+
+    def test_measurement_cycle_retains_only_structured_output_and_usage(self):
+        report = {"improved": False, "confidence": 0.7, "evidence": "tests still fail"}
+        stdout = json.dumps({
+            "structured_output": report,
+            "modelUsage": {"claude-test-20260801": {}},
+            "usage": {"input_tokens": 30, "output_tokens": 8},
+        })
+        completed = mock.Mock(returncode=0, stdout=stdout, stderr="")
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp) / "workspace"
+            workspace.mkdir()
+            auth = Path(tmp) / "auth.json"
+            auth.write_text("{}", encoding="utf-8")
+            with mock.patch.object(agent_adapters.subprocess, "run", return_value=completed):
+                result = agent_adapters.run_measurement_cycle(
+                    agent="claude",
+                    model="claude-test-20260801",
+                    task="s1",
+                    workspace=workspace,
+                    cycle=2,
+                    feedback="rejected",
+                    container_image="image@sha256:" + "a" * 64,
+                    auth_file=auth,
+                    state_file=None,
+                    timeout_seconds=10,
+                    billing_mode="subscription",
+                    max_budget_usd=1.0,
+                )
+            self.assertEqual(result["self_report"], report)
+            self.assertEqual(result["model_served"], "claude-test-20260801")
+            self.assertEqual((result["input_tokens"], result["output_tokens"]), (30, 8))
+            self.assertFalse((workspace / ".loop-verdict-schema.json").exists())
+
     def test_container_can_forward_auth_environment_by_name(self):
         command = agent_adapters.container_command_for(
             "claude", Path("/tmp/work"), "sonnet", 0.2, "agent-image", None, "ANTHROPIC_API_KEY"
@@ -147,6 +216,12 @@ class AdapterTest(unittest.TestCase):
             before = agent_adapters.tree_digest(root)
             (root / "file.txt").write_text("two", encoding="utf-8")
             self.assertNotEqual(before, agent_adapters.tree_digest(root))
+
+    def test_tree_digest_hashes_a_symlink_without_following_its_target(self):
+        with tempfile.TemporaryDirectory() as temp_root:
+            root = Path(temp_root)
+            (root / "external").symlink_to("/path/that/must/not/be-read")
+            self.assertEqual(len(agent_adapters.tree_digest(root)), 64)
 
 
 if __name__ == "__main__":

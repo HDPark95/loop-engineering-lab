@@ -36,6 +36,13 @@ class FactorizationTest(unittest.TestCase):
         self.assertEqual(numeric["rows"][0]["accepted"], sign["rows"][0]["accepted"])
         self.assertNotEqual(numeric["rows"][0]["feedback"], sign["rows"][0]["feedback"])
 
+    def test_sign_feedback_reports_oracle_sign_not_gate_acceptance(self):
+        ungrounded_sign = se_experiment.CELLS[3]
+        self.assertEqual(
+            se_experiment.feedback_text(ungrounded_sign, accepted=True, delta=-0.1, metrics={}),
+            "outcome did not improve",
+        )
+
     def test_smoke_output_has_all_task_cell_combinations(self):
         output = se_experiment.smoke_matrix()
         combinations = {(row["task"], row["cell"]["name"]) for row in output["results"]}
