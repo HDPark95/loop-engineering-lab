@@ -811,3 +811,11 @@ apparatus validation and not confirmatory evidence.
   interpretation and its recorded digest. This closes a concurrent-append race
   without changing any design, outcome, or inferential rule. No confirmatory
   run had started.
+- R31 (2026-08-13): corrected archive verification before freeze. A digest in a
+  cycle row previously proved that an archive had been written but replay did
+  not re-open the retained files, so later deletion or corruption could escape
+  the stated missing-archive gate. Confirmatory replay and inference now require
+  the archive root and verify each referenced canonical manifest plus every
+  content-addressed object's safe path, size, and SHA-256. This enforces the
+  already registered retention rule without changing the design, outcome, or
+  inference. No confirmatory run had started.

@@ -965,6 +965,60 @@ class ArtifactArchiveTest(unittest.TestCase):
             self.assertEqual(files["source.py"]["size"], len("value = 1\n"))
             object_path = archive / "objects" / files["source.py"]["sha256"][:2] / files["source.py"]["sha256"]
             self.assertEqual(object_path.read_text(encoding="utf-8"), "value = 1\n")
+            cycle = {
+                "schema_version": 3,
+                "trajectory": "archive-test",
+                "attempt_id": "complete",
+                "cycle": 1,
+                "cycles_planned": 1,
+                "oracle_delta": 0.0,
+                "apparatus_test": False,
+                "model_served": "model-v1",
+                "model_identity_matches": True,
+                "manifest_digest": "manifest",
+                "preregistration_commit": "freeze",
+                "candidate_archive_manifest_sha256": first,
+            }
+            missing_root = replay.integrity(
+                [cycle], [], [], require_archive_files=True
+            )
+            self.assertTrue(missing_root["candidate_archive_root_missing"])
+            self.assertFalse(missing_root["clean"])
+
+            verified = replay.integrity(
+                [cycle],
+                [],
+                [],
+                archive_root=archive,
+                require_archive_files=True,
+            )
+            self.assertTrue(verified["candidate_archive_files_verified"])
+            self.assertEqual(verified["candidate_archive_manifests_verified"], 1)
+            self.assertTrue(verified["clean"])
+
+            noncanonical_payload = json.dumps(record, indent=2).encode()
+            noncanonical_id = hashlib.sha256(noncanonical_payload).hexdigest()
+            (archive / "manifests" / f"{noncanonical_id}.json").write_bytes(
+                noncanonical_payload + b"\n"
+            )
+            self.assertEqual(
+                replay.verify_candidate_archive(archive, noncanonical_id),
+                "manifest JSON is not canonical",
+            )
+
+            object_path.unlink()
+            corrupted = replay.integrity(
+                [cycle],
+                [],
+                [],
+                archive_root=archive,
+                require_archive_files=True,
+            )
+            self.assertEqual(
+                corrupted["invalid_candidate_archive_trajectories"],
+                ["archive-test"],
+            )
+            self.assertFalse(corrupted["clean"])
 
 
 class ReplayTest(unittest.TestCase):

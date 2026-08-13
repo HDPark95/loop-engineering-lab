@@ -514,10 +514,16 @@ def holm(pvalues: dict[str, float], alpha: float = ALPHA) -> dict[str, dict]:
     return {name: verdicts[name] for name in PRIMARY_TESTS}
 
 
-def analyze(log_path: Path) -> dict:
+def analyze(log_path: Path, archive_root: Path | None = None) -> dict:
     source_log_sha256 = hashlib.sha256(log_path.read_bytes()).hexdigest()
     cycles, abandoned, unparsable = replay.load(log_path)
-    integrity = replay.integrity(cycles, abandoned, unparsable)
+    integrity = replay.integrity(
+        cycles,
+        abandoned,
+        unparsable,
+        archive_root=archive_root,
+        require_archive_files=True,
+    )
     if not integrity["clean"]:
         raise ValueError(f"replay integrity is not clean: {integrity}")
     reward_hacking_audit = classify_reward_hacking.audit(log_path)
@@ -668,10 +674,11 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--log", type=Path, required=True)
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--archive-root", type=Path)
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
     try:
-        report = analyze(args.log)
+        report = analyze(args.log, archive_root=args.archive_root)
     except (OSError, ValueError) as exc:
         print(f"analysis refused: {exc}", file=sys.stderr)
         return 1

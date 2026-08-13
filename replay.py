@@ -21,10 +21,12 @@ HO-B and the outcome is no longer fixed by the gate rule.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import re
 import sys
 from collections import defaultdict
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from statistics import median
 
 
@@ -210,7 +212,120 @@ def trajectory_metrics(rows: list[dict]) -> dict:
     }
 
 
-def integrity(cycles: list[dict], abandoned: list[dict], unparsable: list[int]) -> dict:
+SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
+
+
+def safe_archive_path(value: object) -> bool:
+    if not isinstance(value, str) or not value:
+        return False
+    path = PurePosixPath(value)
+    return (
+        value != "."
+        and not path.is_absolute()
+        and ".." not in path.parts
+        and path.as_posix() == value
+    )
+
+
+def safe_symlink_target(path: str, target: object) -> bool:
+    if not isinstance(target, str) or not target:
+        return False
+    target_path = PurePosixPath(target)
+    if target_path.is_absolute():
+        return False
+    depth = len(PurePosixPath(path).parent.parts)
+    for part in target_path.parts:
+        if part == "..":
+            depth -= 1
+            if depth < 0:
+                return False
+        elif part != ".":
+            depth += 1
+    return True
+
+
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def verify_candidate_archive(archive_root: Path, manifest_id: str) -> str | None:
+    """Return a deterministic error string, or None for a complete exact archive."""
+    if not SHA256_PATTERN.fullmatch(manifest_id):
+        return "invalid manifest digest"
+    manifest_path = archive_root / "manifests" / f"{manifest_id}.json"
+    try:
+        if manifest_path.is_symlink() or not manifest_path.is_file():
+            return "manifest is missing or unreadable"
+        payload_with_newline = manifest_path.read_bytes()
+    except OSError:
+        return "manifest is missing or unreadable"
+    if not payload_with_newline.endswith(b"\n"):
+        return "manifest has no canonical trailing newline"
+    payload = payload_with_newline[:-1]
+    if hashlib.sha256(payload).hexdigest() != manifest_id:
+        return "manifest content digest mismatch"
+    try:
+        record = json.loads(payload)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return "manifest JSON is invalid"
+    if not isinstance(record, dict) or record.get("schema_version") != 1:
+        return "manifest schema is invalid"
+    if json.dumps(record, sort_keys=True, separators=(",", ":")).encode() != payload:
+        return "manifest JSON is not canonical"
+    entries = record.get("entries")
+    if not isinstance(entries, list):
+        return "manifest entries are invalid"
+    seen: set[str] = set()
+    for entry in entries:
+        if not isinstance(entry, dict) or not safe_archive_path(entry.get("path")):
+            return "manifest contains an unsafe path"
+        relative = entry["path"]
+        if relative in seen:
+            return "manifest contains a duplicate path"
+        seen.add(relative)
+        kind = entry.get("type")
+        mode = entry.get("mode")
+        if not isinstance(mode, int) or mode < 0 or mode > 0o7777:
+            return "manifest contains an invalid mode"
+        if kind == "directory":
+            continue
+        if kind == "symlink":
+            if not safe_symlink_target(relative, entry.get("target")):
+                return "manifest contains an unsafe symlink"
+            continue
+        if kind != "file":
+            return "manifest contains an invalid entry type"
+        object_id = entry.get("sha256")
+        size = entry.get("size")
+        if not isinstance(object_id, str) or not SHA256_PATTERN.fullmatch(object_id):
+            return "manifest contains an invalid object digest"
+        if not isinstance(size, int) or size < 0:
+            return "manifest contains an invalid object size"
+        object_path = archive_root / "objects" / object_id[:2] / object_id
+        try:
+            if (
+                object_path.is_symlink()
+                or not object_path.is_file()
+                or object_path.stat().st_size != size
+                or file_sha256(object_path) != object_id
+            ):
+                return "candidate object size or digest mismatch"
+        except OSError:
+            return "candidate object is missing or unreadable"
+    return None
+
+
+def integrity(
+    cycles: list[dict],
+    abandoned: list[dict],
+    unparsable: list[int],
+    archive_root: Path | None = None,
+    require_archive_files: bool = False,
+) -> dict:
     missing_trajectory_records = sum(
         1 for record in [*cycles, *abandoned] if not record.get("trajectory")
     )
@@ -239,6 +354,46 @@ def integrity(cycles: list[dict], abandoned: list[dict], unparsable: list[int]) 
         and not r.get("apparatus_test")
         and not r.get("candidate_archive_manifest_sha256")
     ]
+    archived_rows = [
+        r
+        for r in identified_cycles
+        if r.get("schema_version", 0) >= 3 and not r.get("apparatus_test")
+    ]
+    archive_root_missing = bool(
+        require_archive_files and archived_rows and archive_root is None
+    )
+    archive_errors: dict[str, str] = {}
+    if require_archive_files and archive_root is not None:
+        for manifest_id in sorted(
+            {
+                r.get("candidate_archive_manifest_sha256")
+                for r in archived_rows
+                if r.get("candidate_archive_manifest_sha256")
+            },
+            key=str,
+        ):
+            if not isinstance(manifest_id, str):
+                archive_errors[str(manifest_id)] = "invalid manifest digest"
+                continue
+            error = verify_candidate_archive(archive_root, manifest_id)
+            if error:
+                archive_errors[manifest_id] = error
+    invalid_archive_trajectories = {
+        r["trajectory"]
+        for r in archived_rows
+        if archive_root_missing
+        or not isinstance(r.get("candidate_archive_manifest_sha256"), str)
+        or r.get("candidate_archive_manifest_sha256") in archive_errors
+    }
+    verified_archive_ids = {
+        r["candidate_archive_manifest_sha256"]
+        for r in archived_rows
+        if isinstance(r.get("candidate_archive_manifest_sha256"), str)
+        and SHA256_PATTERN.fullmatch(r["candidate_archive_manifest_sha256"])
+        and r.get("candidate_archive_manifest_sha256") not in archive_errors
+        and require_archive_files
+        and archive_root is not None
+    }
     reward_hacks = [
         r["trajectory"] for r in identified_cycles if r.get("reward_hack_signals")
     ]
@@ -467,6 +622,17 @@ def integrity(cycles: list[dict], abandoned: list[dict], unparsable: list[int]) 
         "unrecovered_abandoned_trajectories": sorted(unrecovered_abandoned),
         "invalid_oracle_trajectories": sorted(set(invalid_oracles)),
         "missing_candidate_archive_trajectories": sorted(set(missing_archives)),
+        "invalid_candidate_archive_trajectories": sorted(
+            invalid_archive_trajectories
+        ),
+        "candidate_archive_errors": archive_errors,
+        "candidate_archive_manifests_verified": len(verified_archive_ids),
+        "candidate_archive_files_verified": bool(archived_rows)
+        and require_archive_files
+        and archive_root is not None
+        and not missing_archives
+        and not invalid_archive_trajectories,
+        "candidate_archive_root_missing": archive_root_missing,
         "reward_hack_signal_trajectories": sorted(set(reward_hacks)),
         "invalid_measurement_contract_trajectories": sorted(
             set(invalid_measurement_contracts)
@@ -488,6 +654,8 @@ def integrity(cycles: list[dict], abandoned: list[dict], unparsable: list[int]) 
                 unrecovered_abandoned,
                 invalid_oracles,
                 missing_archives,
+                invalid_archive_trajectories,
+                archive_root_missing,
                 reward_hacks,
                 invalid_measurement_contracts,
                 ungraded,
@@ -589,6 +757,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--log", type=Path, required=True)
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--archive-root", type=Path)
     args = parser.parse_args()
 
     cycles, abandoned, unparsable = load(args.log)
@@ -598,7 +767,13 @@ def main() -> int:
         "source_log": str(args.log),
         "cycle_records": len(cycles),
         "trajectories": len(grouped),
-        "integrity": integrity(cycles, abandoned, unparsable),
+        "integrity": integrity(
+            cycles,
+            abandoned,
+            unparsable,
+            archive_root=args.archive_root,
+            require_archive_files=True,
+        ),
         "by_cell": by_cell(grouped),
         "note": (
             "Primary quantity is delivered_gain on HO-B. mirage_rate uses the "

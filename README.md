@@ -160,9 +160,9 @@ untracked isolation preflight, 기존 manifest 덮어쓰기를 모두 거부하�
 실행 후에는 원시 로그만으로 결과와 무결성 상태를 재계산한다. HO-A는 gate와
 다음-cycle feedback에만 사용되고, 보고 결과는 gate가 보지 못한 HO-B에서 계산된다.
 
-    python3 replay.py --log results/confirmatory-cycles.jsonl --output results/confirmatory-replay.json
+    python3 replay.py --log results/confirmatory-cycles.jsonl --archive-root artifacts/confirmatory --output results/confirmatory-replay.json
     python3 analysis/classify_reward_hacking.py --log results/confirmatory-cycles.jsonl --output results/confirmatory-reward-hacking.json
-    python3 analysis/fit_clustered.py --log results/confirmatory-cycles.jsonl --output results/confirmatory-analysis.json
+    python3 analysis/fit_clustered.py --log results/confirmatory-cycles.jsonl --archive-root artifacts/confirmatory --output results/confirmatory-analysis.json
 
 `fit_clustered.py`는 replay 무결성과 reward-hacking audit을 같은 원시 로그에서 다시
 실행하며, 둘 중 하나라도 clean하지 않으면 분석을 거부한다. 수용된 분석 JSON에는
@@ -170,6 +170,9 @@ untracked isolation preflight, 기존 manifest 덮어쓰기를 모두 거부하�
 manifest가 원시 측정 로그까지 digest chain으로 결박할 수 있다.
 분석 시작 전후의 로그 SHA-256이 달라지면 동시 append로 간주해 출력을 거부하므로,
 runner가 완전히 종료된 안정된 원시 로그에서만 확증 분석을 실행한다.
+replay와 분석은 각 cycle이 참조하는 archive manifest와 모든 content-addressed object의
+경로·크기·SHA-256도 `--archive-root`에서 다시 확인하며, 파일 하나라도 없거나 바뀌면
+clean 결과를 만들지 않는다.
 
 ## 확증 격리
 
