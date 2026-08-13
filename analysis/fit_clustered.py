@@ -34,7 +34,7 @@ ALPHA = 0.05
 BOOTSTRAP_DRAWS = 20_000
 BOOTSTRAP_SEED = 20260813
 PRIMARY_TESTS = ("B-H1a", "B-H1b")
-TASK_TO_TEST = {"s1": "B-H1a", "s3": "B-H1b"}
+TASK_TO_TEST = {"s1_swebench": "B-H1a", "s3": "B-H1b"}
 EXPECTED_CELLS = {
     "grounded-numeric",
     "grounded-sign",

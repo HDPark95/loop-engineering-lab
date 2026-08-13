@@ -41,6 +41,7 @@ import json
 import math
 import os
 import shutil
+import stat
 import sys
 import tempfile
 import threading
@@ -55,7 +56,7 @@ import agent_adapters
 import se_experiment
 
 ROOT = Path(__file__).resolve().parent
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 # Founder-approved lane rule: at most three agent processes at once. Quota or
 # rate-limit responses wait and retry; they never trigger a switch to API billing.
@@ -176,6 +177,10 @@ def load_manifest(path: Path) -> dict:
         manifest.get("oracle_container_image")
     ):
         raise SystemExit("oracle_container_image must be pinned by sha256 digest")
+    if not manifest.get("apparatus_test", False):
+        archive_dir = manifest.get("artifact_archive_dir")
+        if not isinstance(archive_dir, str) or not archive_dir.strip():
+            raise SystemExit("confirmatory manifests require artifact_archive_dir")
 
     for agent in manifest["agents"]:
         adapter = agent.get("adapter", agent.get("name"))
@@ -366,6 +371,86 @@ class CycleLog:
                 handle.write(line + "\n")
                 handle.flush()
                 os.fsync(handle.fileno())
+
+
+def archive_candidate(candidate: Path, archive_root: Path) -> str:
+    """Store an exact content-addressed candidate without duplicating seed files."""
+    objects = archive_root / "objects"
+    manifests = archive_root / "manifests"
+    objects.mkdir(parents=True, exist_ok=True)
+    manifests.mkdir(parents=True, exist_ok=True)
+    root = candidate.resolve()
+    entries = []
+    for path in sorted(candidate.rglob("*")):
+        relative = path.relative_to(candidate).as_posix()
+        mode = stat.S_IMODE(path.lstat().st_mode)
+        if path.is_symlink():
+            target = os.readlink(path)
+            try:
+                if not path.resolve(strict=True).is_relative_to(root):
+                    raise RuntimeError(f"candidate symlink escapes workspace: {relative}")
+            except (OSError, RuntimeError) as exc:
+                raise RuntimeError(f"unsafe candidate symlink: {relative}") from exc
+            entries.append({"path": relative, "type": "symlink", "target": target, "mode": mode})
+            continue
+        if path.is_dir():
+            entries.append({"path": relative, "type": "directory", "mode": mode})
+            continue
+        if not path.is_file():
+            raise RuntimeError(f"unsupported candidate entry: {relative}")
+        digest = hashlib.sha256()
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        object_id = digest.hexdigest()
+        object_dir = objects / object_id[:2]
+        object_dir.mkdir(parents=True, exist_ok=True)
+        object_path = object_dir / object_id
+        if not object_path.exists():
+            try:
+                descriptor = os.open(
+                    object_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o444
+                )
+            except FileExistsError:
+                descriptor = None
+            if descriptor is not None:
+                try:
+                    with os.fdopen(descriptor, "wb") as output, path.open("rb") as source:
+                        shutil.copyfileobj(source, output, length=1024 * 1024)
+                        output.flush()
+                        os.fsync(output.fileno())
+                except Exception:
+                    object_path.unlink(missing_ok=True)
+                    raise
+        entries.append(
+            {
+                "path": relative,
+                "type": "file",
+                "sha256": object_id,
+                "size": path.stat().st_size,
+                "mode": mode,
+            }
+        )
+    record = {"schema_version": 1, "entries": entries}
+    payload = json.dumps(record, sort_keys=True, separators=(",", ":")).encode()
+    manifest_id = hashlib.sha256(payload).hexdigest()
+    manifest_path = manifests / f"{manifest_id}.json"
+    if manifest_path.exists():
+        if manifest_path.read_bytes() != payload + b"\n":
+            raise RuntimeError("artifact archive manifest digest collision")
+    else:
+        try:
+            descriptor = os.open(
+                manifest_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o444
+            )
+        except FileExistsError:
+            descriptor = None
+        if descriptor is not None:
+            with os.fdopen(descriptor, "wb") as output:
+                output.write(payload + b"\n")
+                output.flush()
+                os.fsync(output.fileno())
+    return manifest_id
 
 
 class Budget:
@@ -708,6 +793,7 @@ def run_trajectory(
     reserved_maximum_usd: float,
     common_first_cycle: CommonFirstCycleCache,
     common_consumers: int,
+    archive_root: Path | None,
 ) -> dict:
     """Drive one trajectory and write one record per cycle.
 
@@ -824,6 +910,17 @@ def run_trajectory(
                 "quota_wait_seconds": outcome.get("quota_wait_seconds", 0.0),
                 "wall_clock_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             }
+            try:
+                usage_record["candidate_archive_manifest_sha256"] = (
+                    archive_candidate(candidate_dir, archive_root)
+                    if archive_root is not None
+                    else None
+                )
+            except Exception as exc:
+                raise TrajectoryRunError(
+                    exc,
+                    {**usage_record, "artifact_archive_failed": True, "shared_cycle_one_failure": cycle == 1},
+                ) from exc
             if trajectory_cost > reserved_maximum_usd + 1e-12:
                 cause = RuntimeError(
                     "trajectory usage exceeded estimated_api_equivalent_usd_per_trajectory"
@@ -917,6 +1014,12 @@ def run_trajectory(
                         "baseline_score_hob": baseline_b,
                         "baseline_score": baseline_b,
                         "feedback_to_next_cycle": feedback,
+                        "oracle_metrics_hoa": oracle_a_result.get("metrics", {}),
+                        "oracle_metrics_hob": oracle_b_result.get("metrics", {}),
+                        "reward_hack_signals": sorted(
+                            set(oracle_a_result.get("metrics", {}).get("reward_hack_signals", []))
+                            | set(oracle_b_result.get("metrics", {}).get("reward_hack_signals", []))
+                        ),
                         "canary_leak": bool(
                             oracle_a_result.get("metrics", {}).get("canary_leak")
                             or oracle_b_result.get("metrics", {}).get("canary_leak")
@@ -979,6 +1082,14 @@ def main() -> int:
     prior_shadow, prior_billed = logged_costs(args.log, digest)
     within_ceiling = ceiling is None or prior_billed + total_billed_estimate <= ceiling
     concurrency = int(manifest["max_concurrent_agents"])
+    archive_root = None
+    if manifest.get("artifact_archive_dir"):
+        configured_archive = Path(manifest["artifact_archive_dir"])
+        archive_root = (
+            configured_archive
+            if configured_archive.is_absolute()
+            else (args.manifest.parent / configured_archive).resolve()
+        )
 
     print(
         json.dumps(
@@ -1058,6 +1169,7 @@ def main() -> int:
                         estimate_per_trajectory,
                         common_first_cycle,
                         common_consumer_counts[group],
+                        archive_root,
                     )
                 ] = (key, group, attempt_id, estimate_per_trajectory)
             for future in as_completed(futures):

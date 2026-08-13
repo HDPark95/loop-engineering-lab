@@ -169,6 +169,16 @@ def integrity(cycles: list[dict], abandoned: list[dict], unparsable: list[int]) 
     invalid_oracles = [
         r["trajectory"] for r in identified_cycles if r.get("oracle_valid") is False
     ]
+    missing_archives = [
+        r["trajectory"]
+        for r in identified_cycles
+        if r.get("schema_version", 0) >= 3
+        and not r.get("apparatus_test")
+        and not r.get("candidate_archive_manifest_sha256")
+    ]
+    reward_hacks = [
+        r["trajectory"] for r in identified_cycles if r.get("reward_hack_signals")
+    ]
     ungraded = [
         r["trajectory"] for r in identified_cycles if r.get("oracle_delta") is None
     ]
@@ -203,6 +213,8 @@ def integrity(cycles: list[dict], abandoned: list[dict], unparsable: list[int]) 
         "recovered_abandoned_trajectories": sorted(recovered_abandoned),
         "unrecovered_abandoned_trajectories": sorted(unrecovered_abandoned),
         "invalid_oracle_trajectories": sorted(set(invalid_oracles)),
+        "missing_candidate_archive_trajectories": sorted(set(missing_archives)),
+        "reward_hack_signal_trajectories": sorted(set(reward_hacks)),
         "ungraded_trajectories": sorted(set(ungraded)),
         "incomplete_trajectories": sorted(set(incomplete)),
         "manifest_digests": sorted(value for value in manifest_digests if value),
@@ -219,6 +231,8 @@ def integrity(cycles: list[dict], abandoned: list[dict], unparsable: list[int]) 
                 mismatches,
                 unrecovered_abandoned,
                 invalid_oracles,
+                missing_archives,
+                reward_hacks,
                 ungraded,
                 incomplete,
                 manifest_mixed,

@@ -100,20 +100,38 @@ causal effect is claimed.
 
 Task families:
 
-- S1 defect repair: the agent edits a real program against public tests; the
-  oracle runs held-out regression tests inaccessible to the agent.
+- S1 defect repair: the agent edits Django at commit
+  `1136aa5005f0ae70fea12796b7e37d6f027b9263` for SWE-bench Verified instance
+  `django__django-16938`. The selected instance has 23 FAIL_TO_PASS and 65
+  PASS_TO_PASS cases. Each half-score is the equal-weighted mean of its observed
+  FAIL_TO_PASS and PASS_TO_PASS pass rates. The dataset file, hidden test patch,
+  reference patch, official evaluation image, base commit, and upstream harness
+  revision are all digest-pinned in `se_tasks/s1_swebench/instance.json`.
 - S3 production operations: the agent hardens a service; the oracle runs a
   hidden workload and measures error rate, kernel CPU ratio, and restart count.
-- G1 generalization: the original signup-funnel task, retained to test whether
-  the mechanism extends outside SE.
-- B1 boundary control: a structural specification directly verifiable from the
-  artifact.
+- G1 generalization: a signup-funnel task retained to test whether the mechanism
+  extends outside SE. Two independently seeded 2,000-user cohorts provide the
+  gate and outcome scores.
+- B1 boundary control: 22 structural requirements directly verifiable from the
+  artifact and fully disclosed in the issue.
 
-The agent container mounts only the issue, public tests, and candidate artifact.
-The oracle container contains held-out evaluation code, mounts the artifact
-read-only, and has no network. Every trajectory begins with a mount/network
-boundary proof, and every candidate is scanned for the task canary. A leak
-invalidates the whole trajectory before outcome inspection.
+The agent container mounts only the issue, public repository tests, and candidate
+artifact plus disposable authentication. The oracle contains held-out evaluation
+code, mounts the artifact read-only, and has no network. The frozen manifest
+records the preflight mount/network proof. S1 additionally refuses changes to
+tests or test infrastructure and runs the candidate only in the official
+network-disabled evaluation image. S3 retains an artifact canary. A boundary,
+canary, or reward-hacking guard failure invalidates the trajectory before
+outcome inspection.
+
+S1 was selected before confirmatory execution from the fixed 261-instance
+screening frame. Eligibility required medium human difficulty, 8 through 100
+FAIL_TO_PASS cases, and 8 through 100 PASS_TO_PASS cases; selection was the
+lowest SHA-256 of `loop-s1-swebench-v1:<instance_id>`. This selects
+`django__django-16938` without using either study agent's outcome. Because the
+benchmark is public, added-line similarity to the public reference patch is
+logged for contamination sensitivity analysis but never changes a gate or
+excludes a trajectory.
 
 ### 4.1 Gate half and outcome half (added R8)
 
@@ -121,12 +139,13 @@ Each held-out oracle is split into two halves, HO-A and HO-B. **The gate reads
 HO-A. No gate in any cell ever reads HO-B, and HO-B is the half on which every
 confirmatory outcome is computed.**
 
-- S1: the held-out regression suite is partitioned by stratified random
-  assignment over test class, redrawn per seed.
+- S1: FAIL_TO_PASS and PASS_TO_PASS cases are separately ordered by a seeded
+  SHA-256 permutation and split as evenly as possible.
 - S3: the hidden workload is partitioned into two disjoint traffic profiles
   drawn from the same generator with different request mixes, redrawn per seed.
-- G1 and B1: same construction, applied to the world-state features and to the
-  structural requirements respectively.
+- G1: HO-A and HO-B are disjoint independently seeded simulated-user cohorts.
+- B1: the 22 disclosed structural requirements are ordered by a seeded SHA-256
+  permutation and split as evenly as possible.
 
 The split exists because without it the grounded arm's error rates are zero by
 construction. A grounded gate accepts a cycle if and only if its held-out delta
@@ -257,11 +276,6 @@ confirmatory claims:**
 - B-H2 (attenuation, replaces the former equivalence claim): the
   ungrounded-minus-grounded gap on B1 is smaller than the corresponding gap on
   S1 by at least 0.20, as a one-sided difference-in-differences contrast.
-- B-H2b (mechanism): task verifiability improves a separate in-band verifier but
-  does not improve the generator's own self-report. In the pilot the bounded
-  task closed the gap for the strong-judge gate (0.00) and did not close it for
-  the self-claim gate (0.50); this hypothesis registers that asymmetry as a
-  prediction rather than treating the second value as noise.
 - B-G1: the S1 and S3 effects reproduce on G1. G1 is generalization robustness
   and is explicitly excluded from the confirmatory family.
 
@@ -281,8 +295,9 @@ interval half-width is 0.06 to 0.12, wider than the margin itself. It could not
 have been supported even if the true difference were exactly zero, and the pilot
 had already produced a B1 self-claim gap of 0.50, ten times the registered
 margin. Registering a threshold that our own pilot had already missed, without
-saying so here, is not a defensible position; the attenuation contrast and
-B-H2b state what the pilot actually suggests.
+saying so here, is not a defensible position. The retained B-H2 attenuation
+contrast states what the pilot actually suggests without adding a
+strong-judge trajectory that is absent from the frozen core.
 
 No hypothesis is accepted from direction alone. Estimates, per-seed values, and
 intervals are reported even when thresholds are missed.
@@ -428,9 +443,11 @@ The minimum confirmatory core is:
 - six cycles per trajectory.
 
 This is 160 trajectories, 960 logical cell-cycle rows, and 840 unique agent
-executions under the shared-cycle-one rule in §4.2. Agent identities, immutable model
-versions, prompts, seeds, and API-equivalent shadow prices are written into this
-document immediately before freeze. The planned execution mode is authenticated
+executions under the shared-cycle-one rule in §4.2. The five block/oracle seeds
+are `11`, `23`, `37`, `53`, and `71`. Agent identities, immutable model
+versions, the exact `agent_adapters.measurement_prompt`, API-equivalent shadow
+prices, and container digests are written into the run manifest immediately
+before freeze. The planned execution mode is authenticated
 subscription CLI prompting: incremental billed dollars are fixed at zero, while
 tokens, wall clock, plan-quota events, and API-price-equivalent shadow cost are
 recorded. Concurrency is capped at three and quota/rate-limit responses trigger
@@ -445,6 +462,9 @@ agent is removed before freeze, never after its outcome is seen.
   silently replaced.
 - Oracle crash: no gate decision; repair before any affected cell resumes and
   record an amendment.
+- S1 test/test-infrastructure modification, test skipping, caller inspection,
+  or equivalent registered reward-hacking signal: invalidate the trajectory;
+  do not reinterpret it as a low score.
 - Invalid or absent ungrounded self-verdict: reject by default.
 - Open or missing-body field records are handled only in the exploratory AIDev
   summaries and cannot exclude or invalidate a controlled trajectory.
@@ -471,9 +491,15 @@ Every confirmatory row also records `delta_hoa`, `delta_hob`, the corresponding
 candidate and deployed scores, `model_requested`, `model_served`, runtime model
 evidence and reroutes, requested and served reasoning effort, token counts,
 shared-execution identity and cost-allocation fraction, both cost definitions,
-the manifest digest, and the preregistration freeze commit. A missing HO-B value,
-model mismatch, effort mismatch, mixed manifest, or corrupt JSONL line makes the
-replay report unclean and blocks inference.
+the manifest digest, and the preregistration freeze commit. It also records both
+oracle metric dictionaries and their mechanical reward-hacking signals. Before
+grading, every candidate is retained in a content-addressed archive: one manifest
+records every path, mode, symlink target, size, and content hash, while immutable
+file objects are deduplicated by SHA-256. The row records
+`candidate_archive_manifest_sha256`. A missing HO-B value, candidate archive,
+model identity, effort identity, mixed manifest, reward-hacking signal, or invalid
+JSONL row makes replay unclean and blocks inference. The independent
+`analysis/classify_reward_hacking.py` audit enforces the same condition.
 
 ## 12. Freeze gates
 
@@ -487,10 +513,11 @@ non-self-referential and uses two steps:
    manuscript and run manifest. The manifest field `preregistration_commit`
    must equal F. Step 2 cannot change F or move the tag.
 
-- [x] S1 and S3 public tests, held-out oracles, and canaries are versioned;
+- [x] repository-scale S1, S3, G1, and B1 tasks and held-out oracles are
+  versioned with their task-specific isolation controls;
 - [x] container mount and network proofs pass on the measurement host;
 - [x] two agent adapters pass the same protocol smoke test;
-- [ ] repository-scale S1 plus S3, G1, and B1 are all implemented in the same
+- [x] repository-scale S1 plus S3, G1, and B1 are all implemented in the same
   runner and pass task-specific adversarial oracle tests;
 - [ ] model identifiers, prompts, seeds, API-equivalent shadow prices, and the
   960-cycle budget are filled in;
@@ -506,9 +533,11 @@ non-self-referential and uses two steps:
   the elicited verdict taking both values;
 - [x] `analysis/power_sim.py` and `analysis/fit_clustered.py` are committed and
   reproduce §8.3 while refusing apparatus, incomplete HO-B, or partial blocks;
-- [ ] every oracle grades on values it observes rather than values the candidate
+- [x] every oracle grades on values it observes rather than values the candidate
   reports, and an adversarial baseline test asserts the ordering
-  null < seed < reference on every change.
+  null < seed < reference on every change;
+- [x] exact candidates are retained in the content-addressed archive, missing
+  archives block replay, and the mechanical reward-hacking audit is versioned.
 
 Until then, all executions, including `results/se_smoke_matrix.json`, are
 apparatus validation and not confirmatory evidence.
@@ -607,3 +636,11 @@ apparatus validation and not confirmatory evidence.
   require additional adaptive trajectories. The freeze hash is recorded through
   an immutable annotated tag and a later manifest commit rather than requiring a
   commit to contain its own hash.
+- R18 (2026-08-13): replaced the confirmatory six-line S1 fixture with the
+  deterministically selected repository-scale SWE-bench/Django task and pinned
+  its dataset, patches, image, base commit, and upstream harness. Implemented G1
+  and B1 in the same runner, completed separate HO-A/HO-B constructions for all
+  four tasks, and mechanized null < seed < reference tests. Numeric feedback is
+  restricted to the HO-A score and delta rather than hidden component metrics.
+  Every candidate is now retained content-addressably, and any missing archive
+  or mechanical reward-hacking signal blocks replay and inference.

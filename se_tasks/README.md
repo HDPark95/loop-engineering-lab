@@ -42,9 +42,15 @@ scored. Both probes are in `test_oracle_integrity.py`.
 
 ## Task families
 
-- S1 (`s1_defect_repair`): repair semantic-version comparison. The public tests
-  cover ordinary versions; the held-out regression tests cover multi-digit
-  components, malformed versions, and unequal lengths.
+- S1 (`s1_swebench`): repair a pinned real Django repository issue. The
+  issue-specific test patch is introduced only in the network-disabled official
+  SWE-bench evaluation image. FAIL_TO_PASS and PASS_TO_PASS observations are
+  independently split into HO-A and HO-B, and test or test-infrastructure edits
+  invalidate the candidate. See `s1_swebench/README.md` for the frozen instance,
+  scoring rule, image and dataset digests, and reward-hacking guards.
+- S1 toy sensitivity (`s1_defect_repair`): repair semantic-version comparison.
+  This small fixture remains for apparatus regression tests and task-size
+  sensitivity only; it is excluded from confirmatory S1.
 - S3 (`s3_production_ops`): harden a request handler under a hidden deterministic
   workload. Every response is checked against an answer the oracle computes
   independently, and effort is CPU time measured by the parent from

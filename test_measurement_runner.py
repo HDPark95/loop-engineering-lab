@@ -79,6 +79,19 @@ def run_cli(manifest_path: Path, log_path: Path, run_id: str, *extra) -> subproc
 
 
 class ManifestGateTest(unittest.TestCase):
+    def test_confirmatory_run_requires_candidate_archive(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = write_manifest(
+                Path(tmp),
+                manifest(
+                    apparatus_test=False,
+                    oracle_container_image="oracle@sha256:" + "b" * 64,
+                ),
+            )
+            with self.assertRaises(SystemExit) as caught:
+                run_measurement.load_manifest(path)
+            self.assertIn("artifact_archive_dir", str(caught.exception))
+
     def test_an_alias_model_is_refused(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = write_manifest(
@@ -185,6 +198,7 @@ class ManifestGateTest(unittest.TestCase):
                 apparatus_test=False,
                 agents=[entry],
                 oracle_container_image="sha256:" + "b" * 64,
+                artifact_archive_dir="artifacts",
             )
             path = write_manifest(Path(tmp), data)
             with self.assertRaisesRegex(SystemExit, "reasoning_effort"):
@@ -618,6 +632,28 @@ class RunnerTest(unittest.TestCase):
             self.assertEqual(len(completed), len(cells) - 1)
 
 
+class ArtifactArchiveTest(unittest.TestCase):
+    def test_archive_is_content_addressed_and_exact(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            candidate = root / "candidate"
+            candidate.mkdir()
+            (candidate / "source.py").write_text("value = 1\n", encoding="utf-8")
+            (candidate / "nested").mkdir()
+            (candidate / "nested" / "data.txt").write_text("observed\n", encoding="utf-8")
+            archive = root / "archive"
+            first = run_measurement.archive_candidate(candidate, archive)
+            second = run_measurement.archive_candidate(candidate, archive)
+            self.assertEqual(first, second)
+            record = json.loads(
+                (archive / "manifests" / f"{first}.json").read_text(encoding="utf-8")
+            )
+            files = {entry["path"]: entry for entry in record["entries"] if entry["type"] == "file"}
+            self.assertEqual(files["source.py"]["size"], len("value = 1\n"))
+            object_path = archive / "objects" / files["source.py"]["sha256"][:2] / files["source.py"]["sha256"]
+            self.assertEqual(object_path.read_text(encoding="utf-8"), "value = 1\n")
+
+
 class ReplayTest(unittest.TestCase):
     def test_every_reported_number_comes_from_the_log(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -723,6 +759,26 @@ class ReplayTest(unittest.TestCase):
         metrics = replay.trajectory_metrics(cycles)
         self.assertAlmostEqual(metrics["harmful_acceptance_incidence"], 1 / 6, places=6)
         self.assertAlmostEqual(metrics["false_rejection_incidence"], 1 / 6, places=6)
+
+    def test_schema_three_confirmatory_row_without_archive_is_unclean(self):
+        cycles = [
+            {
+                "schema_version": 3,
+                "trajectory": "t1",
+                "attempt_id": "a",
+                "cycle": 1,
+                "cycles_planned": 1,
+                "oracle_delta": 0.0,
+                "apparatus_test": False,
+                "model_served": "model-v1",
+                "model_identity_matches": True,
+                "manifest_digest": "m",
+                "preregistration_commit": "p",
+            }
+        ]
+        report = replay.integrity(cycles, [], [])
+        self.assertEqual(report["missing_candidate_archive_trajectories"], ["t1"])
+        self.assertFalse(report["clean"])
 
     def test_abandoned_attempt_rows_are_excluded_from_cell_statistics(self):
         cycles = [

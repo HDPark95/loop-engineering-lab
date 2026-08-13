@@ -62,7 +62,10 @@ class ScriptedCandidate:
 
 TASKS = {
     "s1": ROOT / "se_tasks" / "s1_defect_repair",
+    "s1_swebench": ROOT / "se_tasks" / "s1_swebench",
     "s3": ROOT / "se_tasks" / "s3_production_ops",
+    "g1": ROOT / "se_tasks" / "g1_generalization",
+    "b1": ROOT / "se_tasks" / "b1_boundary",
 }
 
 
@@ -84,9 +87,13 @@ def run_oracle(
         text=True,
         # S3 performs three candidate, three reference, and three floor
         # evaluations. One additional child boundary is the parent margin.
-        timeout=(3 * TIMING_REPEATS + 1) * DEFAULT_TIMEOUT_SECONDS
-        if task == "s3"
-        else DEFAULT_TIMEOUT_SECONDS,
+        timeout=(
+            180
+            if task == "s1_swebench"
+            else (3 * TIMING_REPEATS + 1) * DEFAULT_TIMEOUT_SECONDS
+            if task == "s3"
+            else DEFAULT_TIMEOUT_SECONDS
+        ),
     )
     elapsed = time.perf_counter() - started
     result = json.loads(process.stdout)
@@ -115,6 +122,14 @@ def gate_decision(cell: FactorCell, claim_improved: bool, delta: float) -> bool:
 
 
 def copy_seed(task: str, destination: Path) -> None:
+    materializer = TASKS[task] / "materialize.py"
+    if materializer.is_file():
+        subprocess.run(
+            [sys.executable, str(materializer), "--destination", str(destination)],
+            check=True,
+            timeout=300,
+        )
+        return
     shutil.copytree(TASKS[task] / "seed", destination, dirs_exist_ok=True)
 
 

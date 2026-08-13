@@ -20,7 +20,7 @@ def rows(cell: str = "grounded-numeric", accepted=(False, False)) -> list[dict]:
     return [
         {
             "trajectory": f"s1|codex|model|{cell}|1",
-            "task": "s1",
+            "task": "s1_swebench",
             "agent": "codex",
             "seed": 1,
             "cell": cell,
