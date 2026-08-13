@@ -62,12 +62,24 @@ class AdapterTest(unittest.TestCase):
     def test_claude_usage_parser(self):
         output = json.dumps(
             {
-                "usage": {"input_tokens": 30, "output_tokens": 8, "cache_read_input_tokens": 4},
+                "usage": {
+                    "input_tokens": 30,
+                    "output_tokens": 8,
+                    "cache_read_input_tokens": 4,
+                    "cache_creation_input_tokens": 6,
+                    "cache_creation": {
+                        "ephemeral_5m_input_tokens": 4,
+                        "ephemeral_1h_input_tokens": 2,
+                    },
+                },
                 "total_cost_usd": 0.012,
             }
         )
         usage = agent_adapters.parse_claude_usage(output)
         self.assertEqual((usage.input_tokens, usage.output_tokens, usage.cache_tokens), (30, 8, 4))
+        self.assertEqual(usage.cache_creation_tokens, 6)
+        self.assertEqual(usage.cache_creation_5m_tokens, 4)
+        self.assertEqual(usage.cache_creation_1h_tokens, 2)
         self.assertEqual(usage.usd, 0.012)
 
     def test_subscription_cost_separates_cli_estimate_from_billing(self):

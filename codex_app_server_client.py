@@ -72,6 +72,8 @@ def summarize(
     reroutes = []
     report = None
     usage = None
+    request_usages = []
+    observed_totals = set()
     turn_status = None
     for event in events:
         method = event.get("method")
@@ -94,7 +96,23 @@ def summarize(
             )
         elif method == "thread/tokenUsage/updated":
             token_usage = params.get("tokenUsage") or {}
-            usage = token_usage.get("total") or token_usage.get("last")
+            total = token_usage.get("total") or token_usage.get("last")
+            last = token_usage.get("last")
+            usage = total
+            if isinstance(total, dict):
+                total_key = tuple(
+                    total.get(field)
+                    for field in ("inputTokens", "cachedInputTokens", "outputTokens")
+                )
+                if total_key not in observed_totals and isinstance(last, dict):
+                    request_usages.append(
+                        {
+                            "input_tokens": last.get("inputTokens"),
+                            "cached_input_tokens": last.get("cachedInputTokens"),
+                            "output_tokens": last.get("outputTokens"),
+                        }
+                    )
+                    observed_totals.add(total_key)
         elif method == "item/completed":
             item = params.get("item") or {}
             if item.get("type") == "agentMessage":
@@ -136,6 +154,7 @@ def summarize(
             "input_tokens": input_tokens,
             "cached_input_tokens": cached_tokens,
             "output_tokens": output_tokens,
+            "request_usages": request_usages,
         },
     }
 

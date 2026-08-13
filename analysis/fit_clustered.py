@@ -57,7 +57,9 @@ DESCRIPTIVE_FIELDS = (
     "judge_seconds",
     "oracle_seconds",
     "wall_clock_seconds",
+    "api_equivalent_usd_lower_bound",
     "api_equivalent_usd",
+    "api_equivalent_usd_interval_width",
     "incremental_billed_usd",
     "gain_per_1k_tokens",
     "gain_per_api_equivalent_usd",
@@ -87,6 +89,13 @@ def require_confirmatory_rows(rows: list[dict]) -> None:
         for row in rows
     ):
         raise ValueError("every cycle must carry the frozen edit-success fields")
+    if any(
+        not isinstance(row.get("api_equivalent_usd_lower_bound"), (int, float))
+        or not isinstance(row.get("api_equivalent_usd"), (int, float))
+        or row["api_equivalent_usd_lower_bound"] > row["api_equivalent_usd"]
+        for row in rows
+    ):
+        raise ValueError("every cycle must carry a valid shadow-price interval")
     planned = rows[0].get("cycles_planned")
     observed = {row.get("cycle") for row in rows}
     if not isinstance(planned, int) or observed != set(range(1, planned + 1)):
@@ -131,6 +140,9 @@ def trajectory_record(rows: list[dict]) -> dict:
     api_equivalent_usd = sum(
         float(row.get("api_equivalent_usd") or 0.0) for row in rows
     )
+    api_equivalent_usd_lower_bound = sum(
+        float(row.get("api_equivalent_usd_lower_bound") or 0.0) for row in rows
+    )
     incremental_billed_usd = sum(
         float(row.get("incremental_billed_usd") or 0.0) for row in rows
     )
@@ -161,7 +173,11 @@ def trajectory_record(rows: list[dict]) -> dict:
         "judge_seconds": judge_seconds,
         "oracle_seconds": oracle_seconds,
         "wall_clock_seconds": wall_clock_seconds,
+        "api_equivalent_usd_lower_bound": api_equivalent_usd_lower_bound,
         "api_equivalent_usd": api_equivalent_usd,
+        "api_equivalent_usd_interval_width": (
+            api_equivalent_usd - api_equivalent_usd_lower_bound
+        ),
         "incremental_billed_usd": incremental_billed_usd,
         "gain_per_1k_tokens": (
             delivered_gain / (total_tokens / 1000.0) if total_tokens else None
@@ -360,7 +376,9 @@ def analyze(log_path: Path) -> dict:
                     "judge_seconds",
                     "oracle_seconds",
                     "wall_clock_seconds",
+                    "api_equivalent_usd_lower_bound",
                     "api_equivalent_usd",
+                    "api_equivalent_usd_interval_width",
                     "incremental_billed_usd",
                     "gain_per_1k_tokens",
                     "gain_per_api_equivalent_usd",

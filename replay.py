@@ -28,6 +28,49 @@ from pathlib import Path
 from statistics import median
 
 
+def shadow_bounds_from_row(row: dict) -> tuple[float, float]:
+    """Independently reconstruct schema-five shadow-price endpoints."""
+    schedule = row["shadow_price_schedule"]
+    input_rate = float(schedule["usd_per_1k_input"]) / 1000.0
+    cached_rate = float(schedule["usd_per_1k_cached_input"]) / 1000.0
+    output_rate = float(schedule["usd_per_1k_output"]) / 1000.0
+    write_multiplier = float(schedule["cache_write_input_multiplier"])
+    write_1h_multiplier = float(schedule["cache_write_1h_input_multiplier"])
+    long_input_multiplier = float(schedule["long_context_input_multiplier"])
+    long_output_multiplier = float(schedule["long_context_output_multiplier"])
+    standard_uncached = float(row["execution_standard_uncached_input_tokens"])
+    standard_cached = float(row["execution_standard_cached_input_tokens"])
+    standard_output = float(row["execution_standard_output_tokens"])
+    long_uncached = float(row["execution_long_uncached_input_tokens"])
+    long_cached = float(row["execution_long_cached_input_tokens"])
+    long_output = float(row["execution_long_output_tokens"])
+    base = (
+        standard_uncached * input_rate
+        + standard_cached * cached_rate
+        + standard_output * output_rate
+        + long_uncached * input_rate * long_input_multiplier
+        + long_cached * cached_rate * long_input_multiplier
+        + long_output * output_rate * long_output_multiplier
+    )
+    if row["cache_write_input_tokens_exact"]:
+        writes_5m = float(row["execution_cache_write_5m_input_tokens"])
+        writes_1h = float(row["execution_cache_write_1h_input_tokens"])
+        tier_multiplier = long_input_multiplier if long_uncached else 1.0
+        exact = base + input_rate * tier_multiplier * (
+            writes_5m * (write_multiplier - 1.0)
+            + writes_1h * (write_1h_multiplier - 1.0)
+        )
+        return exact, exact
+    upper = base + (
+        standard_uncached * input_rate * (write_multiplier - 1.0)
+        + long_uncached
+        * input_rate
+        * long_input_multiplier
+        * (write_multiplier - 1.0)
+    )
+    return base, upper
+
+
 def load(log_path: Path) -> tuple[list[dict], list[dict], list[int]]:
     """Load valid records and retain the line numbers of corrupt JSONL rows."""
     cycles, abandoned, unparsable = [], [], []
@@ -142,6 +185,19 @@ def trajectory_metrics(rows: list[dict]) -> dict:
             ),
             6,
         ),
+        "api_equivalent_usd_lower_bound": round(
+            sum(
+                r.get("api_equivalent_usd_lower_bound")
+                if r.get("api_equivalent_usd_lower_bound") is not None
+                else (
+                    r.get("api_equivalent_usd")
+                    if r.get("api_equivalent_usd") is not None
+                    else (r.get("usd") or 0.0)
+                )
+                for r in rows
+            ),
+            6,
+        ),
         "incremental_billed_usd": round(
             sum(r.get("incremental_billed_usd") or 0.0 for r in rows), 6
         ),
@@ -183,7 +239,7 @@ def integrity(cycles: list[dict], abandoned: list[dict], unparsable: list[int]) 
     ]
     invalid_measurement_contracts = []
     for row in identified_cycles:
-        if row.get("schema_version", 0) < 4 or row.get("apparatus_test"):
+        if row.get("schema_version", 0) < 4:
             continue
         fraction = row.get("cost_allocation_fraction")
         candidate_changed = row.get("candidate_changed")
@@ -231,6 +287,133 @@ def integrity(cycles: list[dict], abandoned: list[dict], unparsable: list[int]) 
                 <= 1e-5
                 for logical, execution in allocations
             )
+        if valid and row.get("schema_version", 0) >= 5:
+            schema_five_numeric = (
+                "execution_api_equivalent_usd_lower_bound",
+                "api_equivalent_usd_lower_bound",
+                "execution_uncached_input_tokens",
+                "execution_cached_input_tokens",
+                "execution_cache_write_input_tokens",
+                "execution_cache_write_5m_input_tokens",
+                "execution_cache_write_1h_input_tokens",
+                "execution_standard_uncached_input_tokens",
+                "execution_standard_cached_input_tokens",
+                "execution_standard_output_tokens",
+                "execution_long_uncached_input_tokens",
+                "execution_long_cached_input_tokens",
+                "execution_long_output_tokens",
+                "uncached_input_tokens",
+                "cached_input_tokens",
+                "cache_write_input_tokens",
+                "cache_write_5m_input_tokens",
+                "cache_write_1h_input_tokens",
+                "request_usage_count",
+            )
+            schedule = row.get("shadow_price_schedule")
+            schedule_numeric = (
+                "usd_per_1k_input",
+                "usd_per_1k_cached_input",
+                "usd_per_1k_output",
+                "cache_write_input_multiplier",
+                "cache_write_1h_input_multiplier",
+                "long_context_threshold_input_tokens",
+                "long_context_input_multiplier",
+                "long_context_output_multiplier",
+            )
+            schedule_text = (
+                "pricing_schedule_id",
+                "pricing_source_url",
+                "pricing_retrieved_utc",
+            )
+            valid = bool(
+                all(
+                    isinstance(row.get(field), (int, float))
+                    and not isinstance(row.get(field), bool)
+                    and float(row[field]) >= 0.0
+                    for field in schema_five_numeric
+                )
+                and isinstance(row.get("cache_write_input_tokens_exact"), bool)
+                and isinstance(row.get("api_equivalent_price_exact"), bool)
+                and isinstance(schedule, dict)
+                and all(
+                    isinstance(schedule.get(field), (int, float))
+                    and not isinstance(schedule.get(field), bool)
+                    and float(schedule[field]) >= 0.0
+                    for field in schedule_numeric
+                )
+                and all(
+                    isinstance(schedule.get(field), str) and schedule[field]
+                    for field in schedule_text
+                )
+            )
+            if valid:
+                execution_uncached = (
+                    float(row["execution_standard_uncached_input_tokens"])
+                    + float(row["execution_long_uncached_input_tokens"])
+                )
+                execution_cached = (
+                    float(row["execution_standard_cached_input_tokens"])
+                    + float(row["execution_long_cached_input_tokens"])
+                )
+                execution_output = (
+                    float(row["execution_standard_output_tokens"])
+                    + float(row["execution_long_output_tokens"])
+                )
+                valid = bool(
+                    abs(execution_uncached - float(row["execution_uncached_input_tokens"]))
+                    <= 1e-5
+                    and abs(execution_cached - float(row["execution_cached_input_tokens"]))
+                    <= 1e-5
+                    and abs(
+                        execution_uncached
+                        + execution_cached
+                        - float(row["execution_input_tokens"])
+                    )
+                    <= 1e-5
+                    and abs(execution_output - float(row["execution_output_tokens"]))
+                    <= 1e-5
+                    and float(row["execution_cache_write_input_tokens"])
+                    <= execution_uncached
+                    and abs(
+                        float(row["execution_cache_write_5m_input_tokens"])
+                        + float(row["execution_cache_write_1h_input_tokens"])
+                        - float(row["execution_cache_write_input_tokens"])
+                    ) <= 1e-5
+                    and all(
+                        abs(float(row[logical]) - float(row[execution]) * float(fraction))
+                        <= 1e-5
+                        for logical, execution in (
+                            ("uncached_input_tokens", "execution_uncached_input_tokens"),
+                            ("cached_input_tokens", "execution_cached_input_tokens"),
+                            ("cache_write_input_tokens", "execution_cache_write_input_tokens"),
+                            (
+                                "cache_write_5m_input_tokens",
+                                "execution_cache_write_5m_input_tokens",
+                            ),
+                            (
+                                "cache_write_1h_input_tokens",
+                                "execution_cache_write_1h_input_tokens",
+                            ),
+                            (
+                                "api_equivalent_usd_lower_bound",
+                                "execution_api_equivalent_usd_lower_bound",
+                            ),
+                        )
+                    )
+                )
+            if valid:
+                expected_lower, expected_upper = shadow_bounds_from_row(row)
+                valid = bool(
+                    abs(
+                        float(row["execution_api_equivalent_usd_lower_bound"])
+                        - expected_lower
+                    )
+                    <= 1e-5
+                    and abs(float(row["execution_api_equivalent_usd"]) - expected_upper)
+                    <= 1e-5
+                    and row["api_equivalent_price_exact"]
+                    == (abs(expected_upper - expected_lower) <= 1e-12)
+                )
         if not valid:
             invalid_measurement_contracts.append(row["trajectory"])
     ungraded = [
@@ -333,6 +516,9 @@ def by_cell(grouped: dict[str, list[dict]]) -> dict:
             if m["false_rejection_incidence"] is not None
         ]
         api_equivalent_usd = sum(m["api_equivalent_usd"] for m in metrics)
+        api_equivalent_usd_lower_bound = sum(
+            m["api_equivalent_usd_lower_bound"] for m in metrics
+        )
         incremental_billed_usd = sum(m["incremental_billed_usd"] for m in metrics)
         tokens = sum(m["input_tokens"] + m["output_tokens"] for m in metrics)
         grounded = cell.startswith("grounded")
@@ -375,6 +561,9 @@ def by_cell(grouped: dict[str, list[dict]]) -> dict:
                 else None
             ),
             "api_equivalent_usd": round(api_equivalent_usd, 6),
+            "api_equivalent_usd_lower_bound": round(
+                api_equivalent_usd_lower_bound, 6
+            ),
             "incremental_billed_usd": round(incremental_billed_usd, 6),
         }
     return out

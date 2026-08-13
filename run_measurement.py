@@ -56,7 +56,7 @@ import agent_adapters
 import se_experiment
 
 ROOT = Path(__file__).resolve().parent
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 # Founder-approved lane rule: at most three agent processes at once. Quota or
 # rate-limit responses wait and retry; they never trigger a switch to API billing.
@@ -209,6 +209,68 @@ def load_manifest(path: Path) -> dict:
             agent["usd_per_1k_output"],
             f"agent {agent.get('name')!r} usd_per_1k_output",
         )
+        if not manifest.get("apparatus_test", False):
+            required_pricing_fields = (
+                "usd_per_1k_cached_input",
+                "cache_write_input_multiplier",
+                "cache_write_1h_input_multiplier",
+                "long_context_threshold_input_tokens",
+                "long_context_input_multiplier",
+                "long_context_output_multiplier",
+                "pricing_schedule_id",
+                "pricing_source_url",
+                "pricing_retrieved_utc",
+            )
+            missing_pricing = [
+                field for field in required_pricing_fields if field not in agent
+            ]
+            if missing_pricing:
+                raise SystemExit(
+                    f"agent {agent.get('name')!r} is missing frozen shadow-pricing "
+                    f"fields: {', '.join(missing_pricing)}"
+                )
+            finite_nonnegative(
+                agent["usd_per_1k_cached_input"],
+                f"agent {agent.get('name')!r} usd_per_1k_cached_input",
+            )
+            cache_write_multiplier = finite_nonnegative(
+                agent["cache_write_input_multiplier"],
+                f"agent {agent.get('name')!r} cache_write_input_multiplier",
+            )
+            long_input_multiplier = finite_nonnegative(
+                agent["long_context_input_multiplier"],
+                f"agent {agent.get('name')!r} long_context_input_multiplier",
+            )
+            cache_write_1h_multiplier = finite_nonnegative(
+                agent["cache_write_1h_input_multiplier"],
+                f"agent {agent.get('name')!r} cache_write_1h_input_multiplier",
+            )
+            long_output_multiplier = finite_nonnegative(
+                agent["long_context_output_multiplier"],
+                f"agent {agent.get('name')!r} long_context_output_multiplier",
+            )
+            threshold = agent["long_context_threshold_input_tokens"]
+            if (
+                not isinstance(threshold, int)
+                or isinstance(threshold, bool)
+                or threshold <= 0
+            ):
+                raise SystemExit(
+                    f"agent {agent.get('name')!r} long-context threshold must be "
+                    "a positive integer"
+                )
+            if min(
+                cache_write_multiplier,
+                cache_write_1h_multiplier,
+                long_input_multiplier,
+                long_output_multiplier,
+            ) < 1.0:
+                raise SystemExit("shadow-pricing multipliers must be at least one")
+            for field in ("pricing_schedule_id", "pricing_source_url", "pricing_retrieved_utc"):
+                if not isinstance(agent[field], str) or not agent[field].strip():
+                    raise SystemExit(
+                        f"agent {agent.get('name')!r} {field} must be a nonempty string"
+                    )
         if adapter in {"codex", "claude"}:
             image = agent.get("container_image", "")
             if not image_is_digest_pinned(image):
@@ -754,6 +816,39 @@ def validate_usage(outcome: dict) -> None:
         value = outcome.get(field)
         if not isinstance(value, int) or isinstance(value, bool) or value < 0:
             raise RuntimeError(f"agent output has invalid {field}")
+    total_input = outcome["input_tokens"]
+    cached = outcome.get("cached_input_tokens", 0)
+    uncached = outcome.get("uncached_input_tokens", total_input - cached)
+    cache_write = outcome.get("cache_write_input_tokens", 0)
+    for field, value in (
+        ("cached_input_tokens", cached),
+        ("uncached_input_tokens", uncached),
+        ("cache_write_input_tokens", cache_write),
+        ("cache_write_5m_input_tokens", outcome.get("cache_write_5m_input_tokens", 0)),
+        ("cache_write_1h_input_tokens", outcome.get("cache_write_1h_input_tokens", 0)),
+    ):
+        if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+            raise RuntimeError(f"agent output has invalid {field}")
+    if cached + uncached != total_input or cache_write > uncached:
+        raise RuntimeError("agent output has inconsistent normalized input usage")
+    if outcome.get("cache_write_input_tokens_exact", False) and (
+        outcome.get("cache_write_5m_input_tokens", 0)
+        + outcome.get("cache_write_1h_input_tokens", 0)
+        != cache_write
+    ):
+        raise RuntimeError("agent output has inconsistent cache-write TTL usage")
+    request_usages = outcome.get("request_usages", [])
+    if not isinstance(request_usages, list):
+        raise RuntimeError("agent output has invalid request_usages")
+    for request in request_usages:
+        if not isinstance(request, dict):
+            raise RuntimeError("agent output has invalid request usage entry")
+        for field in ("input_tokens", "cached_input_tokens", "output_tokens"):
+            value = request.get(field)
+            if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+                raise RuntimeError(f"agent request usage has invalid {field}")
+        if request["cached_input_tokens"] > request["input_tokens"]:
+            raise RuntimeError("agent request cached input exceeds total input")
 
 
 def invoke_with_quota_wait(driver, manifest: dict, sleep_fn=time.sleep, **kwargs) -> dict:
@@ -794,11 +889,139 @@ def digest_of(root: Path) -> str:
     return hasher.hexdigest()
 
 
-def price_of(agent_entry: dict, input_tokens: int, output_tokens: int) -> float:
-    return (
-        input_tokens / 1000.0 * float(agent_entry["usd_per_1k_input"])
-        + output_tokens / 1000.0 * float(agent_entry["usd_per_1k_output"])
+def price_schedule(agent_entry: dict) -> dict:
+    """Return the complete frozen schedule copied into every schema-five row."""
+    return {
+        "pricing_schedule_id": agent_entry.get("pricing_schedule_id", "legacy-apparatus"),
+        "pricing_source_url": agent_entry.get("pricing_source_url", "apparatus-only"),
+        "pricing_retrieved_utc": agent_entry.get("pricing_retrieved_utc", "unregistered"),
+        "usd_per_1k_input": float(agent_entry["usd_per_1k_input"]),
+        "usd_per_1k_cached_input": float(
+            agent_entry.get("usd_per_1k_cached_input", agent_entry["usd_per_1k_input"])
+        ),
+        "usd_per_1k_output": float(agent_entry["usd_per_1k_output"]),
+        "cache_write_input_multiplier": float(
+            agent_entry.get("cache_write_input_multiplier", 1.0)
+        ),
+        "cache_write_1h_input_multiplier": float(
+            agent_entry.get("cache_write_1h_input_multiplier", 1.0)
+        ),
+        "long_context_threshold_input_tokens": int(
+            agent_entry.get("long_context_threshold_input_tokens", 10**18)
+        ),
+        "long_context_input_multiplier": float(
+            agent_entry.get("long_context_input_multiplier", 1.0)
+        ),
+        "long_context_output_multiplier": float(
+            agent_entry.get("long_context_output_multiplier", 1.0)
+        ),
+    }
+
+
+def price_of(agent_entry: dict, outcome: dict) -> dict:
+    """Compute a reproducible API-equivalent interval from normalized usage.
+
+    Codex exposes cache reads but not cache writes, so its upper endpoint treats
+    every non-cached input token as a possible cache write. The lower endpoint
+    treats none as a write. Claude exposes cache creation separately, making
+    the endpoints equal. Long-context premiums are classified per model request
+    when request-level telemetry exists; an unclassifiable aggregate fails.
+    """
+    schedule = price_schedule(agent_entry)
+    total_input = int(outcome["input_tokens"])
+    output_tokens = int(outcome["output_tokens"])
+    cached = int(outcome.get("cached_input_tokens", 0))
+    uncached = int(outcome.get("uncached_input_tokens", total_input - cached))
+    cache_write = int(outcome.get("cache_write_input_tokens", 0))
+    cache_write_5m = int(outcome.get("cache_write_5m_input_tokens", 0))
+    cache_write_1h = int(outcome.get("cache_write_1h_input_tokens", 0))
+    cache_write_exact = bool(outcome.get("cache_write_input_tokens_exact", False))
+    requests = outcome.get("request_usages", [])
+    threshold = schedule["long_context_threshold_input_tokens"]
+
+    if requests:
+        if sum(request["input_tokens"] for request in requests) != total_input:
+            raise RuntimeError("request input usage does not sum to total input usage")
+        if sum(request["cached_input_tokens"] for request in requests) != cached:
+            raise RuntimeError("request cached usage does not sum to total cached usage")
+        if sum(request["output_tokens"] for request in requests) != output_tokens:
+            raise RuntimeError("request output usage does not sum to total output usage")
+        standard = [request for request in requests if request["input_tokens"] <= threshold]
+        long = [request for request in requests if request["input_tokens"] > threshold]
+    else:
+        if total_input > threshold:
+            raise RuntimeError(
+                "aggregate usage exceeds the long-context threshold without request telemetry"
+            )
+        standard = [{
+            "input_tokens": total_input,
+            "cached_input_tokens": cached,
+            "output_tokens": output_tokens,
+        }]
+        long = []
+
+    def totals(rows: list[dict]) -> tuple[int, int, int]:
+        input_total = sum(row["input_tokens"] for row in rows)
+        cached_total = sum(row["cached_input_tokens"] for row in rows)
+        output_total = sum(row["output_tokens"] for row in rows)
+        return input_total - cached_total, cached_total, output_total
+
+    standard_uncached, standard_cached, standard_output = totals(standard)
+    long_uncached, long_cached, long_output = totals(long)
+    if standard_uncached + long_uncached != uncached:
+        raise RuntimeError("normalized uncached usage disagrees with request telemetry")
+
+    input_rate = schedule["usd_per_1k_input"] / 1000.0
+    cached_rate = schedule["usd_per_1k_cached_input"] / 1000.0
+    output_rate = schedule["usd_per_1k_output"] / 1000.0
+    write_multiplier = schedule["cache_write_input_multiplier"]
+    write_1h_multiplier = schedule["cache_write_1h_input_multiplier"]
+    long_input_multiplier = schedule["long_context_input_multiplier"]
+    long_output_multiplier = schedule["long_context_output_multiplier"]
+
+    base_without_writes = (
+        standard_uncached * input_rate
+        + standard_cached * cached_rate
+        + standard_output * output_rate
+        + long_uncached * input_rate * long_input_multiplier
+        + long_cached * cached_rate * long_input_multiplier
+        + long_output * output_rate * long_output_multiplier
     )
+    if cache_write_exact:
+        if cache_write and standard_uncached and long_uncached:
+            raise RuntimeError("cache writes cannot be allocated across mixed context tiers")
+        write_tier_multiplier = long_input_multiplier if long_uncached else 1.0
+        write_surcharge = input_rate * write_tier_multiplier * (
+            cache_write_5m * (write_multiplier - 1.0)
+            + cache_write_1h * (write_1h_multiplier - 1.0)
+        )
+        lower = upper = base_without_writes + write_surcharge
+    else:
+        lower = base_without_writes
+        upper = base_without_writes + (
+            standard_uncached * input_rate * (write_multiplier - 1.0)
+            + long_uncached
+            * input_rate
+            * long_input_multiplier
+            * (write_multiplier - 1.0)
+        )
+    return {
+        "lower_usd": round(lower, 9),
+        "upper_usd": round(upper, 9),
+        "exact": abs(upper - lower) <= 1e-12,
+        "cache_write_input_tokens": cache_write,
+        "cache_write_5m_input_tokens": cache_write_5m,
+        "cache_write_1h_input_tokens": cache_write_1h,
+        "cache_write_input_tokens_exact": cache_write_exact,
+        "standard_uncached_input_tokens": standard_uncached,
+        "standard_cached_input_tokens": standard_cached,
+        "standard_output_tokens": standard_output,
+        "long_uncached_input_tokens": long_uncached,
+        "long_cached_input_tokens": long_cached,
+        "long_output_tokens": long_output,
+        "request_count": len(requests) if requests else 1,
+        "schedule": schedule,
+    }
 
 
 def run_trajectory(
@@ -864,10 +1087,11 @@ def run_trajectory(
                 shared_execution_id = None
                 cost_owner = True
                 cost_share = 1.0
-            execution_shadow_usd = price_of(
-                agent_entry, outcome["input_tokens"], outcome["output_tokens"]
-            )
+            pricing = price_of(agent_entry, outcome)
+            execution_shadow_usd = pricing["upper_usd"]
+            execution_shadow_lower_usd = pricing["lower_usd"]
             shadow_usd = execution_shadow_usd * cost_share
+            shadow_lower_usd = execution_shadow_lower_usd * cost_share
             incremental_billed_usd = shadow_usd if manifest["billing_mode"] == "api" else 0.0
             trajectory_cost += shadow_usd
             if cost_owner:
@@ -915,9 +1139,49 @@ def run_trajectory(
                 "shared_execution_id": shared_execution_id,
                 "cost_allocation_fraction": cost_share,
                 "execution_api_equivalent_usd": round(execution_shadow_usd, 6),
+                "execution_api_equivalent_usd_lower_bound": round(
+                    execution_shadow_lower_usd, 6
+                ),
                 "execution_input_tokens": outcome["input_tokens"],
+                "execution_uncached_input_tokens": (
+                    pricing["standard_uncached_input_tokens"]
+                    + pricing["long_uncached_input_tokens"]
+                ),
+                "execution_cached_input_tokens": (
+                    pricing["standard_cached_input_tokens"]
+                    + pricing["long_cached_input_tokens"]
+                ),
+                "execution_cache_write_input_tokens": pricing[
+                    "cache_write_input_tokens"
+                ],
+                "execution_cache_write_5m_input_tokens": pricing[
+                    "cache_write_5m_input_tokens"
+                ],
+                "execution_cache_write_1h_input_tokens": pricing[
+                    "cache_write_1h_input_tokens"
+                ],
+                "execution_standard_uncached_input_tokens": pricing[
+                    "standard_uncached_input_tokens"
+                ],
+                "execution_standard_cached_input_tokens": pricing[
+                    "standard_cached_input_tokens"
+                ],
+                "execution_standard_output_tokens": pricing["standard_output_tokens"],
+                "execution_long_uncached_input_tokens": pricing[
+                    "long_uncached_input_tokens"
+                ],
+                "execution_long_cached_input_tokens": pricing[
+                    "long_cached_input_tokens"
+                ],
+                "execution_long_output_tokens": pricing["long_output_tokens"],
                 "execution_output_tokens": outcome["output_tokens"],
                 "execution_agent_seconds": outcome.get("agent_seconds"),
+                "request_usage_count": pricing["request_count"],
+                "cache_write_input_tokens_exact": pricing[
+                    "cache_write_input_tokens_exact"
+                ],
+                "api_equivalent_price_exact": pricing["exact"],
+                "shadow_price_schedule": pricing["schedule"],
                 "claim_improved": outcome.get("claim_improved"),
                 "claim_confidence": outcome.get("claim_confidence"),
                 "claim_evidence": outcome.get("claim_evidence"),
@@ -925,6 +1189,31 @@ def run_trajectory(
                 "self_report": outcome.get("self_report"),
                 "judge_verdict": outcome.get("judge_verdict"),
                 "input_tokens": round(outcome["input_tokens"] * cost_share, 6),
+                "uncached_input_tokens": round(
+                    (
+                        pricing["standard_uncached_input_tokens"]
+                        + pricing["long_uncached_input_tokens"]
+                    )
+                    * cost_share,
+                    6,
+                ),
+                "cached_input_tokens": round(
+                    (
+                        pricing["standard_cached_input_tokens"]
+                        + pricing["long_cached_input_tokens"]
+                    )
+                    * cost_share,
+                    6,
+                ),
+                "cache_write_input_tokens": round(
+                    pricing["cache_write_input_tokens"] * cost_share, 6
+                ),
+                "cache_write_5m_input_tokens": round(
+                    pricing["cache_write_5m_input_tokens"] * cost_share, 6
+                ),
+                "cache_write_1h_input_tokens": round(
+                    pricing["cache_write_1h_input_tokens"] * cost_share, 6
+                ),
                 "output_tokens": round(outcome["output_tokens"] * cost_share, 6),
                 "agent_seconds": round(
                     (outcome.get("agent_seconds") or 0.0) * cost_share, 6
@@ -934,6 +1223,7 @@ def run_trajectory(
                 "execution_mode": manifest["execution_mode"],
                 "apparatus_test": bool(manifest.get("apparatus_test", False)),
                 "api_equivalent_usd": round(shadow_usd, 6),
+                "api_equivalent_usd_lower_bound": round(shadow_lower_usd, 6),
                 "incremental_billed_usd": round(incremental_billed_usd, 6),
                 "quota_wait_events": outcome.get("quota_wait_events", 0),
                 "quota_wait_seconds": outcome.get("quota_wait_seconds", 0.0),

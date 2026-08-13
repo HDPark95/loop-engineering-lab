@@ -47,6 +47,7 @@ def rows(cell: str = "grounded-numeric", accepted=(False, False)) -> list[dict]:
             "agent_seconds": 1.0,
             "judge_seconds": 0.0,
             "oracle_seconds": 0.5,
+            "api_equivalent_usd_lower_bound": 0.008,
             "api_equivalent_usd": 0.01,
             "incremental_billed_usd": 0.0,
         }
@@ -160,6 +161,7 @@ class BlockInferenceTest(unittest.TestCase):
                                     "agent_seconds": 1.0,
                                     "judge_seconds": 0.0,
                                     "oracle_seconds": 0.5,
+                                    "api_equivalent_usd_lower_bound": 0.008,
                                     "api_equivalent_usd": 0.01,
                                     "incremental_billed_usd": 0.0,
                                     "model_served": "model",

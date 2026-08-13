@@ -347,16 +347,21 @@ The unit column is binding: it fixes what a row of the analysis table is, and
 
 **Cost.**
 
-- input tokens, output tokens, agent seconds, judge seconds, oracle seconds,
-  CLI-reported API-price-equivalent dollars, and incremental billed dollars per
-  cycle;
+- total, uncached, cached-read, and observed cache-write input tokens; output
+  tokens; agent seconds; judge seconds; oracle seconds; API-price-equivalent
+  lower and upper dollars; and incremental billed dollars per cycle;
 - gain per 1,000 tokens, gain per API-price-equivalent dollar, gain per
   incremental billed dollar where nonzero, and gain per wall-clock hour.
 
-Subscription-authenticated runs record zero incremental billed dollars and
-still record an API-price-equivalent estimate when the CLI provides one. The
-latter is the cross-agent comparison metric; subscription quota consumption is
-reported separately and is not represented as a monetary charge.
+Subscription-authenticated runs record zero incremental billed dollars. Shadow
+prices are recomputed from a source-dated manifest schedule rather than accepted
+from a CLI total. Cached reads and per-request long-context premiums are priced
+directly. If a runtime does not expose cache writes, the lower endpoint prices
+none of its uncached input as a write and the upper endpoint prices all of it as
+a possible write. `api_equivalent_usd` is the conservative upper endpoint used
+for cross-agent efficiency; `api_equivalent_usd_lower_bound` and interval width
+are reported alongside it. Subscription quota consumption is reported
+separately and is not represented as a monetary charge.
 
 ## 8. Inference plan (added R10)
 
@@ -446,7 +451,8 @@ This is 160 trajectories, 960 logical cell-cycle rows, and 840 unique agent
 executions under the shared-cycle-one rule in §4.2. The five block/oracle seeds
 are `11`, `23`, `37`, `53`, and `71`. Agent identities, immutable model
 versions, the exact `agent_adapters.measurement_prompt`, API-equivalent shadow
-prices, and container digests are written into the run manifest immediately
+price source, retrieval time, cache/read/write rates, long-context threshold
+and multipliers, and container digests are written into the run manifest immediately
 before freeze. The planned execution mode is authenticated
 subscription CLI prompting: incremental billed dollars are fixed at zero, while
 tokens, wall clock, plan-quota events, and API-price-equivalent shadow cost are
@@ -508,7 +514,12 @@ turn exits successfully, and `edit_success` is their conjunction. The controlled
 core has no separate judge, so `judge_seconds` is always `0.0`. For shared cycle
 1, `execution_input_tokens`, `execution_output_tokens`,
 `execution_agent_seconds`, `execution_oracle_seconds`, and
-`execution_api_equivalent_usd` preserve the full single-execution telemetry.
+both endpoints of `execution_api_equivalent_usd` preserve the full
+single-execution telemetry. Schema-five rows additionally preserve normalized
+uncached/cached/cache-write tokens, standard- and long-context tier totals,
+request count, price-exactness flags, and the complete source-dated shadow-price
+schedule. Replay independently recomputes both price endpoints and blocks
+inference on any inconsistent token partition, price equation, or allocation.
 The corresponding unsuffixed logical-row fields are multiplied by the
 registered one-quarter allocation. Summing
 the four cell rows therefore counts the shared call exactly once. Cycles 2
@@ -657,3 +668,11 @@ apparatus validation and not confirmatory evidence.
   restricted to the HO-A score and delta rather than hidden component metrics.
   Every candidate is now retained content-addressably, and any missing archive
   or mechanical reward-hacking signal blocks replay and inference.
+- R19 (2026-08-13): corrected shadow-cost telemetry before freeze. Subscription
+  prompting still has exactly zero incremental billed dollars. API-equivalent
+  cost now uses source-dated model prices, cached-read tokens, explicit or
+  bounded cache-write tokens, and per-request long-context tiers. Because Codex
+  App Server reports cache reads but not cache writes, the registered comparison
+  uses a conservative upper endpoint and reports the lower endpoint alongside
+  it. Schema-five replay recomputes the price interval and rejects an
+  unclassifiable long-context aggregate rather than silently applying one rate.

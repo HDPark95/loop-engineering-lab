@@ -86,6 +86,9 @@ class Usage:
     output_tokens: int | None
     cache_tokens: int | None
     usd: float | None
+    cache_creation_tokens: int | None = None
+    cache_creation_5m_tokens: int | None = None
+    cache_creation_1h_tokens: int | None = None
 
 
 def validate_billing_mode(billing_mode: str) -> None:
@@ -168,11 +171,15 @@ def parse_claude_usage(stdout: str) -> Usage:
     except json.JSONDecodeError:
         return Usage(None, None, None, None)
     usage = event.get("usage", {})
+    cache_creation = usage.get("cache_creation") or {}
     return Usage(
         usage.get("input_tokens"),
         usage.get("output_tokens"),
         usage.get("cache_read_input_tokens"),
         event.get("total_cost_usd"),
+        usage.get("cache_creation_input_tokens"),
+        cache_creation.get("ephemeral_5m_input_tokens"),
+        cache_creation.get("ephemeral_1h_input_tokens"),
     )
 
 
@@ -476,6 +483,42 @@ def run_measurement_cycle(
                 continue
             if candidate_event.get("protocol") == "codex-app-server-v2":
                 protocol_event = candidate_event
+    if agent == "codex":
+        cached_input_tokens = int(usage.cache_tokens or 0)
+        total_input_tokens = int(usage.input_tokens)
+        if cached_input_tokens > total_input_tokens:
+            raise AgentInvocationError(
+                "Codex cached input exceeds total input usage", "telemetry"
+            )
+        uncached_input_tokens = total_input_tokens - cached_input_tokens
+        cache_write_input_tokens = 0
+        cache_write_input_tokens_exact = False
+        request_usages = (protocol_event.get("usage") or {}).get(
+            "request_usages", []
+        ) if protocol_event else []
+    else:
+        # Claude reports base, cache-read, and cache-creation input as disjoint
+        # counters. Normalize them to the same total/subset contract used for
+        # Codex so the measurement runner can price both adapters identically.
+        cached_input_tokens = int(usage.cache_tokens or 0)
+        cache_write_input_tokens = int(usage.cache_creation_tokens or 0)
+        cache_write_5m_input_tokens = (
+            int(usage.cache_creation_5m_tokens)
+            if usage.cache_creation_5m_tokens is not None
+            else cache_write_input_tokens
+        )
+        cache_write_1h_input_tokens = int(usage.cache_creation_1h_tokens or 0)
+        if cache_write_5m_input_tokens + cache_write_1h_input_tokens != cache_write_input_tokens:
+            raise AgentInvocationError(
+                "Claude cache-write TTL usage is inconsistent", "telemetry"
+            )
+        uncached_input_tokens = int(usage.input_tokens) + cache_write_input_tokens
+        total_input_tokens = uncached_input_tokens + cached_input_tokens
+        cache_write_input_tokens_exact = True
+        request_usages = []
+    if agent == "codex":
+        cache_write_5m_input_tokens = 0
+        cache_write_1h_input_tokens = 0
     return {
         "self_report": report,
         "judge_verdict": None,
@@ -489,7 +532,14 @@ def run_measurement_cycle(
         "reasoning_effort_served": (
             protocol_event.get("reasoning_effort_served") if protocol_event else None
         ),
-        "input_tokens": int(usage.input_tokens),
+        "input_tokens": total_input_tokens,
+        "uncached_input_tokens": uncached_input_tokens,
+        "cached_input_tokens": cached_input_tokens,
+        "cache_write_input_tokens": cache_write_input_tokens,
+        "cache_write_5m_input_tokens": cache_write_5m_input_tokens,
+        "cache_write_1h_input_tokens": cache_write_1h_input_tokens,
+        "cache_write_input_tokens_exact": cache_write_input_tokens_exact,
+        "request_usages": request_usages,
         "output_tokens": int(usage.output_tokens),
         "agent_seconds": round(time.perf_counter() - started, 6),
     }

@@ -50,9 +50,15 @@ cycle 원시 기록을 append-only JSONL로 남긴다. 구독 prompt 실행에�
 telemetry일 뿐 실행 한도가 아니다. 실제 달러 ceiling은 `billing_mode=api`일 때만
 작동한다.
 
+Shadow 환산은 manifest에 고정한 출처·조회시점·모델 단가로 재계산한다. 캐시
+read와 요청별 long-context 구간을 직접 반영하며, 런타임이 cache write를 구분해
+주지 않으면 하한(쓰기 0개)과 보수적 상한(비캐시 입력 전부가 쓰기일 가능성)을
+함께 남긴다. `api_equivalent_usd`는 이 보수적 상한이고 실제 청구액이 아니다.
+
 본 측정 전에는 manifest에 다음을 모두 채워야 한다.
 
-- alias가 아닌 두 agent의 정확한 model ID, reasoning effort, API 환산 단가
+- alias가 아닌 두 agent의 정확한 model ID, reasoning effort, 출처와 조회시점까지
+  고정한 일반·캐시·cache-write·long-context API 환산 단가
 - digest로 고정한 agent/oracle container image, 실행 timeout, 인증 파일 경로를
   담는 환경변수 이름
 - preregistration commit, 다섯 seed, 6 cycles, 네 task와 네 factor cell
