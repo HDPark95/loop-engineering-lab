@@ -62,6 +62,7 @@ SCHEMA_VERSION = 5
 # Founder-approved lane rule: at most three agent processes at once. Quota or
 # rate-limit responses wait and retry; they never trigger a switch to API billing.
 MAX_CONCURRENT_AGENTS = 3
+MIN_CONFIRMATORY_QUOTA_WAIT_SECONDS = 7 * 24 * 60 * 60
 
 
 class QuotaLimitError(RuntimeError):
@@ -357,9 +358,21 @@ def load_manifest(path: Path) -> dict:
     concurrency = int(manifest["max_concurrent_agents"])
     if concurrency < 1 or concurrency > MAX_CONCURRENT_AGENTS:
         raise SystemExit(f"max_concurrent_agents must be between 1 and {MAX_CONCURRENT_AGENTS}")
-    finite_nonnegative(manifest["quota_wait_seconds"], "quota_wait_seconds")
-    if int(manifest["quota_max_retries"]) < 0:
+    quota_wait_seconds = finite_nonnegative(
+        manifest["quota_wait_seconds"], "quota_wait_seconds"
+    )
+    quota_max_retries = int(manifest["quota_max_retries"])
+    if quota_max_retries < 0:
         raise SystemExit("quota wait and retry settings must be non-negative")
+    if (
+        not manifest.get("apparatus_test", False)
+        and manifest["billing_mode"] == "subscription"
+        and quota_wait_seconds * quota_max_retries
+        < MIN_CONFIRMATORY_QUOTA_WAIT_SECONDS
+    ):
+        raise SystemExit(
+            "confirmatory subscription quota retries must span at least seven days"
+        )
     if "estimated_api_equivalent_usd_per_trajectory" not in manifest:
         raise SystemExit("manifest requires estimated_api_equivalent_usd_per_trajectory")
     finite_nonnegative(

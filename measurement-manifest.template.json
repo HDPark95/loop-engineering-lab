@@ -61,8 +61,8 @@
   "isolation_preflight_sha256": "ba5c80faec958f306c4e6b54b84bb318284c73a59dd39e4ba58f7434c4bcfa4c",
   "max_concurrent_agents": 3,
   "preregistration_commit": "__PREREGISTRATION_FREEZE_COMMIT__",
-  "quota_max_retries": 2,
-  "quota_wait_seconds": 300,
+  "quota_max_retries": 168,
+  "quota_wait_seconds": 3600,
   "seeds": [
     11,
     23,

@@ -98,6 +98,10 @@ class FinalizeManifestTest(unittest.TestCase):
                 run_measurement.worker_lane_limits(loaded),
                 {"claude": 1, "codex": 1},
             )
+            self.assertGreaterEqual(
+                loaded["quota_wait_seconds"] * loaded["quota_max_retries"],
+                7 * 24 * 60 * 60,
+            )
 
     def test_existing_output_is_never_overwritten(self):
         with tempfile.TemporaryDirectory() as directory:

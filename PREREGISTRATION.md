@@ -781,3 +781,11 @@ apparatus validation and not confirmatory evidence.
   against the registered 160-trajectory, 960-row, 840-execution, two-writer-lane
   contract. This changes freeze mechanics, not tasks, treatments, outcomes, or
   inference. No confirmatory run had started.
+- R27 (2026-08-13): extended the frozen subscription-quota wait horizon from
+  two five-minute retries to 168 hourly retries. With one writer lane per
+  agent, an exhausted subscription now holds only that agent's lane through a
+  possible weekly reset while the other agent continues. This prevents a short
+  retry window from serially abandoning every already-queued block; it never
+  changes billing mode or invokes an API key. Tests require at least a full
+  seven-day horizon. This changes failure handling and elapsed time, not tasks,
+  treatments, outcomes, or inference. No confirmatory run had started.

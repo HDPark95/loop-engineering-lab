@@ -94,6 +94,9 @@ manifest가 파일 SHA-256와 image ID를 다시 대조한다.
 있다. `__...__` 값은 Claude exact model·공식 가격과 6-cycle apparatus 상한을 확인한
 뒤에만 채운다. finalizer는 이런 runtime placeholder가 하나라도 남으면 tag 결박 전에
 거부하고, `__PREREGISTRATION_FREEZE_COMMIT__`만 annotated tag의 commit으로 교체한다.
+구독 쿼터 응답은 agent별 단일 writer lane에서 한 시간 간격으로 최대 168회 재확인한다.
+따라서 한 agent가 주간 reset을 기다리는 동안 다른 agent lane은 계속 실행하며, 짧은
+retry 소진 때문에 대기 중인 전체 block을 연속 폐기하지 않는다.
 
     python3 preflight_isolation.py --sandbox-image sha256:<image-id> --output preflight/sandbox-isolation.json
 

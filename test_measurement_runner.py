@@ -65,8 +65,8 @@ def manifest(**overrides) -> dict:
         "incremental_billed_usd": 0.0,
         "apparatus_test": True,
         "max_concurrent_agents": 3,
-        "quota_wait_seconds": 60,
-        "quota_max_retries": 4,
+        "quota_wait_seconds": 3600,
+        "quota_max_retries": 168,
         "cell_schedule_seed": "test-cell-order-v1",
         "estimated_api_equivalent_usd_per_trajectory": 0.01,
         "preregistration_commit": "0" * 40,
@@ -301,6 +301,14 @@ class ManifestGateTest(unittest.TestCase):
             )
             add_isolation_preflight(Path(tmp), frozen)
             self.assertEqual(run_measurement.load_manifest(write_manifest(Path(tmp), frozen)), frozen)
+
+            short_quota_horizon = json.loads(json.dumps(frozen))
+            short_quota_horizon["quota_wait_seconds"] = 300
+            short_quota_horizon["quota_max_retries"] = 2
+            with self.assertRaisesRegex(SystemExit, "at least seven days"):
+                run_measurement.load_manifest(
+                    write_manifest(Path(tmp), short_quota_horizon)
+                )
 
             no_refresh_persistence = json.loads(json.dumps(frozen))
             no_refresh_persistence["agents"][1].pop("persist_refreshed_credentials")
