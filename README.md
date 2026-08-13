@@ -55,8 +55,10 @@ task-agent-seed 4-cell block 단위로 재개하고, cycle 원시 기록을 appe
 JSONL로 남긴다. 한 분기라도 실패하거나 강제 종료로 block이 불완전하면 기존
 시도를 tombstone 처리하고 네 분기를 모두 cycle 1부터 다시 실행한다. 구독 prompt 실행에서는
 `incremental_billed_usd`가 항상 0이며, 토큰 기반 API 환산액은 비교용 shadow
-telemetry일 뿐 실행 한도가 아니다. 실제 달러 ceiling은 `billing_mode=api`일 때만
-작동한다.
+telemetry다. 실제 달러 ceiling과 Claude CLI의 `--max-budget-usd`는
+`billing_mode=api`일 때만 작동한다. 다만 manifest의 trajectory별 shadow 추정치는
+계측 이상을 조기에 탐지하는 보수적 무결성 guard로 사용되며 실제 결제나 API 전환을
+뜻하지 않는다.
 
 Shadow 환산은 manifest에 고정한 출처·조회시점·모델 단가로 재계산한다. 캐시
 read와 요청별 long-context 구간을 직접 반영하며, 런타임이 cache write를 구분해
@@ -102,6 +104,16 @@ retry 소진 때문에 대기 중인 전체 block을 연속 폐기하지 않는�
 exact model과 그 모델의 공식 입력·출력 shadow 단가 세 값만 확인 후 채운다.
 alias/exact-ID adapter smoke JSON은 최초 증거를 보존하기 위해 기존 출력 경로를 절대
 덮어쓰지 않는다. 재시도가 필요하면 새 run ID가 드러나는 새 파일명을 사용한다.
+두 smoke와 공식 가격 JSON을 확보한 뒤 아래 도구로 apparatus manifest를 만든다.
+도구는 alias와 exact-ID가 같은 불변 모델을 제공했고 두 실행·공개 테스트·credential
+scan이 성공했는지 확인하며, 기존 출력은 덮어쓰지 않는다.
+
+    python3 prepare_runtime_manifests.py apparatus \
+      --alias-smoke logs/apparatus/claude-sonnet-alias-smoke-20260815.json \
+      --exact-smoke logs/apparatus/claude-exact-smoke-20260815.json \
+      --pricing logs/apparatus/claude-official-pricing-20260815.json \
+      --template logs/apparatus/claude-resource-20260815.manifest.template.json \
+      --output logs/apparatus/claude-resource-20260815.manifest.json
 
     python3 preflight_isolation.py --sandbox-image sha256:<image-id> --output preflight/sandbox-isolation.json
 
@@ -145,9 +157,22 @@ filesystem·환경·명령을 읽지 않고 Docker CPU/memory counter와 host `/
     runner_status=$?
     test "$monitor_status" -eq 0 && test "$runner_status" -eq 0
 
-먼저 호출 없이 계획을 확인한다.
+성공한 Claude apparatus의 정확한 cache-write TTL token을 공식 전체 가격표로 다시
+계산한다. trajectory별 shadow 무결성 guard는 결과를 보기 전에 공개한 규칙
+`ceil(max(20, 4 × Claude 전 요청 long-context 상한, 4 × Codex 기준 전 요청
+long-context 상한))`으로만 정한다. Codex 기준 상한은 이미 기록된 6-cycle S1 shadow
+합계에 2.5를 곱한다. 이 값과 가격·smoke·두 apparatus log의 SHA-256은 별도 증거
+JSON에 남고, 둘 중 어느 출력도 기존 파일을 덮어쓰지 않는다.
 
-    python3 run_measurement.py --manifest measurement-manifest.json --log results/confirmatory-cycles.jsonl --run-id confirmatory-01 --plan-only
+    python3 prepare_runtime_manifests.py confirmatory \
+      --alias-smoke logs/apparatus/claude-sonnet-alias-smoke-20260815.json \
+      --exact-smoke logs/apparatus/claude-exact-smoke-20260815.json \
+      --pricing logs/apparatus/claude-official-pricing-20260815.json \
+      --claude-manifest logs/apparatus/claude-resource-20260815.manifest.json \
+      --claude-log logs/apparatus/claude-resource-20260815.cycles.jsonl \
+      --template measurement-manifest.template.json \
+      --output measurement-manifest.runtime.template.json \
+      --evidence-output logs/apparatus/runtime-shadow-budget-20260815.json
 
 동결은 자기 참조를 피하기 위해 두 단계로 한다. 정확한 모델·단가·이미지 digest를
 모두 채운 tracked template의 `preregistration_commit`에는
@@ -157,7 +182,11 @@ filesystem·환경·명령을 읽지 않고 Docker CPU/memory counter와 host `/
 untracked isolation preflight, 기존 manifest 덮어쓰기를 모두 거부하고 생성 전에
 `run_measurement.load_manifest`로 전체 확증 grid를 검증한다.
 
-    python3 finalize_measurement_manifest.py --template measurement-manifest.template.json --output measurement-manifest.json --tag prereg-v1
+    python3 finalize_measurement_manifest.py --template measurement-manifest.runtime.template.json --output measurement-manifest.json --tag prereg-v1
+
+finalizer가 동결 commit을 결박한 뒤, 실제 agent 호출 없이 계획부터 확인한다.
+
+    python3 run_measurement.py --manifest measurement-manifest.json --log results/confirmatory-cycles.jsonl --run-id confirmatory-01 --plan-only
 
 실행 후에는 원시 로그만으로 결과와 무결성 상태를 재계산한다. HO-A는 gate와
 다음-cycle feedback에만 사용되고, 보고 결과는 gate가 보지 못한 HO-B에서 계산된다.

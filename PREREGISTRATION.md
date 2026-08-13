@@ -839,3 +839,20 @@ apparatus validation and not confirmatory evidence.
   silently replace the first runtime record. A retry must use a new explicit
   filename. This changes evidence retention, not the design, outcome, or
   inference. No confirmatory run had started.
+- R35 (2026-08-14): fixed the trajectory-level shadow-usage guard before the
+  Claude resource apparatus or any confirmatory outcome. A new preparation
+  tool accepts only successful, append-only alias and exact-model smoke
+  evidence for the same immutable model and an exact official pricing record.
+  After the registered six-cycle Claude apparatus, it deterministically sets
+  the guard to the ceiling of the largest of USD 20, four times the Claude
+  all-requests-long-context repricing, and four times a conservative
+  all-long-context transformation of the existing Codex six-cycle reference
+  whose log SHA-256 is
+  `7f53d641513bc17348780d65d70655f60d3bcb70e34627106ed18d79624b4934`.
+  It records every input digest and refuses incomplete token telemetry,
+  mismatched pricing, invalid manifests, or existing outputs. This value is an
+  anomaly guard for API-equivalent shadow telemetry: subscription prompt mode
+  still records zero incremental billed cost and never converts to API billing.
+  This removes post-apparatus discretion over a safety threshold without
+  changing tasks, treatments, sample, outcomes, or inference. No confirmatory
+  run had started.
