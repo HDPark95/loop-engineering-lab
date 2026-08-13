@@ -1,0 +1,40 @@
+{
+  "access_right": "open",
+  "creators": [
+    {
+      "affiliation": "Independent Researcher",
+      "name": "Park, Hyundoo",
+      "orcid": "0009-0005-4870-8803"
+    },
+    {
+      "affiliation": "Independent Researcher",
+      "name": "Choi, Byungho",
+      "orcid": "0009-0004-4987-3897"
+    }
+  ],
+  "description": "Frozen preregistration, measurement harness, raw cycle log, retained candidate artifacts, integrity reports, and registered analysis for the LOOP confirmatory study.",
+  "keywords": [
+    "agentic software engineering",
+    "coding agents",
+    "evaluation grounding",
+    "preregistration",
+    "replication package"
+  ],
+  "language": "eng",
+  "license": "mit",
+  "related_identifiers": [
+    {
+      "identifier": "10.5281/zenodo.21594735",
+      "relation": "isSupplementTo",
+      "resource_type": "publication-preprint"
+    },
+    {
+      "identifier": "https://github.com/HDPark95/loop-engineering-lab",
+      "relation": "isDerivedFrom",
+      "resource_type": "software"
+    }
+  ],
+  "title": "LOOP Engineering Lab: Confirmatory Replication Package for The Progress Mirage in Agentic Software Engineering",
+  "upload_type": "software",
+  "version": "1.0.0"
+}

@@ -825,3 +825,11 @@ apparatus validation and not confirmatory evidence.
   changed. Analysis schema 3 and the manuscript renderer require these newer
   provenance fields. This changes report validation, not the design, outcome,
   or inference. No confirmatory run had started.
+- R33 (2026-08-13): added deterministic final replication packaging before
+  freeze. The builder revalidates the preregistration tag, manifest, preflight,
+  stable raw log, standalone replay and audit, registered analysis, and all
+  referenced candidate bytes before emitting checksummed source and candidate
+  archives plus Zenodo metadata. It includes only objects referenced by the
+  append-only log and never overwrites an existing release directory. This
+  changes release mechanics, not the design, outcome, or inference. No
+  confirmatory run had started.

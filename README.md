@@ -177,6 +177,27 @@ standalone replay와 reward-hacking JSON도 같은 원시 로그 SHA-256을 기�
 전후 해시가 다르면 clean을 거부한다. 분석 schema 3은 이 안정성 결과와 물리 archive
 검증을 포함하며, 원고 renderer는 이전 schema를 받지 않는다.
 
+확증 결과와 원고 렌더링을 검증한 뒤 공개용 replication bundle을 만든다. 도구는
+`prereg-v1` 소스, frozen manifest·preflight, 원시 로그와 세 결과 JSON, 그리고 로그가
+실제로 참조하는 candidate manifest/object만 묶는다. 160 trajectories·960 completed
+logical rows, 동일 manifest/tag/log digest, clean replay/audit/analysis를 다시 확인하며
+기존 output directory는 덮어쓰지 않는다.
+
+    python3 build_replication_bundle.py \
+      --manifest measurement-manifest.json \
+      --log results/confirmatory-cycles.jsonl \
+      --replay results/confirmatory-replay.json \
+      --reward-audit results/confirmatory-reward-hacking.json \
+      --analysis results/confirmatory-analysis.json \
+      --archive-root artifacts/confirmatory \
+      --output-dir release/loop-engineering-confirmatory-v1
+
+출력 directory에는 Zenodo에 단일 파일로 올릴 deterministic
+`loop-engineering-confirmatory-v1.zip`, 그 sidecar SHA-256, API/UI 입력용 metadata가
+생긴다. ZIP 내부에는 source/candidate tarball, `replication-manifest.json`,
+`SHA256SUMS`, 두 저자 ORCID와 preprint 관계를 담은 metadata가 포함된다. Zenodo의
+manual software deposit 지침에 따라 record에는 이 ZIP 하나만 업로드한다.
+
 ## 확증 격리
 
 확증 실행에서 신뢰 주체는 호스트 runner와 host-side oracle이다. 에이전트
