@@ -272,6 +272,25 @@ def load_manifest(path: Path) -> dict:
             "preregistration_commit must be a full hexadecimal commit ID frozen "
             "before confirmatory measurement starts."
         )
+    if not manifest.get("apparatus_test", False):
+        expected_tasks = {"s1_swebench", "s3", "g1", "b1"}
+        expected_cells = {cell.name for cell in se_experiment.CELLS}
+        expected_seeds = {11, 23, 37, 53, 71}
+        adapters = [agent.get("adapter", agent.get("name")) for agent in manifest["agents"]]
+        if set(manifest["tasks"]) != expected_tasks or len(manifest["tasks"]) != 4:
+            raise SystemExit(
+                "confirmatory task grid must contain exactly s1_swebench, s3, g1, and b1"
+            )
+        if set(manifest["cells"]) != expected_cells or len(manifest["cells"]) != 4:
+            raise SystemExit("confirmatory grid must contain exactly the four frozen cells")
+        if set(seeds) != expected_seeds or len(seeds) != 5:
+            raise SystemExit("confirmatory grid must use exactly seeds 11, 23, 37, 53, and 71")
+        if cycles != 6:
+            raise SystemExit("confirmatory trajectories must contain exactly six cycles")
+        if set(adapters) != {"codex", "claude"} or len(adapters) != 2:
+            raise SystemExit("confirmatory grid requires exactly one Codex and one Claude agent")
+        if manifest["billing_mode"] != "subscription":
+            raise SystemExit("confirmatory billing_mode is frozen to subscription")
     return manifest
 
 

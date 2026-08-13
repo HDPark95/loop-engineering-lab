@@ -205,9 +205,77 @@ class ManifestGateTest(unittest.TestCase):
                 run_measurement.load_manifest(path)
 
             entry["reasoning_effort"] = "medium"
+            data.update(
+                tasks=["s1_swebench", "s3", "g1", "b1"],
+                cells=[cell.name for cell in run_measurement.se_experiment.CELLS],
+                seeds=[11, 23, 37, 53, 71],
+                cycles=6,
+                agents=[
+                    entry,
+                    {
+                        "name": "claude",
+                        "adapter": "claude",
+                        "model": "claude-test-2026-08-01",
+                        "usd_per_1k_input": 0.1,
+                        "usd_per_1k_output": 0.2,
+                        "container_image": "sha256:" + "c" * 64,
+                        "timeout_seconds": 900,
+                        "auth_file_env": "LOOP_CLAUDE_AUTH_FILE",
+                    },
+                ],
+            )
             path = write_manifest(Path(tmp), data)
             loaded = run_measurement.load_manifest(path)
             self.assertEqual(loaded["agents"][0]["reasoning_effort"], "medium")
+
+    def test_confirmatory_design_shape_is_frozen(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            agents = [
+                {
+                    "name": "codex",
+                    "adapter": "codex",
+                    "model": "gpt-test-2026-08-01",
+                    "reasoning_effort": "medium",
+                    "usd_per_1k_input": 0.1,
+                    "usd_per_1k_output": 0.2,
+                    "container_image": "sha256:" + "a" * 64,
+                    "timeout_seconds": 900,
+                    "auth_file_env": "LOOP_CODEX_AUTH_FILE",
+                },
+                {
+                    "name": "claude",
+                    "adapter": "claude",
+                    "model": "claude-test-2026-08-01",
+                    "usd_per_1k_input": 0.1,
+                    "usd_per_1k_output": 0.2,
+                    "container_image": "sha256:" + "c" * 64,
+                    "timeout_seconds": 900,
+                    "auth_file_env": "LOOP_CLAUDE_AUTH_FILE",
+                },
+            ]
+            frozen = manifest(
+                apparatus_test=False,
+                tasks=["s1_swebench", "s3", "g1", "b1"],
+                agents=agents,
+                cells=[cell.name for cell in run_measurement.se_experiment.CELLS],
+                seeds=[11, 23, 37, 53, 71],
+                cycles=6,
+                oracle_container_image="sha256:" + "b" * 64,
+                artifact_archive_dir="artifacts",
+            )
+            self.assertEqual(run_measurement.load_manifest(write_manifest(Path(tmp), frozen)), frozen)
+
+            mutations = (
+                {"tasks": ["s1_swebench", "s3", "g1"]},
+                {"cells": ["grounded-numeric"]},
+                {"seeds": [11, 23, 37, 53]},
+                {"cycles": 5},
+                {"agents": agents[:1]},
+            )
+            for override in mutations:
+                path = write_manifest(Path(tmp), frozen | override)
+                with self.assertRaises(SystemExit):
+                    run_measurement.load_manifest(path)
 
 
 class RunnerTest(unittest.TestCase):
