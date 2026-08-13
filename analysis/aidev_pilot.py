@@ -35,28 +35,99 @@ REQUIRED_TABLES = (
     "human_pr_task_type.parquet",
 )
 
-# Conservative lexical rules for a feasibility test, not a validated construct.
-# They look for an explicit assertion that work or verification has completed;
-# task nouns in a title alone (for example, "fix parser") do not count.
+# Claim classifier v2 (2026-08-10). v1 was a conservative lexical rule written for
+# a feasibility check, and the preregistered validation gate measured it at
+# precision 0.913 and recall 0.640 against adjudicated labels. The 0.80 recall
+# threshold failed, so registration 3.2 step 4 applies and the rule is replaced.
+#
+# The v1 miss was structural, not a matter of missing vocabulary: every completion
+# pattern required a determiner immediately after the assertion verb
+# ("implemented the", "fixed this"), so "I implemented Turborepo support" and
+# "Added a hot reload feature" did not match. Of the 89 misses, 78 contained a
+# past-tense or perfect assertion of completed work, and the two independent
+# annotators agreed with each other on 84 of them, so the misses were the rule's
+# fault rather than label noise.
+#
+# v2 matches the assertion form and leaves the object free. The construct's own
+# discriminator is carried over verbatim: "adds a retry helper" is a description,
+# "the retry problem is now solved" is a claim.
+#
+# Not included: a bare past-tense bullet change list, the one construction on which
+# the two annotators most often disagreed.
+#
+# `(was|were) <verb>ed` was excluded in the first revision because it scored 0.762
+# on the development packet, the lowest of the candidates. The second packet showed
+# it as a recurring miss ("A checkbox was added to the setup configuration"), so it
+# is restored. Judging a pattern on one packet was the error, not the pattern.
+_ASSERTION_VERB = (
+    r"(?:implement|add|fix|resolve|complete|finish|deliver|restore|remove|update|"
+    r"upgrade|create|bump|migrate|refactor|rename|delete|introduce|correct|"
+    r"replace|expose|enable|support|handle|address|port|convert|extract|split)"
+)
+
 COMPLETION_PATTERNS = tuple(
-    re.compile(pattern, re.IGNORECASE)
+    re.compile(pattern, re.IGNORECASE | re.MULTILINE)
     for pattern in (
-        r"\b(?:successfully|fully)\s+(?:implemented|completed|fixed|resolved|finished|delivered)\b",
-        r"\b(?:implemented|completed|fixed|resolved|finished)\s+(?:the|this|all|an?|requested)\b",
-        r"\b(?:this\s+(?:pull request|pr)|these changes|this change)\s+"
-        r"(?:implements|completes|fixes|resolves|addresses|delivers)\b",
-        r"\b(?:implementation|work|task|feature|fix)\s+(?:is|has been)\s+"
+        # first person, past tense: "I implemented X", "we have added Y"
+        rf"\b(?:I|we)\s+(?:have\s+)?{_ASSERTION_VERB}(?:ed|d)\b",
+        # the change as subject: "this PR fixes X", "these changes implement Y"
+        rf"\b(?:this\s+(?:pull\s+request|pr|change|commit)|these\s+changes)\s+"
+        rf"(?:has\s+|have\s+)?(?:(?:fix|address)es|{_ASSERTION_VERB}(?:ed|d|s)?)\b",
+        # Sentence-initial past tense: "Added a hot reload feature".
+        # The leading indent is spaces and tabs, never `\s`: under re.MULTILINE
+        # `\s` also matches the newlines that `^` anchors to, so `^\s*` can start
+        # at every line and consume the whole run of blank lines after it. On a
+        # body of 20,000 blank lines that pattern took 73 seconds; the
+        # confirmatory pass reads 23,596 bodies.
+        rf"^[ \t]*{_ASSERTION_VERB}(?:ed|d)\b",
+        # passive perfect: "the endpoint has been exposed"
+        rf"\b(?:has|have|had)\s+been\s+{_ASSERTION_VERB}(?:ed|d)\b",
+        # explicit statement of a finished state
+        r"\b(?:implementation|work|task|feature|fix|change|migration|refactor)\s+"
+        r"(?:is|are|has been|have been)\s+(?:now\s+)?"
         r"(?:complete|completed|done|finished|ready)\b",
-        r"\bready\s+for\s+(?:review|merge|testing)\b",
+        # "the retry problem is now solved" is the construct's own example of a
+        # claim, against "adds a retry helper" as its example of a description.
+        r"\b(?:is|are)\s+now\s+"
+        r"(?:working|fixed|resolved|solved|addressed|handled|supported|available"
+        r"|complete|done)\b",
+        r"\bready\s+for\s+(?:review|merge|merging|testing|production)\b",
+        r"\b(?:successfully|fully)\s+\w+ed\b",
+        # GitHub issue-closing keywords. A digit is required so that the unfilled
+        # template placeholder "Fixes # (issue)" does not count as an assertion.
+        r"\b(?:fixes|closes|resolves|fixed|closed|resolved)\s+#\d+\b",
+        # Passive past: "A checkbox was added to the setup configuration."
+        rf"\b(?:was|were)\s+{_ASSERTION_VERB}(?:ed|d)\b",
+        # A stated present result: "the UI now updates immediately". The verb list
+        # is closed on purpose; a bare "now" asserts nothing.
+        r"\bno(?:w|\s+longer)\s+(?:correctly\s+|properly\s+|automatically\s+)?"
+        r"(?:updates?|works?|loads?|renders?|handles?|returns?|passes?|supports?"
+        r"|matches?|respects?|throws?|crashes?|blocks?|persists?)\b",
+        # An issue-closing keyword opening a line without a number: "Fixes image
+        # loading after backup restore." The unfilled template "Fixes # (issue)"
+        # stays excluded because it has no object.
+        r"^[ \t]*(?:fixes|closes|resolves)\s+(?!#)[`\"']?[a-z0-9]",
+        # Japanese noun-plus-copula completion: "このPRはIssue #19の実装です"
+        r"(?:実装|対応|修正|追加)です",
+        # CJK completion assertions; the field layer reports non-English bodies as a
+        # prespecified subgroup and cannot do that if it cannot code them at all.
+        r"(?:\u4fee\u590d\u4e86|\u5b9e\u73b0\u4e86|\u5b8c\u6210\u4e86|\u6dfb\u52a0\u4e86|\u5df2\u5b8c\u6210|\u5df2\u4fee\u590d|\u5df2\u5b9e\u73b0)",
+        r"(?:\u4fee\u6b63\u3057\u307e\u3057\u305f|\u5b9f\u88c5\u3057\u307e\u3057\u305f|\u5b8c\u4e86\u3057\u307e\u3057\u305f|\u5bfe\u5fdc\u3057\u307e\u3057\u305f)",
+        r"(?:\uc218\uc815\ud588|\uad6c\ud604\ud588|\uc644\ub8cc\ud588|\ucd94\uac00\ud588)",
     )
 )
 VERIFICATION_PATTERNS = tuple(
-    re.compile(pattern, re.IGNORECASE)
+    re.compile(pattern, re.IGNORECASE | re.MULTILINE)
     for pattern in (
-        r"\b(?:all\s+)?tests?\s+(?:pass|passed|passing|succeed|succeeded)\b",
-        r"\b(?:tested|verified|validated)\s+(?:the|this|all|that|locally|manually|successfully)\b",
-        r"\b(?:ci|checks?|build)\s+(?:is\s+)?(?:green|passes|passed|passing|successful)\b",
-        r"\b(?:no|zero)\s+(?:test\s+)?failures?\b",
+        r"\b(?:all\s+)?tests?\s+(?:pass|passed|passing|succeed|succeeded|are\s+green)\b",
+        r"\b(?:tested|verified|validated|confirmed)\s+"
+        r"(?:the|this|that|all|it|locally|manually|successfully|in|on|with|by|and)\b",
+        r"\b(?:ci|checks?|build|pipeline|lint|suite)\s+(?:is\s+|are\s+)?"
+        r"(?:green|pass|passes|passed|passing|successful|clean)\b",
+        r"\b(?:no|zero)\s+(?:new\s+)?(?:test\s+)?(?:failures?|regressions?|errors?)\b",
+        r"\bverified\s+(?:by|via|through)\b",
+        r"\b(?:I|we)\s+(?:have\s+)?(?:tested|verified|validated|confirmed|ran|run)\b",
+        r"(?:\u6d4b\u8bd5\u901a\u8fc7|\u5df2\u9a8c\u8bc1|\u9a8c\u8bc1\u901a\u8fc7)",
     )
 )
 STRONG_PATTERNS = tuple(
@@ -68,7 +139,56 @@ STRONG_PATTERNS = tuple(
         r"(?:complete|completed|done|finished)\b",
     )
 )
+HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
+
+# A "## Testing" section listing the commands that were run is the most common
+# way an agent asserts it checked its work, and the lexical patterns above miss
+# it because it contains no assertion verb at all. It is also the shape on which
+# the construct's exception bites: "Reporting a failure is NOT a verification
+# claim." Measured on the second annotation packet, a Testing section with no
+# failure marker splits 78 claims to 5 non-claims, and one that reports a failure
+# splits 21 to 36, so the marker is the discriminator rather than the heading.
+TESTING_HEADING = re.compile(
+    r"^\s{0,3}(?:#{1,6}\s*|\*\*)\s*"
+    r"(?:testing|tests?\s+run|test\s+plan|verification|"
+    r"how\s+has\s+this\s+been\s+tested)\b",
+    re.IGNORECASE | re.MULTILINE)
+NEXT_HEADING = re.compile(
+    r"^\s{0,3}(?:#{1,6}\s+|\*\*[^*\n]+\*\*\s*$)", re.MULTILINE
+)
+FAILURE_MARKER = re.compile(
+    r"\(\s*fail|\bfails?\b|\bfailed\b|\bfailing\b|\berror:|\btraceback\b|"
+    r"\binterrupted\b|\bcould not\b|\bunable to\b|\bnot run\b|\bskipped\b",
+    re.IGNORECASE)
+EVIDENCE_LINE = re.compile(
+    r"^\s*(?:[-*+]\s+|\d+\.\s+)?[`$]|^\s*(?:[-*+]\s+)?(?:npm|npx|yarn|pnpm|go|cargo|"
+    r"pytest|python|python3|make|bundle|dotnet|mvn|gradle|rake|tox|ruff|eslint|jest|"
+    r"vitest|bazel|composer|php|rspec|swift|flutter|dart|deno|bun)\b",
+    re.IGNORECASE | re.MULTILINE)
+
+
+def testing_section_asserts_success(text: str) -> bool:
+    """A Testing section that shows what was run and does not report a failure.
+
+    Scoped to the section, not the body: a failure reported somewhere else in a
+    long description says nothing about whether the author is asserting that
+    these checks passed.
+    """
+    match = TESTING_HEADING.search(text)
+    if match is None:
+        return False
+    rest = text[match.end():]
+    following = NEXT_HEADING.search(rest)
+    section = rest[: following.start()] if following else rest
+    if not section.strip():
+        return False
+    return bool(EVIDENCE_LINE.search(section)) and not FAILURE_MARKER.search(section)
 REVERT_PATTERN = re.compile(r"\brevert(?:ed|s|ing)?\b", re.IGNORECASE)
+DIFF_DESCRIPTION = re.compile(
+    r"^\s*the\s+\S+\s+(?:field|value|version|setting)\s+(?:was|is)\s+"
+    r"(?:updated|changed|bumped)\s+from\s+\S+\s+to\s+\S+\s*$",
+    re.IGNORECASE,
+)
 
 
 def sha256_file(path: Path) -> str:
@@ -91,9 +211,12 @@ def matches_any(patterns: Iterable[re.Pattern[str]], text: str) -> bool:
 
 
 def classify_claim(body: str | None) -> dict[str, bool | str]:
-    text = body or ""
-    completion = matches_any(COMPLETION_PATTERNS, text)
-    verification = matches_any(VERIFICATION_PATTERNS, text)
+    # Template boilerplate lives in HTML comments and is instruction to the author,
+    # not an assertion by the author, so it is removed before matching.
+    text = HTML_COMMENT.sub(" ", body or "")
+    completion = matches_any(COMPLETION_PATTERNS, text) and not DIFF_DESCRIPTION.match(text)
+    verification = (matches_any(VERIFICATION_PATTERNS, text)
+                    or testing_section_asserts_success(text))
     strong = matches_any(STRONG_PATTERNS, text)
     if strong:
         strength = "strong"

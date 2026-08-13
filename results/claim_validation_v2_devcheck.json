@@ -1,0 +1,66 @@
+{
+  "estimates_inverse_probability_weighted_to_the_10000_pr_frame": {
+    "current_rule": {
+      "packet_1": {
+        "precision": 0.7858,
+        "recall": 0.985
+      },
+      "packet_2": {
+        "precision": 0.7262,
+        "recall": 0.955
+      }
+    },
+    "drop_bare_issue_closing": {
+      "packet_1": {
+        "precision": 0.7797,
+        "recall": 0.9611
+      },
+      "packet_2": {
+        "precision": 0.7691,
+        "recall": 0.923
+      }
+    },
+    "drop_both": {
+      "packet_1": {
+        "precision": 0.784,
+        "recall": 0.9144
+      },
+      "packet_2": {
+        "precision": 0.7865,
+        "recall": 0.8732
+      }
+    },
+    "drop_present_tense_this_pr_adds": {
+      "packet_1": {
+        "precision": 0.7937,
+        "recall": 0.9571
+      },
+      "packet_2": {
+        "precision": 0.7405,
+        "recall": 0.9359
+      }
+    }
+  },
+  "finding": "recall clears the 0.80 threshold comfortably once the packet is reweighted to the frame it was drawn from; precision does not, and plateaus between 0.726 and 0.787 across two independent packets and four rule variants. The threshold is not reachable by tightening this instrument, so the instrument is the thing to change.",
+  "freeze_gate_passed": false,
+  "measurement_design_note": "the registered packet is stratified by agent and by the classifier's own preliminary verdict, so raw packet precision and recall are estimates for the packet rather than for the corpus. Stratum weights on packet 2 range from 1.12 to 91.28. Reweighting moves recall from 0.824 to 0.955 and precision from 0.739 to 0.726.",
+  "packets": {
+    "packet_1": {
+      "n": 353,
+      "note": "used to develop the rule; not an independent estimate",
+      "reference": "two machine annotators, adjudicated"
+    },
+    "packet_2": {
+      "n": 400,
+      "note": "drawn disjoint from packet 1; spent as a development set once its errors were inspected",
+      "reference": "one machine annotator, no adjudication"
+    }
+  },
+  "privacy": "aggregate only; no annotation IDs or text",
+  "schema_version": 2,
+  "status": "development check, not the preregistered validation gate",
+  "unweighted_packet_2_current_rule": {
+    "precision": 0.7391,
+    "recall": 0.8238
+  }
+}

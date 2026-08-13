@@ -11,8 +11,9 @@ SE 특별호용 개정 설계와 동결 조건은 [PREREGISTRATION.md](PREREGIST
 
 - `analysis/aidev_pilot.py`: AIDev 10,000-PR 탐색적 타당성 분석. 원문이나
   식별자를 내보내지 않고 집계만 쓴다.
-- `se_tasks/s1_defect_repair`: 공개 테스트와 held-out 회귀 테스트를 분리한
-  결함 수정 과제.
+- `se_tasks/s1_swebench`: digest로 고정한 실제 Django 저장소와 공식
+  SWE-bench 평가 이미지에서 공개 코드와 숨은 회귀 테스트를 분리한 S1.
+- `se_tasks/s1_defect_repair`: runner 단위검증에만 쓰는 소형 S1 장치 과제.
 - `se_tasks/s3_production_ops`: 오류율, 부모가 커널에서 받아온 CPU 시간,
   재시작 횟수를 재는 운영 과제. 모든 응답은 오라클이 따로 계산한 정답과
   대조하고, 처리 비용은 같은 실행에서 함께 측정한 참조 구현 대비 비율로
@@ -43,18 +44,27 @@ SE 장치 스모크 검증:
 
 ### 본 측정 러너
 
-`run_measurement.py`는 동결된 manifest를 받아 trajectory 단위로 재개하고,
-cycle 원시 기록을 append-only JSONL로 남긴다. 구독 prompt 실행에서는
+`run_measurement.py`는 동결된 manifest를 받아 공통 cycle-1을 공유하는
+task-agent-seed 4-cell block 단위로 재개하고, cycle 원시 기록을 append-only
+JSONL로 남긴다. 한 분기라도 실패하거나 강제 종료로 block이 불완전하면 기존
+시도를 tombstone 처리하고 네 분기를 모두 cycle 1부터 다시 실행한다. 구독 prompt 실행에서는
 `incremental_billed_usd`가 항상 0이며, 토큰 기반 API 환산액은 비교용 shadow
 telemetry일 뿐 실행 한도가 아니다. 실제 달러 ceiling은 `billing_mode=api`일 때만
 작동한다.
 
+Shadow 환산은 manifest에 고정한 출처·조회시점·모델 단가로 재계산한다. 캐시
+read와 요청별 long-context 구간을 직접 반영하며, 런타임이 cache write를 구분해
+주지 않으면 하한(쓰기 0개)과 보수적 상한(비캐시 입력 전부가 쓰기일 가능성)을
+함께 남긴다. `api_equivalent_usd`는 이 보수적 상한이고 실제 청구액이 아니다.
+
 본 측정 전에는 manifest에 다음을 모두 채워야 한다.
 
-- alias가 아닌 두 agent의 정확한 model ID, reasoning effort, API 환산 단가
+- alias가 아닌 두 agent의 정확한 model ID, reasoning effort, 출처와 조회시점까지
+  고정한 일반·캐시·cache-write·long-context API 환산 단가
 - digest로 고정한 agent/oracle container image, 실행 timeout, 인증 파일 경로를
   담는 환경변수 이름
-- preregistration commit, 10개 seed, 6 cycles, 두 task와 네 factor cell
+- preregistration commit, 다섯 seed, 6 cycles, 네 task와 네 factor cell
+- block별 네 cell의 실행 순서를 SHA-256으로 고정 난수화하는 `cell_schedule_seed`
 - trajectory별 최대 API 환산 추정치. 이는 초과 계측을 탐지하는 보수적 상한이며
   구독 실행의 실제 청구액이 아니다.
 

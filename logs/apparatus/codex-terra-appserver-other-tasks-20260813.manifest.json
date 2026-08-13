@@ -1,0 +1,30 @@
+{
+  "tasks": ["s3", "g1", "b1"],
+  "agents": [
+    {
+      "name": "codex",
+      "adapter": "codex",
+      "model": "gpt-5.6-terra",
+      "reasoning_effort": "medium",
+      "usd_per_1k_input": 0.0025,
+      "usd_per_1k_output": 0.015,
+      "container_image": "sha256:f0c45bd79e2d84cad75ed512d95541d3b4ca2d88bbfe4d8e24aa4c09df8f175c",
+      "timeout_seconds": 1200,
+      "auth_file_env": "LOOP_CODEX_AUTH_FILE"
+    }
+  ],
+  "cells": ["grounded-numeric"],
+  "seeds": [11],
+  "cycles": 6,
+  "billing_mode": "subscription",
+  "execution_mode": "prompt",
+  "incremental_billed_usd": 0.0,
+  "apparatus_test": true,
+  "max_concurrent_agents": 3,
+  "quota_wait_seconds": 300,
+  "quota_max_retries": 2,
+  "estimated_api_equivalent_usd_per_trajectory": 3.0,
+  "preregistration_commit": "bfece2f052c9f359faf26b3ac7423d898d62fe31",
+  "oracle_container_image": "sha256:a7a6a7de8404c2615aee5cb09770af014160638e30d303f9564a6a6a993a6547",
+  "artifact_archive_dir": "../../artifacts/apparatus/codex-other-tasks-20260813"
+}

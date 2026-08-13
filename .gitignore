@@ -5,3 +5,5 @@ __pycache__/
 data/
 *.parquet
 .venv/
+se_tasks/**/.cache/
+artifacts/

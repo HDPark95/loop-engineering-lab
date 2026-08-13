@@ -27,6 +27,8 @@
       "pooled_false_reject": 0.375,
       "pooled_n_neg": 10,
       "pooled_n_pos": 8,
+      "pooled_note": "descriptive only, not an inferential quantity: cycles within a trajectory are dependent, so no interval is computed over them; see PREREGISTRATION.md section 8",
+      "mirage_note": "the mirage rate is zero by construction in any grounded arm whose gate reads the oracle the outcome is computed on; from R8 the primary variable is the regression acceptance rate on the outcome half HO-B, and this figure is a definitional consequence reported for completeness",
       "canary_leaks_total": 0,
       "ci_note": "bootstrap percentile interval over n=3 trajectories; with n=3 this reads as an observed range, not a calibrated 95% interval"
     },
@@ -57,6 +59,8 @@
       "pooled_false_reject": 0.0,
       "pooled_n_neg": 11,
       "pooled_n_pos": 7,
+      "pooled_note": "descriptive only, not an inferential quantity: cycles within a trajectory are dependent, so no interval is computed over them; see PREREGISTRATION.md section 8",
+      "mirage_note": "the mirage rate is zero by construction in any grounded arm whose gate reads the oracle the outcome is computed on; from R8 the primary variable is the regression acceptance rate on the outcome half HO-B, and this figure is a definitional consequence reported for completeness",
       "canary_leaks_total": 0,
       "ci_note": "bootstrap percentile interval over n=3 trajectories; with n=3 this reads as an observed range, not a calibrated 95% interval"
     },
@@ -87,6 +91,8 @@
       "pooled_false_reject": 0.0,
       "pooled_n_neg": 8,
       "pooled_n_pos": 10,
+      "pooled_note": "descriptive only, not an inferential quantity: cycles within a trajectory are dependent, so no interval is computed over them; see PREREGISTRATION.md section 8",
+      "mirage_note": "the mirage rate is zero by construction in any grounded arm whose gate reads the oracle the outcome is computed on; from R8 the primary variable is the regression acceptance rate on the outcome half HO-B, and this figure is a definitional consequence reported for completeness",
       "canary_leaks_total": 0,
       "ci_note": "bootstrap percentile interval over n=3 trajectories; with n=3 this reads as an observed range, not a calibrated 95% interval"
     }

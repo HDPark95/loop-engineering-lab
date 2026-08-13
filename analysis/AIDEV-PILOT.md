@@ -32,9 +32,9 @@ Raw parquet files are intentionally gitignored. The committed outputs contain
 aggregates only: no PR text, GitHub user name, repository name, URL, or numeric
 identifier is written.
 
-The preregistered validation gate has executable preparation and scoring tools.
+The exploratory instrument check has executable preparation and scoring tools.
 Preparation writes raw PR text only below the gitignored `data/` directory. Each
-annotator receives a separate copy of the blinded packet; only the aggregate
+machine rater receives a separate copy of the blinded packet; only the aggregate
 scorer output may be committed.
 
 ```sh
@@ -47,30 +47,49 @@ scorer output may be committed.
 .venv/bin/python analysis/llm_annotate_claims.py \
   --packet data/claim_annotation/claim_annotation_packet.csv \
   --output data/claim_annotation/annotator_b.csv --annotator b --engine codex
+.venv/bin/python analysis/adjudicate_claims.py \
+  --packet data/claim_annotation/claim_annotation_packet.csv \
+  --annotator-a data/claim_annotation/annotator_a.csv \
+  --annotator-b data/claim_annotation/annotator_b.csv \
+  --disputes-output data/claim_annotation/disputes.csv
+.venv/bin/python analysis/llm_annotate_claims.py \
+  --packet data/claim_annotation/disputes.csv \
+  --output data/claim_annotation/third_claude.csv --annotator c --engine claude
+.venv/bin/python analysis/llm_annotate_claims.py \
+  --packet data/claim_annotation/disputes.csv \
+  --output data/claim_annotation/third_codex.csv --annotator c --engine codex
+.venv/bin/python analysis/adjudicate_claims.py \
+  --packet data/claim_annotation/claim_annotation_packet.csv \
+  --annotator-a data/claim_annotation/annotator_a.csv \
+  --annotator-b data/claim_annotation/annotator_b.csv \
+  --disputes-output data/claim_annotation/disputes.csv \
+  --third-claude data/claim_annotation/third_claude.csv \
+  --third-codex data/claim_annotation/third_codex.csv \
+  --adjudicated-output data/claim_annotation/adjudicated.csv
 .venv/bin/python analysis/score_claim_annotation.py \
-  --annotator-a data/claim_annotation/a.csv \
-  --annotator-b data/claim_annotation/b.csv \
+  --annotator-a data/claim_annotation/annotator_a.csv \
+  --annotator-b data/claim_annotation/annotator_b.csv \
   --adjudicated data/claim_annotation/adjudicated.csv \
   --classifier data/claim_annotation/claim_annotation_classifier.csv \
   --output results/claim_validation.json
 ```
 
-## Validation run of 2026-08-10: the gate did not pass
+## Validation run of 2026-08-10: the instrument did not validate
 
 The annotators in this run were language models, not the two people the
 preregistration names. Annotator A ran on Claude and annotator B on Codex under
 different prompt wordings, so their errors are not forced to share an engine or
 a phrasing. Contested items went to a third rater run on both engines, and an
 item was adjudicated only where the two engines returned the same label. This is
-machine annotation and is reported as such. It does not discharge the
-preregistered human-annotation requirement; it establishes whether the lexical
-classifier is worth taking to human validation at all.
+machine annotation and is reported as such. Under preregistration amendment R16,
+it is preserved as exploratory instrument evidence and creates no human-
+annotation requirement.
 
 `results/claim_validation.json` records the outcome on the 353 adjudicated
 items: precision 0.913, recall 0.640, so the 0.80 recall threshold fails and
-`freeze_gate_passed` is false. Preregistration section 3.2 step 4 therefore
-applies: the classifier is replaced and revalidated on a fresh 400-PR subset
-before any confirmatory field analysis.
+`freeze_gate_passed` is false. Replacement variants later reached recall above
+0.80 but plateaued at precision 0.726 to 0.787. Iteration therefore stops; there
+is no confirmatory field analysis.
 
 Two numbers should be read with care. Cohen's kappa of 0.765 is computed on the
 adjudicated subset only; across all 400 items, before adjudication removed the
@@ -95,14 +114,13 @@ rules track one agent's PR template. The by-agent claim-prevalence spread in the
 pilot below therefore measures the classifier as much as the agents, and must
 not be read as an agent-level finding.
 
-## Frozen pilot rule
+## Exploratory pilot rule
 
 The sample is the 10,000 PR IDs with the lowest SHA-256 value of
 `loop-engineering-aidev-pilot-v1:<PR id>`. Claim coding uses conservative
 English lexical rules for explicit completion or verification assertions in
-the PR body. Titles alone do not count. This is a feasibility rule whose
-precision and recall still require blinded manual validation before any
-confirmatory field analysis.
+the PR body. Titles alone do not count. This is a feasibility rule, not a
+validated measurement instrument for confirmatory inference.
 
 ## Results
 
@@ -119,14 +137,14 @@ Claim prevalence differs sharply by agent, from 0.55% for OpenAI Codex to
 42.20% for Copilot in this lexical coding. Therefore the unadjusted overall
 association between claims and merging is confounded by agent-specific PR
 templates and base rates. It must not be interpreted as a causal effect or as
-evidence that claims are informative or uninformative. Confirmatory analysis
-must stratify by agent and task type, validate the claim classifier, and report
-within-stratum estimates.
+evidence that claims are informative or uninformative. No confirmatory AIDev
+analysis is planned; any within-stratum estimates remain descriptive and
+instrument-limited.
 
 ## P3 decision
 
-1. Completion and verification assertions are present often enough to code,
-   but the lexical construct needs manual validation and multilingual coverage.
+1. Completion and verification assertions are present often enough for an
+   exploratory diagnostic, but the lexical construct did not validate.
 2. Merge, closed-unmerged, review, and changes-requested outcomes are directly
    observable.
 3. A comparable human table exists, but its sampling relation to the agent PRs
@@ -136,6 +154,8 @@ within-stratum estimates.
    back to the merged PR. The 303 within-PR revert markers in the sample are not
    post-merge outcomes.
 
-The field design therefore proceeds with merge/closed-unmerged and
-changes-requested as outcomes. Post-merge revert is excluded unless a separate,
-timestamped cross-PR mining pass is preregistered and implemented.
+The field layer therefore remains exploratory, with merge/closed-unmerged and
+changes-requested retained only as descriptive outcomes. It needs no human
+annotator and supplies no confirmatory hypothesis. Post-merge revert is excluded
+unless a separate, timestamped cross-PR mining pass is preregistered and
+implemented.

@@ -1,0 +1,89 @@
+{
+  "by_cell": {
+    "b1|codex|grounded-numeric": {
+      "api_equivalent_usd": 1.01066,
+      "delivered_gain_median": 0.454545,
+      "delivered_gain_values": [
+        0.454545
+      ],
+      "false_rejection_incidence_median": 0.0,
+      "false_rejection_rate_median": 0.0,
+      "gain_per_1k_tokens": 0.00122,
+      "gain_per_api_equivalent_usd": 0.449751,
+      "gain_per_incremental_billed_usd": null,
+      "harmful_acceptance_incidence_median": 0.0,
+      "incremental_billed_usd": 0.0,
+      "mirage_rate_is_structural": true,
+      "mirage_rate_median": 0.0,
+      "outcome_is_hob": true,
+      "regression_acceptance_rate_median": 0.0,
+      "trajectories": 1
+    },
+    "g1|codex|grounded-numeric": {
+      "api_equivalent_usd": 1.54827,
+      "delivered_gain_median": 0.5245,
+      "delivered_gain_values": [
+        0.5245
+      ],
+      "false_rejection_incidence_median": 0.0,
+      "false_rejection_rate_median": 0.0,
+      "gain_per_1k_tokens": 0.000914,
+      "gain_per_api_equivalent_usd": 0.338765,
+      "gain_per_incremental_billed_usd": null,
+      "harmful_acceptance_incidence_median": 0.166667,
+      "incremental_billed_usd": 0.0,
+      "mirage_rate_is_structural": true,
+      "mirage_rate_median": 0.0,
+      "outcome_is_hob": true,
+      "regression_acceptance_rate_median": 0.333333,
+      "trajectories": 1
+    },
+    "s3|codex|grounded-numeric": {
+      "api_equivalent_usd": 1.107103,
+      "delivered_gain_median": 76.0,
+      "delivered_gain_values": [
+        76.0
+      ],
+      "false_rejection_incidence_median": 0.0,
+      "false_rejection_rate_median": 0.0,
+      "gain_per_1k_tokens": 0.180659,
+      "gain_per_api_equivalent_usd": 68.647633,
+      "gain_per_incremental_billed_usd": null,
+      "harmful_acceptance_incidence_median": 0.0,
+      "incremental_billed_usd": 0.0,
+      "mirage_rate_is_structural": true,
+      "mirage_rate_median": 0.0,
+      "outcome_is_hob": true,
+      "regression_acceptance_rate_median": 0.0,
+      "trajectories": 1
+    }
+  },
+  "cycle_records": 18,
+  "integrity": {
+    "abandoned_trajectories": [],
+    "canary_leak_trajectories": [],
+    "clean": true,
+    "incomplete_trajectories": [],
+    "invalid_oracle_trajectories": [],
+    "manifest_digests": [
+      "7d024605a84bcc3411a67b31995aae884fdae8bc24a3e969a310f4d312be403f"
+    ],
+    "missing_candidate_archive_trajectories": [],
+    "missing_trajectory_records": 0,
+    "mixed_or_missing_manifest_digest": false,
+    "mixed_or_missing_preregistration_commit": false,
+    "model_identity_mismatch_trajectories": [],
+    "preregistration_commits": [
+      "bfece2f052c9f359faf26b3ac7423d898d62fe31"
+    ],
+    "recovered_abandoned_trajectories": [],
+    "reward_hack_signal_trajectories": [],
+    "ungraded_trajectories": [],
+    "unparsable_log_lines": [],
+    "unrecovered_abandoned_trajectories": []
+  },
+  "note": "Primary quantity is delivered_gain on HO-B. mirage_rate uses the gate half HO-A and is structural in grounded cells; regression acceptance uses the outcome half HO-B.",
+  "schema_version": 2,
+  "source_log": "logs/apparatus/codex-terra-appserver-other-tasks-20260813.cycles.jsonl",
+  "trajectories": 3
+}

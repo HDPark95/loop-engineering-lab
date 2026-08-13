@@ -62,12 +62,24 @@ class AdapterTest(unittest.TestCase):
     def test_claude_usage_parser(self):
         output = json.dumps(
             {
-                "usage": {"input_tokens": 30, "output_tokens": 8, "cache_read_input_tokens": 4},
+                "usage": {
+                    "input_tokens": 30,
+                    "output_tokens": 8,
+                    "cache_read_input_tokens": 4,
+                    "cache_creation_input_tokens": 6,
+                    "cache_creation": {
+                        "ephemeral_5m_input_tokens": 4,
+                        "ephemeral_1h_input_tokens": 2,
+                    },
+                },
                 "total_cost_usd": 0.012,
             }
         )
         usage = agent_adapters.parse_claude_usage(output)
         self.assertEqual((usage.input_tokens, usage.output_tokens, usage.cache_tokens), (30, 8, 4))
+        self.assertEqual(usage.cache_creation_tokens, 6)
+        self.assertEqual(usage.cache_creation_5m_tokens, 4)
+        self.assertEqual(usage.cache_creation_1h_tokens, 2)
         self.assertEqual(usage.usd, 0.012)
 
     def test_subscription_cost_separates_cli_estimate_from_billing(self):
@@ -310,7 +322,21 @@ class AdapterTest(unittest.TestCase):
             auth_dir=Path("/tmp/private-auth"),
         )
         self.assertIn("type=bind,src=/tmp/private-auth,dst=/tmp/.codex", command)
-        self.assertNotIn("/home/", " ".join(command))
+        # The frozen App Server helper itself is mounted read-only. Apart from
+        # that exact file, no source directory or user home may be exposed.
+        mounts = [
+            command[index + 1]
+            for index, value in enumerate(command[:-1])
+            if value == "--mount"
+        ]
+        expected_helper = (
+            f"type=bind,src={agent_adapters.APP_SERVER_CLIENT_SOURCE},"
+            "dst=/opt/loop-codex-app-server-client.py,readonly"
+        )
+        self.assertIn(expected_helper, mounts)
+        self.assertFalse(
+            any("src=/home/" in mount for mount in mounts if mount != expected_helper)
+        )
 
     def test_tree_digest_changes_with_contents(self):
         with tempfile.TemporaryDirectory() as temp_root:

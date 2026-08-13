@@ -75,7 +75,15 @@ def agg(arm, trajs):
     gain = col("real_gain")
     fin = col("final")
     ttfs = [m["ttf"] for m in ms if m["ttf"] is not None]
-    # pooled (cycle-level) discrimination across the arm's trajectories
+    # Pooled (cycle-level) discrimination across the arm's trajectories.
+    # DESCRIPTIVE ONLY, NOT AN INFERENTIAL QUANTITY. Cycles inside a trajectory are
+    # not independent: the candidate accepted at cycle t is the deployed baseline at
+    # t+1, the agent carries its own history, and one seed governs the whole
+    # trajectory. An interval over pooled cycles is pseudo-replication. Confirmatory
+    # inference first reduces each trajectory to a fixed-denominator incidence and
+    # then compares complete task-agent-seed blocks (PREREGISTRATION.md section 8).
+    # The label below travels with the numbers into the released results file so a
+    # reader of the JSON sees it too.
     neg = [r for r in allrows if r["delta"] <= 0]
     pos = [r for r in allrows if r["delta"] > 0]
     pooled_acc_neg = (sum(1 for r in neg if r["accept"]) / len(neg)) if neg else None
@@ -95,6 +103,13 @@ def agg(arm, trajs):
         "pooled_acc_given_neg": pooled_acc_neg, "pooled_acc_given_pos": pooled_acc_pos,
         "pooled_false_reject": (1 - pooled_acc_pos) if pooled_acc_pos is not None else None,
         "pooled_n_neg": len(neg), "pooled_n_pos": len(pos),
+        "pooled_note": "descriptive only, not an inferential quantity: cycles within a "
+                       "trajectory are dependent, so no interval is computed over them; "
+                       "see PREREGISTRATION.md section 8",
+        "mirage_note": "this is a legacy pre-split artifact and does not compute the "
+                       "registered HO-B outcome; its mirage_mean uses the same delta visible "
+                       "to the grounded gate and is therefore structural in that arm, so it "
+                       "is descriptive pilot evidence only",
         "canary_leaks_total": sum(col("canary_leaks")),
         "ci_note": "bootstrap percentile interval over n=3 trajectories; with n=3 this "
                    "reads as an observed range, not a calibrated 95% interval",

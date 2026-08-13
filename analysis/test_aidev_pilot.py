@@ -52,3 +52,82 @@ class SamplingAndIntervalTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ClaimClassifierV2Test(unittest.TestCase):
+    """v1 scored recall 0.640 against adjudicated labels and failed the gate.
+
+    Its completion patterns required a determiner immediately after the assertion
+    verb, so an assertion with any other object slipped through. These cases are
+    the shapes that produced the 89 misses, plus the construct's own pair of
+    examples, plus the descriptions that must keep scoring negative.
+    """
+
+    def assertClaim(self, body):
+        self.assertTrue(MODULE.classify_claim(body)["claim"], body)
+
+    def assertNotClaim(self, body):
+        self.assertFalse(MODULE.classify_claim(body)["claim"], body)
+
+    def test_construct_examples(self):
+        # The two examples the annotation construct itself uses to draw the line.
+        self.assertClaim("the retry problem is now solved")
+        self.assertNotClaim("adds a retry helper")
+
+    def test_first_person_past_tense_with_a_free_object(self):
+        self.assertClaim("I implemented Turborepo support to optimize build times.")
+        self.assertClaim("We have migrated every connector to the new base image.")
+
+    def test_sentence_initial_past_tense(self):
+        self.assertClaim("Added a hot reload feature that watches the repository.")
+
+    def test_bare_change_list_bullets_are_not_assertions(self):
+        self.assertNotClaim("- Added a hot reload feature")
+        self.assertNotClaim("* Fixed a parser bug")
+        self.assertNotClaim("1. Updated the dependency")
+
+    def test_third_person_es_inflections(self):
+        self.assertClaim("This PR fixes the parser edge case.")
+        self.assertClaim("These changes address the retry failure.")
+
+    def test_passive_perfect(self):
+        self.assertClaim("The endpoint has been exposed to the OpenAPI specification.")
+
+    def test_issue_closing_keyword_needs_a_number(self):
+        self.assertClaim("Fixes #54706")
+        # The unfilled template placeholder asserts nothing.
+        self.assertNotClaim("Fixes # (issue)")
+
+    def test_template_boilerplate_in_a_comment_is_not_an_assertion(self):
+        self.assertNotClaim("<!-- All tests passed locally. -->")
+
+    def test_bold_testing_section_stops_at_the_next_bold_heading(self):
+        body = "**Testing**\n\n- pytest\n\n**Known limitations**\n\nFailed on Windows"
+        self.assertClaim(body)
+
+    def test_diff_description_is_not_a_completion_claim(self):
+        self.assertNotClaim("The version field was updated from 2.1.1 to 2.1.2.")
+
+    def test_verification_claims(self):
+        self.assertClaim("All tests pass locally and CI is green.")
+        self.assertClaim("I verified the fix on a staging build.")
+        self.assertNotClaim("Please describe the tests that you ran.")
+
+    def test_cjk_completion_assertion(self):
+        # Non-English bodies are a prespecified subgroup; the field layer cannot
+        # report them as a subgroup if the classifier cannot code them at all.
+        self.assertClaim("修复了 PromptX init 命令出现的循环依赖问题")
+
+    def test_empty_body_is_not_a_claim(self):
+        self.assertNotClaim("")
+        self.assertFalse(MODULE.classify_claim(None)["claim"])
+
+    def test_a_body_of_blank_lines_returns_promptly(self):
+        # `^\s*` under re.MULTILINE anchors at every line start and `\s` also
+        # matches the newlines it anchors to, so the indent prefix could consume
+        # the whole run of blank lines from every position. That cost 73 seconds
+        # on 20,000 blank lines, and the confirmatory pass reads 23,596 bodies.
+        import time
+        start = time.perf_counter()
+        MODULE.classify_claim("\n" * 20000)
+        self.assertLess(time.perf_counter() - start, 1.0)

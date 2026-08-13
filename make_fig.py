@@ -43,12 +43,21 @@ def main():
         ms = [mirage(r) for r in trajs[a]]
         m = st.mean(ms); means.append(m)
         lo.append(m - min(ms)); hi.append(max(ms) - m)
+    # The grounded arm's zero is a consequence of the gate rule rather than a
+    # measurement: it accepts iff the delta is positive, and this bar counts
+    # accepted cycles whose delta is not positive. Hatching it keeps the figure
+    # from asserting in a glance what the text spends a paragraph withdrawing.
     bars = ax1.bar(range(len(arms)), means, yerr=[lo, hi], capsize=4,
-                   color=[COLORS[a] for a in arms], edgecolor="black", linewidth=0.6)
+                   color=[COLORS[a] for a in arms], edgecolor="black", linewidth=0.6,
+                   hatch=["//" if a == "out-of-band" else "" for a in arms])
+    for i, a in enumerate(arms):
+        if a == "out-of-band":
+            ax1.text(i, 0.12, "structural", ha="center", fontsize=7,
+                     style="italic", rotation=90, color="black")
     ax1.set_xticks(range(len(arms))); ax1.set_xticklabels(arms, fontsize=8, rotation=12)
     ax1.set_ylabel("progress-mirage rate", fontsize=9)
     ax1.set_ylim(0, 1.0)
-    ax1.set_title("(a) Accepted cycles with real delta <= 0", fontsize=9)
+    ax1.set_title("(a) Accepted cycles with held-out delta <= 0", fontsize=9)
     for i, m in enumerate(means):
         ax1.text(i, m + 0.04, f"{m:.2f}", ha="center", fontsize=8, fontweight="bold")
     ax1.grid(axis="y", alpha=0.3)
@@ -64,8 +73,8 @@ def main():
     ax2.axhline(base0, color="gray", linestyle="--", linewidth=0.8, alpha=0.7)
     ax2.text(0.05, base0, " baseline", fontsize=7, color="gray", va="bottom")
     ax2.set_xlabel("cycle", fontsize=9)
-    ax2.set_ylabel("deployed real conversions", fontsize=9)
-    ax2.set_title("(b) Real outcome of the deployed state", fontsize=9)
+    ax2.set_ylabel("held-out outcome of the deployed state", fontsize=9)
+    ax2.set_title("(b) Held-out outcome of the deployed state", fontsize=9)
     ax2.legend(fontsize=7.5, loc="best")
     ax2.grid(alpha=0.3)
 

@@ -42,9 +42,15 @@ scored. Both probes are in `test_oracle_integrity.py`.
 
 ## Task families
 
-- S1 (`s1_defect_repair`): repair semantic-version comparison. The public tests
-  cover ordinary versions; the held-out regression tests cover multi-digit
-  components, malformed versions, and unequal lengths.
+- S1 (`s1_swebench`): repair a pinned real Django repository issue. The
+  issue-specific test patch is introduced only in the network-disabled official
+  SWE-bench evaluation image. FAIL_TO_PASS and PASS_TO_PASS observations are
+  independently split into HO-A and HO-B, and test or test-infrastructure edits
+  invalidate the candidate. See `s1_swebench/README.md` for the frozen instance,
+  scoring rule, image and dataset digests, and reward-hacking guards.
+- S1 toy sensitivity (`s1_defect_repair`): repair semantic-version comparison.
+  This small fixture remains for apparatus regression tests and task-size
+  sensitivity only; it is excluded from confirmatory S1.
 - S3 (`s3_production_ops`): harden a request handler under a hidden deterministic
   workload. Every response is checked against an answer the oracle computes
   independently, and effort is CPU time measured by the parent from
@@ -82,8 +88,11 @@ status, aggregate scores, changed file names, timing, tokens, billing mode,
 CLI-reported API-price-equivalent cost, and incremental billed cost. It
 discards model text and source contents. Alias or session-default model
 selections are acceptable only for an
-apparatus smoke. Confirmatory runs require an immutable model identifier and a
-frozen total cost ceiling in the preregistration.
+apparatus smoke. Confirmatory runs require immutable model identifiers, frozen
+prompts and seeds, and the 960-logical-cycle budget in the preregistration. The
+execution mode is subscription authentication with zero incremental billing;
+API-price-equivalent shadow cost, quota events, and rate-limit waits remain
+mechanized telemetry rather than a spending-approval gate.
 
 When the host cannot create a nested CLI sandbox, pass `--container-image` plus
 either `--auth-file` or `--auth-env`. The adapter then uses the agent image as

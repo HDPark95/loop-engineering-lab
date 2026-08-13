@@ -29,6 +29,22 @@ import run_measurement
 ROOT = Path(__file__).resolve().parent
 
 
+def frozen_price() -> dict:
+    return {
+        "usd_per_1k_input": 0.1,
+        "usd_per_1k_cached_input": 0.01,
+        "usd_per_1k_output": 0.2,
+        "cache_write_input_multiplier": 1.25,
+        "cache_write_1h_input_multiplier": 2.0,
+        "long_context_threshold_input_tokens": 272000,
+        "long_context_input_multiplier": 2.0,
+        "long_context_output_multiplier": 1.5,
+        "pricing_schedule_id": "test-price-20260813",
+        "pricing_source_url": "https://example.test/pricing",
+        "pricing_retrieved_utc": "2026-08-13T00:00:00Z",
+    }
+
+
 def manifest(**overrides) -> dict:
     base = {
         "tasks": ["s1"],
@@ -50,6 +66,7 @@ def manifest(**overrides) -> dict:
         "max_concurrent_agents": 3,
         "quota_wait_seconds": 60,
         "quota_max_retries": 4,
+        "cell_schedule_seed": "test-cell-order-v1",
         "estimated_api_equivalent_usd_per_trajectory": 0.01,
         "preregistration_commit": "0" * 40,
     }
@@ -79,6 +96,19 @@ def run_cli(manifest_path: Path, log_path: Path, run_id: str, *extra) -> subproc
 
 
 class ManifestGateTest(unittest.TestCase):
+    def test_confirmatory_run_requires_candidate_archive(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = write_manifest(
+                Path(tmp),
+                manifest(
+                    apparatus_test=False,
+                    oracle_container_image="oracle@sha256:" + "b" * 64,
+                ),
+            )
+            with self.assertRaises(SystemExit) as caught:
+                run_measurement.load_manifest(path)
+            self.assertIn("artifact_archive_dir", str(caught.exception))
+
     def test_an_alias_model_is_refused(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = write_manifest(
@@ -154,8 +184,7 @@ class ManifestGateTest(unittest.TestCase):
             entry = {
                 "name": "codex",
                 "model": "gpt-test-2026-08-01",
-                "usd_per_1k_input": 0.1,
-                "usd_per_1k_output": 0.2,
+                **frozen_price(),
                 "container_image": "agent-image:latest",
                 "timeout_seconds": 900,
                 "auth_file_env": "LOOP_CODEX_AUTH_FILE",
@@ -175,8 +204,7 @@ class ManifestGateTest(unittest.TestCase):
             entry = {
                 "name": "codex",
                 "model": "gpt-test-2026-08-01",
-                "usd_per_1k_input": 0.1,
-                "usd_per_1k_output": 0.2,
+                **frozen_price(),
                 "container_image": "sha256:" + "a" * 64,
                 "timeout_seconds": 900,
                 "auth_file_env": "LOOP_CODEX_AUTH_FILE",
@@ -185,18 +213,141 @@ class ManifestGateTest(unittest.TestCase):
                 apparatus_test=False,
                 agents=[entry],
                 oracle_container_image="sha256:" + "b" * 64,
+                artifact_archive_dir="artifacts",
             )
             path = write_manifest(Path(tmp), data)
             with self.assertRaisesRegex(SystemExit, "reasoning_effort"):
                 run_measurement.load_manifest(path)
 
             entry["reasoning_effort"] = "medium"
+            data.update(
+                tasks=["s1_swebench", "s3", "g1", "b1"],
+                cells=[cell.name for cell in run_measurement.se_experiment.CELLS],
+                seeds=[11, 23, 37, 53, 71],
+                cycles=6,
+                agents=[
+                    entry,
+                    {
+                        "name": "claude",
+                        "adapter": "claude",
+                        "model": "claude-test-2026-08-01",
+                        **frozen_price(),
+                        "container_image": "sha256:" + "c" * 64,
+                        "timeout_seconds": 900,
+                        "auth_file_env": "LOOP_CLAUDE_AUTH_FILE",
+                    },
+                ],
+            )
             path = write_manifest(Path(tmp), data)
             loaded = run_measurement.load_manifest(path)
             self.assertEqual(loaded["agents"][0]["reasoning_effort"], "medium")
 
+    def test_confirmatory_design_shape_is_frozen(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            agents = [
+                {
+                    "name": "codex",
+                    "adapter": "codex",
+                    "model": "gpt-test-2026-08-01",
+                    "reasoning_effort": "medium",
+                    **frozen_price(),
+                    "container_image": "sha256:" + "a" * 64,
+                    "timeout_seconds": 900,
+                    "auth_file_env": "LOOP_CODEX_AUTH_FILE",
+                },
+                {
+                    "name": "claude",
+                    "adapter": "claude",
+                    "model": "claude-test-2026-08-01",
+                    **frozen_price(),
+                    "container_image": "sha256:" + "c" * 64,
+                    "timeout_seconds": 900,
+                    "auth_file_env": "LOOP_CLAUDE_AUTH_FILE",
+                },
+            ]
+            frozen = manifest(
+                apparatus_test=False,
+                tasks=["s1_swebench", "s3", "g1", "b1"],
+                agents=agents,
+                cells=[cell.name for cell in run_measurement.se_experiment.CELLS],
+                seeds=[11, 23, 37, 53, 71],
+                cycles=6,
+                oracle_container_image="sha256:" + "b" * 64,
+                artifact_archive_dir="artifacts",
+            )
+            self.assertEqual(run_measurement.load_manifest(write_manifest(Path(tmp), frozen)), frozen)
+
+            mutations = (
+                {"tasks": ["s1_swebench", "s3", "g1"]},
+                {"cells": ["grounded-numeric"]},
+                {"seeds": [11, 23, 37, 53]},
+                {"cycles": 5},
+                {"agents": agents[:1]},
+            )
+            for override in mutations:
+                path = write_manifest(Path(tmp), frozen | override)
+                with self.assertRaises(SystemExit):
+                    run_measurement.load_manifest(path)
+
 
 class RunnerTest(unittest.TestCase):
+    def test_shadow_price_uses_cache_and_request_level_long_context_tiers(self):
+        agent = {
+            **frozen_price(),
+            "usd_per_1k_input": 1.0,
+            "usd_per_1k_cached_input": 0.1,
+            "usd_per_1k_output": 10.0,
+            "long_context_threshold_input_tokens": 1000,
+        }
+        codex = run_measurement.price_of(agent, {
+            "input_tokens": 1300,
+            "uncached_input_tokens": 1060,
+            "cached_input_tokens": 240,
+            "cache_write_input_tokens": 0,
+            "cache_write_5m_input_tokens": 0,
+            "cache_write_1h_input_tokens": 0,
+            "cache_write_input_tokens_exact": False,
+            "output_tokens": 110,
+            "request_usages": [
+                {"input_tokens": 100, "cached_input_tokens": 40, "output_tokens": 10},
+                {"input_tokens": 1200, "cached_input_tokens": 200, "output_tokens": 100},
+            ],
+        })
+        self.assertAlmostEqual(codex["lower_usd"], 3.704)
+        self.assertAlmostEqual(codex["upper_usd"], 4.219)
+        self.assertFalse(codex["exact"])
+        self.assertEqual(codex["long_uncached_input_tokens"], 1000)
+
+        claude = run_measurement.price_of(agent, {
+            "input_tokens": 100,
+            "uncached_input_tokens": 70,
+            "cached_input_tokens": 30,
+            "cache_write_input_tokens": 20,
+            "cache_write_5m_input_tokens": 12,
+            "cache_write_1h_input_tokens": 8,
+            "cache_write_input_tokens_exact": True,
+            "output_tokens": 10,
+            "request_usages": [],
+        })
+        self.assertAlmostEqual(claude["lower_usd"], 0.184)
+        self.assertEqual(claude["lower_usd"], claude["upper_usd"])
+        self.assertTrue(claude["exact"])
+
+    def test_shadow_price_refuses_unclassified_long_context_aggregate(self):
+        agent = frozen_price() | {"long_context_threshold_input_tokens": 100}
+        with self.assertRaisesRegex(RuntimeError, "without request telemetry"):
+            run_measurement.price_of(agent, {
+                "input_tokens": 101,
+                "uncached_input_tokens": 101,
+                "cached_input_tokens": 0,
+                "cache_write_input_tokens": 0,
+                "cache_write_5m_input_tokens": 0,
+                "cache_write_1h_input_tokens": 0,
+                "cache_write_input_tokens_exact": True,
+                "output_tokens": 1,
+                "request_usages": [],
+            })
+
     def test_a_full_run_writes_one_record_per_cycle(self):
         with tempfile.TemporaryDirectory() as tmp:
             directory = Path(tmp)
@@ -213,6 +364,11 @@ class RunnerTest(unittest.TestCase):
             self.assertTrue(all(r["model_identity_matches"] for r in records))
             self.assertTrue(all(r["billing_mode"] == "subscription" for r in records))
             self.assertTrue(all(r["incremental_billed_usd"] == 0.0 for r in records))
+            self.assertTrue(all(r["agent_completed"] for r in records))
+            self.assertTrue(
+                all(r["edit_success"] == r["candidate_changed"] for r in records)
+            )
+            self.assertTrue(all(r["judge_seconds"] == 0.0 for r in records))
             self.assertTrue(any(r["api_equivalent_usd"] > 0.0 for r in records))
 
     def test_resume_does_not_redo_completed_trajectories(self):
@@ -538,8 +694,39 @@ class RunnerTest(unittest.TestCase):
             self.assertEqual(len({record["shared_execution_id"] for record in first}), 1)
             self.assertEqual(len({record["candidate_digest"] for record in first}), 1)
             self.assertAlmostEqual(sum(record["cost_allocation_fraction"] for record in first), 1.0)
+            self.assertEqual(sum(record["input_tokens"] for record in first), 100.0)
+            self.assertEqual(sum(record["output_tokens"] for record in first), 50.0)
+            self.assertAlmostEqual(sum(record["agent_seconds"] for record in first), 0.01)
+            self.assertAlmostEqual(sum(record["oracle_seconds"] for record in first), 0.02)
+            self.assertTrue(
+                all(record["execution_oracle_seconds"] == 0.02 for record in first)
+            )
 
-    def test_cycle_two_failure_does_not_abandon_peer_trajectories(self):
+    def test_frozen_schedule_runs_one_hash_ordered_cell_per_block_per_round(self):
+        data = manifest(
+            cells=[cell.name for cell in run_measurement.se_experiment.CELLS],
+            seeds=[1, 2],
+        )
+        keys = run_measurement.trajectories(data)
+        scheduled = run_measurement.scheduled_trajectories(keys, data)
+        self.assertEqual(scheduled, run_measurement.scheduled_trajectories(keys, data))
+        groups = {run_measurement.common_group(key) for key in keys}
+        for round_index in range(4):
+            round_keys = scheduled[
+                round_index * len(groups):(round_index + 1) * len(groups)
+            ]
+            self.assertEqual(
+                {run_measurement.common_group(key) for key in round_keys}, groups
+            )
+            self.assertTrue(
+                all(
+                    run_measurement.cell_order(data, key).index(key.cell)
+                    == round_index
+                    for key in round_keys
+                )
+            )
+
+    def test_cycle_two_failure_abandons_the_whole_common_block(self):
         calls = []
 
         def driver(model, task, workspace, cycle, seed, manifest, feedback=""):
@@ -608,14 +795,86 @@ class RunnerTest(unittest.TestCase):
 
             records = [json.loads(line) for line in log.read_text().splitlines()]
             abandoned = [record for record in records if record.get("abandoned")]
-            self.assertEqual(len(abandoned), 1)
+            self.assertEqual(len(abandoned), len(cells))
             self.assertNotIn("bundle_abandoned", abandoned[0])
+            self.assertEqual(
+                sum(bool(record.get("bundle_abandoned")) for record in abandoned),
+                len(cells) - 1,
+            )
             completed = {
                 record["trajectory"]
                 for record in records
                 if record.get("cycle") == 2 and not record.get("abandoned")
             }
             self.assertEqual(len(completed), len(cells) - 1)
+            self.assertEqual(
+                run_measurement.completed_common_group_trajectories(
+                    log,
+                    data,
+                    2,
+                    run_measurement.manifest_digest(data),
+                ),
+                set(),
+            )
+
+    def test_hard_kill_partial_block_is_tombstoned_and_rerun_from_cycle_one(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            data = manifest(
+                cells=[cell.name for cell in run_measurement.se_experiment.CELLS],
+                seeds=[1],
+                cycles=2,
+            )
+            path = write_manifest(directory, data)
+            log = directory / "cycles.jsonl"
+            key = run_measurement.trajectories(data)[0]
+            digest = run_measurement.manifest_digest(data)
+            partial = {
+                "schema_version": run_measurement.SCHEMA_VERSION,
+                "run_id": "killed-run",
+                "attempt_id": "killed-run:attempt",
+                "manifest_digest": digest,
+                "preregistration_commit": data["preregistration_commit"],
+                "trajectory": key.token(),
+                **key.as_dict(),
+                "cycle": 1,
+            }
+            log.write_text(json.dumps(partial) + "\n", encoding="utf-8")
+
+            result = run_cli(path, log, "recovery-run")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            records = [json.loads(line) for line in log.read_text().splitlines()]
+            killed = [
+                row for row in records
+                if row.get("attempt_id") == "killed-run:attempt"
+            ]
+            self.assertTrue(any(row.get("reconciled_incomplete_common_group") for row in killed))
+            complete = run_measurement.completed_common_group_trajectories(
+                log, data, 2, digest
+            )
+            self.assertEqual(len(complete), 4)
+
+
+class ArtifactArchiveTest(unittest.TestCase):
+    def test_archive_is_content_addressed_and_exact(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            candidate = root / "candidate"
+            candidate.mkdir()
+            (candidate / "source.py").write_text("value = 1\n", encoding="utf-8")
+            (candidate / "nested").mkdir()
+            (candidate / "nested" / "data.txt").write_text("observed\n", encoding="utf-8")
+            archive = root / "archive"
+            first = run_measurement.archive_candidate(candidate, archive)
+            second = run_measurement.archive_candidate(candidate, archive)
+            self.assertEqual(first, second)
+            record = json.loads(
+                (archive / "manifests" / f"{first}.json").read_text(encoding="utf-8")
+            )
+            files = {entry["path"]: entry for entry in record["entries"] if entry["type"] == "file"}
+            self.assertEqual(files["source.py"]["size"], len("value = 1\n"))
+            object_path = archive / "objects" / files["source.py"]["sha256"][:2] / files["source.py"]["sha256"]
+            self.assertEqual(object_path.read_text(encoding="utf-8"), "value = 1\n")
 
 
 class ReplayTest(unittest.TestCase):
@@ -637,7 +896,11 @@ class ReplayTest(unittest.TestCase):
                 self.assertEqual(cell["incremental_billed_usd"], 0.0, key)
                 self.assertIsNone(cell["gain_per_incremental_billed_usd"], key)
                 self.assertTrue(cell["outcome_is_hob"], key)
-                self.assertFalse(cell["mirage_rate_is_structural"], key)
+                self.assertEqual(
+                    cell["mirage_rate_is_structural"],
+                    key.split("|")[-1].startswith("grounded"),
+                    key,
+                )
 
     def test_a_grounded_cell_gates_only_on_hoa(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -704,6 +967,190 @@ class ReplayTest(unittest.TestCase):
             self.assertFalse(report["clean"])
             self.assertEqual(metrics["ungraded_cycles"], 1)
             self.assertIsNone(metrics["mirage_rate"])
+
+    def test_replay_reports_registered_fixed_denominator_incidences(self):
+        cycles = [
+            {
+                "cycle": 1,
+                "cycles_planned": 6,
+                "oracle_delta": -1.0,
+                "accepted": True,
+            },
+            {
+                "cycle": 2,
+                "cycles_planned": 6,
+                "oracle_delta": 1.0,
+                "accepted": False,
+            },
+        ]
+        metrics = replay.trajectory_metrics(cycles)
+        self.assertAlmostEqual(metrics["harmful_acceptance_incidence"], 1 / 6, places=6)
+        self.assertAlmostEqual(metrics["false_rejection_incidence"], 1 / 6, places=6)
+
+    def test_gate_mirage_and_outcome_regression_use_different_halves(self):
+        cycles = [
+            {
+                "cycle": 1,
+                "cycles_planned": 6,
+                "oracle_delta": 0.0,
+                "delta_hoa": 0.1,
+                "delta_hob": 0.0,
+                "accepted": True,
+            },
+            {
+                "cycle": 2,
+                "cycles_planned": 6,
+                "oracle_delta": 0.2,
+                "delta_hoa": -0.1,
+                "delta_hob": 0.2,
+                "accepted": False,
+            },
+        ]
+        metrics = replay.trajectory_metrics(cycles)
+        self.assertEqual(metrics["mirage_rate"], 0.0)
+        self.assertEqual(metrics["regression_acceptance_rate"], 1.0)
+        self.assertAlmostEqual(metrics["harmful_acceptance_incidence"], 1 / 6, places=6)
+        self.assertAlmostEqual(metrics["false_rejection_incidence"], 1 / 6, places=6)
+
+    def test_schema_three_confirmatory_row_without_archive_is_unclean(self):
+        cycles = [
+            {
+                "schema_version": 3,
+                "trajectory": "t1",
+                "attempt_id": "a",
+                "cycle": 1,
+                "cycles_planned": 1,
+                "oracle_delta": 0.0,
+                "apparatus_test": False,
+                "model_served": "model-v1",
+                "model_identity_matches": True,
+                "manifest_digest": "m",
+                "preregistration_commit": "p",
+            }
+        ]
+        report = replay.integrity(cycles, [], [])
+        self.assertEqual(report["missing_candidate_archive_trajectories"], ["t1"])
+        self.assertFalse(report["clean"])
+
+    def test_schema_four_confirmatory_row_without_allocation_contract_is_unclean(self):
+        cycles = [
+            {
+                "schema_version": 4,
+                "trajectory": "t1",
+                "attempt_id": "a",
+                "cycle": 1,
+                "cycles_planned": 1,
+                "oracle_delta": 0.0,
+                "apparatus_test": False,
+                "model_served": "model-v1",
+                "model_identity_matches": True,
+                "manifest_digest": "m",
+                "preregistration_commit": "p",
+                "candidate_archive_manifest_sha256": "archive",
+            }
+        ]
+        report = replay.integrity(cycles, [], [])
+        self.assertEqual(report["invalid_measurement_contract_trajectories"], ["t1"])
+        self.assertFalse(report["clean"])
+
+    def test_schema_four_allocation_contract_is_replay_clean(self):
+        cycles = [
+            {
+                "schema_version": 4,
+                "trajectory": "t1",
+                "attempt_id": "a",
+                "cycle": 1,
+                "cycles_planned": 1,
+                "oracle_delta": 0.0,
+                "apparatus_test": False,
+                "model_served": "model-v1",
+                "model_identity_matches": True,
+                "manifest_digest": "m",
+                "preregistration_commit": "p",
+                "candidate_archive_manifest_sha256": "archive",
+                "cost_allocation_fraction": 0.25,
+                "candidate_changed": True,
+                "agent_completed": True,
+                "edit_success": True,
+                "execution_input_tokens": 100,
+                "execution_output_tokens": 20,
+                "execution_agent_seconds": 4.0,
+                "execution_oracle_seconds": 2.0,
+                "execution_api_equivalent_usd": 1.0,
+                "input_tokens": 25.0,
+                "output_tokens": 5.0,
+                "agent_seconds": 1.0,
+                "oracle_seconds": 0.5,
+                "judge_seconds": 0.0,
+                "api_equivalent_usd": 0.25,
+            }
+        ]
+        report = replay.integrity(cycles, [], [])
+        self.assertEqual(report["invalid_measurement_contract_trajectories"], [])
+        self.assertTrue(report["clean"])
+
+    def test_schema_five_shadow_price_is_recomputed_from_the_log(self):
+        schedule = run_measurement.price_schedule(frozen_price())
+        row = {
+            "schema_version": 5,
+            "trajectory": "t1",
+            "attempt_id": "a",
+            "cycle": 1,
+            "cycles_planned": 1,
+            "oracle_delta": 0.0,
+            "apparatus_test": False,
+            "cell_schedule_seed": "replay-test-order-v1",
+            "cell_schedule_position": 1,
+            "model_served": "model-v1",
+            "model_identity_matches": True,
+            "manifest_digest": "m",
+            "preregistration_commit": "p",
+            "candidate_archive_manifest_sha256": "archive",
+            "cost_allocation_fraction": 0.25,
+            "candidate_changed": True,
+            "agent_completed": True,
+            "edit_success": True,
+            "execution_input_tokens": 100,
+            "execution_uncached_input_tokens": 80,
+            "execution_cached_input_tokens": 20,
+            "execution_cache_write_input_tokens": 0,
+            "execution_cache_write_5m_input_tokens": 0,
+            "execution_cache_write_1h_input_tokens": 0,
+            "execution_standard_uncached_input_tokens": 80,
+            "execution_standard_cached_input_tokens": 20,
+            "execution_standard_output_tokens": 20,
+            "execution_long_uncached_input_tokens": 0,
+            "execution_long_cached_input_tokens": 0,
+            "execution_long_output_tokens": 0,
+            "execution_output_tokens": 20,
+            "execution_agent_seconds": 4.0,
+            "execution_oracle_seconds": 2.0,
+            "execution_api_equivalent_usd_lower_bound": 0.0122,
+            "execution_api_equivalent_usd": 0.0142,
+            "input_tokens": 25.0,
+            "uncached_input_tokens": 20.0,
+            "cached_input_tokens": 5.0,
+            "cache_write_input_tokens": 0.0,
+            "cache_write_5m_input_tokens": 0.0,
+            "cache_write_1h_input_tokens": 0.0,
+            "output_tokens": 5.0,
+            "agent_seconds": 1.0,
+            "oracle_seconds": 0.5,
+            "judge_seconds": 0.0,
+            "api_equivalent_usd_lower_bound": 0.00305,
+            "api_equivalent_usd": 0.00355,
+            "request_usage_count": 1,
+            "cache_write_input_tokens_exact": False,
+            "api_equivalent_price_exact": False,
+            "shadow_price_schedule": schedule,
+        }
+        report = replay.integrity([row], [], [])
+        self.assertTrue(report["clean"])
+
+        row["execution_api_equivalent_usd"] = 0.0143
+        report = replay.integrity([row], [], [])
+        self.assertEqual(report["invalid_measurement_contract_trajectories"], ["t1"])
+        self.assertFalse(report["clean"])
 
     def test_abandoned_attempt_rows_are_excluded_from_cell_statistics(self):
         cycles = [

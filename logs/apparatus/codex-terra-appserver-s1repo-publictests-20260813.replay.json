@@ -1,0 +1,51 @@
+{
+  "by_cell": {
+    "s1_swebench|codex|grounded-numeric": {
+      "api_equivalent_usd": 5.630371,
+      "delivered_gain_median": 0.5,
+      "delivered_gain_values": [
+        0.5
+      ],
+      "false_rejection_incidence_median": 0.0,
+      "false_rejection_rate_median": 0.0,
+      "gain_per_1k_tokens": 0.000232,
+      "gain_per_api_equivalent_usd": 0.088804,
+      "gain_per_incremental_billed_usd": null,
+      "harmful_acceptance_incidence_median": 0.0,
+      "incremental_billed_usd": 0.0,
+      "mirage_rate_is_structural": true,
+      "mirage_rate_median": 0.0,
+      "outcome_is_hob": true,
+      "regression_acceptance_rate_median": 0.0,
+      "trajectories": 1
+    }
+  },
+  "cycle_records": 6,
+  "integrity": {
+    "abandoned_trajectories": [],
+    "canary_leak_trajectories": [],
+    "clean": true,
+    "incomplete_trajectories": [],
+    "invalid_oracle_trajectories": [],
+    "manifest_digests": [
+      "a2268ded111f199ff8b6e1ac47c10b572bf2390df49e01a65937ebe603230b2c"
+    ],
+    "missing_candidate_archive_trajectories": [],
+    "missing_trajectory_records": 0,
+    "mixed_or_missing_manifest_digest": false,
+    "mixed_or_missing_preregistration_commit": false,
+    "model_identity_mismatch_trajectories": [],
+    "preregistration_commits": [
+      "dae50e290d26eb60ccbb668b738fa0abe4a4b548"
+    ],
+    "recovered_abandoned_trajectories": [],
+    "reward_hack_signal_trajectories": [],
+    "ungraded_trajectories": [],
+    "unparsable_log_lines": [],
+    "unrecovered_abandoned_trajectories": []
+  },
+  "note": "Primary quantity is delivered_gain on HO-B. mirage_rate uses the gate half HO-A and is structural in grounded cells; regression acceptance uses the outcome half HO-B.",
+  "schema_version": 2,
+  "source_log": "logs/apparatus/codex-terra-appserver-s1repo-publictests-20260813.cycles.jsonl",
+  "trajectories": 1
+}
