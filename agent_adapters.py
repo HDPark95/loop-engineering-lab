@@ -22,6 +22,7 @@ from pathlib import Path
 
 import se_experiment
 
+APP_SERVER_CLIENT_SOURCE = Path(__file__).resolve().parent / "codex_app_server_client.py"
 
 PROMPT = """Repair the issue in ISSUE.md in the current isolated directory.
 Work only in the current directory. Inspect the implementation and public tests,
@@ -134,6 +135,9 @@ def parse_codex_usage(stdout: str) -> Usage:
             event = json.loads(line)
         except json.JSONDecodeError:
             continue
+        if event.get("protocol") == "codex-app-server-v2":
+            usage = event.get("usage", {})
+            continue
         if event.get("type") == "turn.completed":
             usage = event.get("usage", {})
     return Usage(
@@ -212,6 +216,7 @@ def container_command_for(
     verdict_schema: dict | None = None,
     container_name: str | None = None,
     billing_mode: str = "unknown",
+    reasoning_effort: str | None = None,
 ) -> list[str]:
     """Build a CLI command for a container that sees only the task and auth."""
     common = [
@@ -230,20 +235,27 @@ def container_command_for(
     if container_name:
         common[2:2] = ["--name", container_name]
     if agent == "codex":
+        common.extend(
+            [
+                "--mount",
+                f"type=bind,src={APP_SERVER_CLIENT_SOURCE},"
+                "dst=/opt/loop-codex-app-server-client.py,readonly",
+            ]
+        )
         inner = [
-            "codex",
-            "exec",
-            "--json",
-            "--ephemeral",
-            "--ignore-user-config",
-            "--ignore-rules",
-            "--skip-git-repo-check",
-            "--dangerously-bypass-approvals-and-sandbox",
-            "--cd",
+            "python3",
+            "/opt/loop-codex-app-server-client.py",
+            "--model",
+            model or "",
+            "--workspace",
             "/workspace",
+            "--prompt",
+            prompt,
         ]
         if verdict_schema_path:
             inner.extend(["--output-schema", verdict_schema_path])
+        if reasoning_effort:
+            inner.extend(["--reasoning-effort", reasoning_effort])
         target = "/tmp/.codex/auth.json"
     elif agent == "claude":
         inner = [
@@ -262,7 +274,7 @@ def container_command_for(
         target = "/tmp/.claude/.credentials.json"
     else:
         raise ValueError(f"unsupported agent: {agent}")
-    if model:
+    if agent == "claude" and model:
         inner.extend(["--model", model])
     mounts = [*common]
     if auth_dir:
@@ -278,12 +290,9 @@ def container_command_for(
         mounts.extend(
             ["--mount", f"type=bind,src={state_file.resolve()},dst=/tmp/.claude.json,readonly"]
         )
-    return [
-        *mounts,
-        image,
-        *inner,
-        prompt,
-    ]
+    if agent == "claude":
+        inner.append(prompt)
+    return [*mounts, image, *inner]
 
 
 def parse_codex_final_report(stdout: str) -> dict | None:
@@ -292,6 +301,11 @@ def parse_codex_final_report(stdout: str) -> dict | None:
         try:
             event = json.loads(line)
         except json.JSONDecodeError:
+            continue
+        if event.get("protocol") == "codex-app-server-v2":
+            structured = event.get("self_report")
+            if isinstance(structured, dict):
+                report = structured
             continue
         item = event.get("item") or {}
         if event.get("type") == "item.completed" and item.get("type") == "agent_message":
@@ -340,6 +354,11 @@ def reported_model(agent: str, stdout: str) -> str | None:
             event = json.loads(line)
         except json.JSONDecodeError:
             continue
+        if event.get("protocol") == "codex-app-server-v2":
+            value = event.get("model_served")
+            if isinstance(value, str) and value:
+                models.add(value)
+            continue
         for source in (event, event.get("item") or {}):
             value = source.get("model") or source.get("model_name")
             if isinstance(value, str) and value:
@@ -361,6 +380,7 @@ def run_measurement_cycle(
     timeout_seconds: int,
     billing_mode: str,
     max_budget_usd: float,
+    reasoning_effort: str | None = None,
 ) -> dict:
     """Run one real prompt cycle and retain only structured aggregate output."""
     if agent not in {"codex", "claude"}:
@@ -399,6 +419,7 @@ def run_measurement_cycle(
                 verdict_schema=VERDICT_SCHEMA if agent == "claude" else None,
                 container_name=container_name,
                 billing_mode=billing_mode,
+                reasoning_effort=reasoning_effort,
             )
             try:
                 process = subprocess.run(
@@ -434,10 +455,28 @@ def run_measurement_cycle(
     usage = parse_codex_usage(process.stdout) if agent == "codex" else parse_claude_usage(process.stdout)
     if usage.input_tokens is None or usage.output_tokens is None:
         raise AgentInvocationError("agent output omitted token usage", "telemetry")
+    protocol_event = None
+    if agent == "codex":
+        for line in process.stdout.splitlines():
+            try:
+                candidate_event = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if candidate_event.get("protocol") == "codex-app-server-v2":
+                protocol_event = candidate_event
     return {
         "self_report": report,
         "judge_verdict": None,
         "model_served": reported_model(agent, process.stdout),
+        "model_identity_evidence": (
+            protocol_event.get("model_identity_evidence")
+            if protocol_event
+            else "runtime_cli_output"
+        ),
+        "model_reroutes": protocol_event.get("model_reroutes", []) if protocol_event else [],
+        "reasoning_effort_served": (
+            protocol_event.get("reasoning_effort_served") if protocol_event else None
+        ),
         "input_tokens": int(usage.input_tokens),
         "output_tokens": int(usage.output_tokens),
         "agent_seconds": round(time.perf_counter() - started, 6),

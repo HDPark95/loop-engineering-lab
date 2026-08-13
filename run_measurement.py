@@ -219,6 +219,17 @@ def load_manifest(path: Path) -> dict:
             auth_file_env = agent.get("auth_file_env", "")
             if not isinstance(auth_file_env, str) or not auth_file_env:
                 raise SystemExit(f"agent {agent.get('name')!r} requires auth_file_env")
+            if (
+                adapter == "codex"
+                and not manifest.get("apparatus_test", False)
+                and (
+                    not isinstance(agent.get("reasoning_effort"), str)
+                    or not agent["reasoning_effort"].strip()
+                )
+            ):
+                raise SystemExit(
+                    f"agent {agent.get('name')!r} must freeze reasoning_effort"
+                )
 
     if manifest["billing_mode"] not in {"subscription", "api"}:
         raise SystemExit("billing_mode must be 'subscription' or 'api'")
@@ -593,6 +604,7 @@ def real_agent_driver(
             timeout_seconds=int(entry["timeout_seconds"]),
             billing_mode=manifest["billing_mode"],
             max_budget_usd=float(manifest["estimated_api_equivalent_usd_per_trajectory"]),
+            reasoning_effort=entry.get("reasoning_effort"),
         )
     except agent_adapters.AgentInvocationError as exc:
         if exc.kind == "quota":
@@ -770,11 +782,25 @@ def run_trajectory(
                 "model_served": outcome.get("model_served"),
                 "model_identity_matches": outcome.get("model_served") == key.model,
                 "model_identity_evidence": (
-                    "runtime_cli_output" if outcome.get("model_served") else "unreported"
+                    outcome.get("model_identity_evidence")
+                    or ("runtime_cli_output" if outcome.get("model_served") else "unreported")
+                ),
+                "model_reroutes": outcome.get("model_reroutes", []),
+                "reasoning_effort_requested": agent_entry.get("reasoning_effort"),
+                "reasoning_effort_served": outcome.get("reasoning_effort_served"),
+                "reasoning_effort_matches": bool(
+                    not agent_entry.get("reasoning_effort")
+                    or outcome.get("reasoning_effort_served")
+                    == agent_entry.get("reasoning_effort")
                 ),
                 "confirmatory_eligible": bool(
                     not manifest.get("apparatus_test", False)
                     and outcome.get("model_served") == key.model
+                    and (
+                        not agent_entry.get("reasoning_effort")
+                        or outcome.get("reasoning_effort_served")
+                        == agent_entry.get("reasoning_effort")
+                    )
                 ),
                 "candidate_digest": outcome.get("candidate_digest"),
                 "shared_execution_id": shared_execution_id,
@@ -816,6 +842,17 @@ def run_trajectory(
             ):
                 cause = RuntimeError(
                     "runtime did not report the exact immutable model requested by the manifest"
+                )
+                raise TrajectoryRunError(
+                    cause,
+                    {**usage_record, "shared_cycle_one_failure": cycle == 1},
+                )
+            if (
+                not usage_record["reasoning_effort_matches"]
+                and not manifest.get("apparatus_test", False)
+            ):
+                cause = RuntimeError(
+                    "runtime reasoning effort did not match the frozen manifest"
                 )
                 raise TrajectoryRunError(
                     cause,

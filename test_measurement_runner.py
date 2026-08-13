@@ -170,6 +170,31 @@ class ManifestGateTest(unittest.TestCase):
             with self.assertRaisesRegex(SystemExit, "auth_file_env"):
                 run_measurement.load_manifest(path)
 
+    def test_confirmatory_codex_agent_requires_frozen_reasoning_effort(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            entry = {
+                "name": "codex",
+                "model": "gpt-test-2026-08-01",
+                "usd_per_1k_input": 0.1,
+                "usd_per_1k_output": 0.2,
+                "container_image": "sha256:" + "a" * 64,
+                "timeout_seconds": 900,
+                "auth_file_env": "LOOP_CODEX_AUTH_FILE",
+            }
+            data = manifest(
+                apparatus_test=False,
+                agents=[entry],
+                oracle_container_image="sha256:" + "b" * 64,
+            )
+            path = write_manifest(Path(tmp), data)
+            with self.assertRaisesRegex(SystemExit, "reasoning_effort"):
+                run_measurement.load_manifest(path)
+
+            entry["reasoning_effort"] = "medium"
+            path = write_manifest(Path(tmp), data)
+            loaded = run_measurement.load_manifest(path)
+            self.assertEqual(loaded["agents"][0]["reasoning_effort"], "medium")
+
 
 class RunnerTest(unittest.TestCase):
     def test_a_full_run_writes_one_record_per_cycle(self):

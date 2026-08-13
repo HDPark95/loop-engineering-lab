@@ -29,7 +29,13 @@ class AdapterTest(unittest.TestCase):
         command = agent_adapters.container_command_for(
             "codex", Path("/tmp/work"), None, 0.2, "agent-image", Path("/tmp/auth.json")
         )
-        self.assertIn("--dangerously-bypass-approvals-and-sandbox", command)
+        self.assertIn("/opt/loop-codex-app-server-client.py", command)
+        self.assertTrue(
+            any(
+                "dst=/opt/loop-codex-app-server-client.py,readonly" in part
+                for part in command
+            )
+        )
         self.assertIn("type=bind,src=/tmp/work,dst=/workspace", command)
         self.assertIn("type=bind,src=/tmp/auth.json,dst=/tmp/.codex/auth.json,readonly", command)
         position = command.index("--user")
@@ -132,6 +138,26 @@ class AdapterTest(unittest.TestCase):
             "item": {"type": "agent_message", "text": json.dumps(report)},
         })
         self.assertEqual(agent_adapters.parse_codex_final_report(codex_output), report)
+
+        app_server_output = json.dumps({
+            "protocol": "codex-app-server-v2",
+            "self_report": report,
+            "model_served": "gpt-5.6-terra",
+            "usage": {
+                "input_tokens": 30,
+                "cached_input_tokens": 4,
+                "output_tokens": 8,
+            },
+        })
+        self.assertEqual(agent_adapters.parse_codex_final_report(app_server_output), report)
+        self.assertEqual(
+            agent_adapters.reported_model("codex", app_server_output),
+            "gpt-5.6-terra",
+        )
+        self.assertEqual(
+            agent_adapters.parse_codex_usage(app_server_output),
+            agent_adapters.Usage(30, 8, 4, None),
+        )
 
         claude_output = json.dumps({
             "structured_output": report,

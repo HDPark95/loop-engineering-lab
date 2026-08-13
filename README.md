@@ -51,12 +51,21 @@ telemetry일 뿐 실행 한도가 아니다. 실제 달러 ceiling은 `billing_m
 
 본 측정 전에는 manifest에 다음을 모두 채워야 한다.
 
-- alias가 아닌 두 agent의 정확한 model ID와 API 환산 단가
+- alias가 아닌 두 agent의 정확한 model ID, reasoning effort, API 환산 단가
 - digest로 고정한 agent/oracle container image, 실행 timeout, 인증 파일 경로를
   담는 환경변수 이름
 - preregistration commit, 10개 seed, 6 cycles, 두 task와 네 factor cell
 - trajectory별 최대 API 환산 추정치. 이는 초과 계측을 탐지하는 보수적 상한이며
   구독 실행의 실제 청구액이 아니다.
+
+Codex adapter는 CLI 최종 텍스트의 자기보고를 모델 식별 근거로 쓰지 않는다.
+컨테이너 안에서 Codex App Server를 시작하고 `thread/start`,
+`thread/settings/updated`, `model/rerouted` 프로토콜 사건으로 실제 제공 모델과
+reasoning effort를 기록한다. 본 측정에서는 둘 중 하나라도 manifest와 다르거나
+런타임이 값을 보고하지 않으면 trajectory를 실패 처리한다. `model/rerouted`가
+관측되면 목적 모델을 보존하되 reroute 이력도 원시 로그에 함께 남긴다.
+App Server 호출은 기존 ChatGPT 구독 인증을 사용하므로 추가 API 청구액은 0이다.
+로그의 `api_equivalent_usd`는 동일 토큰을 API로 실행했을 때의 비교용 환산치다.
 
 먼저 호출 없이 계획을 확인한다.
 
