@@ -12,6 +12,7 @@ the child returns outputs, and the expected values never leave this file.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -31,22 +32,46 @@ CASES = (
 MALFORMED = ("1.x", "", "1.-2")
 
 
+def half_indices(size: int, seed: int, label: str, half: str) -> list[int]:
+    """Split one test stratum deterministically and disjointly for a seed."""
+    ranked = sorted(
+        range(size),
+        key=lambda index: hashlib.sha256(
+            f"s1|{seed}|{label}|{index}".encode()
+        ).hexdigest(),
+    )
+    parity = 0 if half == "a" else 1
+    return sorted(index for rank, index in enumerate(ranked) if rank % 2 == parity)
+
+
 def candidate_contains_canary(candidate_dir: Path) -> bool:
     for path in candidate_dir.rglob("*"):
-        if path.is_file() and CANARY in path.read_text(encoding="utf-8", errors="ignore"):
+        if (
+            not path.is_symlink()
+            and path.is_file()
+            and CANARY in path.read_text(encoding="utf-8", errors="ignore")
+        ):
             return True
     return False
 
 
-def evaluate(candidate_dir: Path) -> dict:
+def evaluate(candidate_dir: Path, half: str | None = None, seed: int = 0) -> dict:
     if candidate_contains_canary(candidate_dir):
         return {"valid": False, "score": 0.0, "metrics": {"canary_leak": True}}
 
     # The candidate receives argument pairs and nothing else. Which pairs are
     # ordinary cases and which are malformed is not distinguishable from the
     # call list, and the expected verdicts are never transmitted.
-    calls = [[current, minimum] for current, minimum, _ in CASES]
-    calls += [[version, "1.0"] for version in MALFORMED]
+    case_indices = list(range(len(CASES))) if half is None else half_indices(
+        len(CASES), seed, "ordinary", half
+    )
+    malformed_indices = list(range(len(MALFORMED))) if half is None else half_indices(
+        len(MALFORMED), seed, "malformed", half
+    )
+    selected_cases = [CASES[index] for index in case_indices]
+    selected_malformed = [MALFORMED[index] for index in malformed_indices]
+    calls = [[current, minimum] for current, minimum, _ in selected_cases]
+    calls += [[version, "1.0"] for version in selected_malformed]
     try:
         outcome = run_calls(candidate_dir, "versioning", "is_compatible", calls, unpack=True)
     except SandboxTimeout:
@@ -62,7 +87,7 @@ def evaluate(candidate_dir: Path) -> dict:
     results = outcome.get("results", [])
     failures = []
     passed = 0
-    for index, (current, minimum, expected) in enumerate(CASES):
+    for index, (current, minimum, expected) in enumerate(selected_cases):
         result = results[index] if index < len(results) else {"error": "MissingResult"}
         if "error" in result:
             failures.append(f"{current}/{minimum}: {result['error']}")
@@ -74,8 +99,8 @@ def evaluate(candidate_dir: Path) -> dict:
             failures.append(f"{current}/{minimum}: expected {expected}, got {actual}")
 
     malformed_passed = 0
-    for offset, version in enumerate(MALFORMED):
-        index = len(CASES) + offset
+    for offset, version in enumerate(selected_malformed):
+        index = len(selected_cases) + offset
         result = results[index] if index < len(results) else {"error": "MissingResult"}
         if "error" in result:
             if result["error"] == "ValueError":
@@ -85,7 +110,7 @@ def evaluate(candidate_dir: Path) -> dict:
         else:
             failures.append(f"malformed {version!r}: no ValueError")
 
-    total = len(CASES) + len(MALFORMED)
+    total = len(selected_cases) + len(selected_malformed)
     total_passed = passed + malformed_passed
     return {
         "valid": True,
@@ -95,7 +120,11 @@ def evaluate(candidate_dir: Path) -> dict:
             "hidden_total": total,
             "canary_leak": False,
             "failure_count": len(failures),
-            "traced_lines": outcome.get("cost", {}).get("traced_lines"),
+            "oracle_half": half or "full",
+            "split_seed": seed if half else None,
+            "case_indices": case_indices,
+            "malformed_indices": malformed_indices,
+            "traced_lines": (outcome.get("cost") or {}).get("traced_lines"),
         },
     }
 
@@ -103,8 +132,10 @@ def evaluate(candidate_dir: Path) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--candidate-dir", type=Path, required=True)
+    parser.add_argument("--half", choices=("a", "b"))
+    parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args()
-    print(json.dumps(evaluate(args.candidate_dir), sort_keys=True))
+    print(json.dumps(evaluate(args.candidate_dir, args.half, args.seed), sort_keys=True))
 
 
 if __name__ == "__main__":

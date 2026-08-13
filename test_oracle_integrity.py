@@ -28,17 +28,34 @@ scored 100.0 at the time.
 from __future__ import annotations
 
 import json
+import importlib.util
+import os
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parent
 S1_ORACLE = ROOT / "se_tasks" / "s1_defect_repair" / "oracle.py"
 S3_ORACLE = ROOT / "se_tasks" / "s3_production_ops" / "oracle.py"
 S1_SEED = ROOT / "se_tasks" / "s1_defect_repair" / "seed" / "versioning.py"
 S3_SEED = ROOT / "se_tasks" / "s3_production_ops" / "seed" / "service.py"
+
+if str(ROOT / "se_tasks") not in sys.path:
+    sys.path.insert(0, str(ROOT / "se_tasks"))
+
+from _sandbox.harness import run_calls  # noqa: E402
+from _sandbox import harness  # noqa: E402
+
+
+def load_oracle(path: Path, name: str):
+    spec = importlib.util.spec_from_file_location(name, path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 S3_NULL = """
 def handle(request):
@@ -161,9 +178,6 @@ def probe(*args, **kwargs):
 
 def survey_from_inside(filename: str, entry_point: str) -> dict:
     """Run the probe through the real boundary and return what it could see."""
-    sys.path.insert(0, str(ROOT / "se_tasks"))
-    from _sandbox.harness import run_calls
-
     module = filename[: -len(".py")]
     source = PROBE.replace("def probe(", f"def {entry_point}(")
     with tempfile.TemporaryDirectory() as tmp:
@@ -236,6 +250,86 @@ class S3OracleTest(unittest.TestCase):
         self.assertEqual(findings["reachable"], {})
         self.assertEqual(findings["readable"], [])
 
+    def test_fifo_candidate_is_rejected_before_copying(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            os.mkfifo(directory / "blocked-pipe")
+            outcome = run_calls(directory, "service", "handle", [])
+        self.assertFalse(outcome["ok"])
+        self.assertEqual(outcome["load_error"], "UnsupportedCandidateFile")
+        self.assertEqual(outcome["unsupported_path"], "blocked-pipe")
+
+    def test_blocked_docker_cleanup_does_not_skip_process_group_kill(self):
+        process = mock.Mock(pid=12345)
+        process.communicate.side_effect = [
+            subprocess.TimeoutExpired(["docker", "run"], 1),
+            ("", ""),
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            (directory / "service.py").write_text("def handle(x): return x", encoding="utf-8")
+            with (
+                mock.patch.object(harness.subprocess, "Popen", return_value=process),
+                mock.patch.object(
+                    harness.subprocess,
+                    "run",
+                    side_effect=subprocess.TimeoutExpired(["docker", "cleanup"], 5),
+                ),
+                mock.patch.object(harness.os, "killpg") as killpg,
+                self.assertRaises(harness.SandboxTimeout),
+            ):
+                harness.run_calls(directory, "service", "handle", [], timeout=1)
+        killpg.assert_called_once_with(12345, harness.signal.SIGKILL)
+
+    def test_hoa_and_hob_workloads_are_disjoint_and_seeded(self):
+        s3_oracle = load_oracle(S3_ORACLE, "s3_oracle_for_split_test")
+
+        a = set(s3_oracle.workload_indices(17, "a"))
+        b = set(s3_oracle.workload_indices(17, "b"))
+        self.assertFalse(a & b)
+        self.assertEqual(a | b, set(range(len(s3_oracle.PAYLOAD_LENGTHS))))
+        self.assertNotEqual(a, set(s3_oracle.workload_indices(18, "a")))
+
+    def test_half_workload_uses_its_own_denominator(self):
+        s3_oracle = load_oracle(S3_ORACLE, "s3_oracle_for_denominator_test")
+
+        def correct_outcome(candidate_dir, module, callable_name, calls):
+            return {
+                "ok": True,
+                "results": [
+                    {"value": s3_oracle.expected_response(call["payload"])} for call in calls
+                ],
+                "measured_cpu_seconds": 0.01,
+                "cost": {},
+            }
+
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(
+            s3_oracle, "run_calls", side_effect=correct_outcome
+        ), mock.patch.object(s3_oracle, "time_reference", return_value=0.01):
+            result = s3_oracle.evaluate(Path(tmp), half="a", seed=17)
+        self.assertEqual(result["metrics"]["requests"], len(s3_oracle.PAYLOAD_LENGTHS) // 2)
+        self.assertEqual(result["score"], 100.0)
+
+    def test_missing_candidate_cpu_invalidates_the_oracle(self):
+        s3_oracle = load_oracle(S3_ORACLE, "s3_oracle_for_missing_cpu_test")
+
+        def missing_cpu(candidate_dir, module, callable_name, calls):
+            return {
+                "ok": True,
+                "results": [
+                    {"value": s3_oracle.expected_response(call["payload"])} for call in calls
+                ],
+                "measured_cpu_seconds": None,
+                "cost": {},
+            }
+
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(
+            s3_oracle, "run_calls", side_effect=missing_cpu
+        ):
+            result = s3_oracle.evaluate(Path(tmp))
+        self.assertFalse(result["valid"])
+        self.assertFalse(result["metrics"]["cpu_measured"])
+
 
 class S1OracleTest(unittest.TestCase):
     def setUp(self):
@@ -276,6 +370,15 @@ class S1OracleTest(unittest.TestCase):
         findings = survey_from_inside("versioning.py", "is_compatible")
         self.assertEqual(findings["reachable"], {})
         self.assertEqual(findings["readable"], [])
+
+    def test_hoa_and_hob_cases_are_disjoint_and_complete(self):
+        s1_oracle = load_oracle(S1_ORACLE, "s1_oracle_for_split_test")
+
+        for size, label in ((len(s1_oracle.CASES), "ordinary"), (len(s1_oracle.MALFORMED), "malformed")):
+            a = set(s1_oracle.half_indices(size, 17, label, "a"))
+            b = set(s1_oracle.half_indices(size, 17, label, "b"))
+            self.assertFalse(a & b)
+            self.assertEqual(a | b, set(range(size)))
 
 
 if __name__ == "__main__":
