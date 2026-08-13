@@ -121,11 +121,12 @@ trusted host process. Candidate functions are invoked in a separate read-only,
 network-disabled sandbox image that contains no oracle, task seed, answer key,
 or score function and mounts only a disposable candidate-and-runner directory.
 The frozen manifest pins that sandbox image and records the preflight
-mount/network proof. S1 additionally refuses changes to tests or test
+mount/network record and its SHA-256. S1 additionally refuses changes to tests or test
 infrastructure and runs the candidate only in the official network-disabled
-evaluation image. S3 retains an artifact canary. A boundary, canary, or
-reward-hacking guard failure invalidates the trajectory before outcome
-inspection.
+evaluation image. S3 retains an artifact canary. A canary or reward-hacking
+guard failure, an archive defect, or a model-identity mismatch
+invalidates the trajectory before outcome inspection. The preflight must pass
+before the manifest can be finalized or any confirmatory trajectory can start.
 
 S1 was selected before confirmatory execution from the fixed 261-instance
 screening frame. Eligibility required medium human difficulty, 8 through 100
