@@ -1,0 +1,16 @@
+{
+  "agreement": {
+    "claim_cohen_kappa": 0.764971
+  },
+  "classifier_claim_validation": {
+    "fn": 89,
+    "fp": 15,
+    "precision": 0.913295,
+    "recall": 0.639676,
+    "tp": 158
+  },
+  "freeze_gate_passed": false,
+  "n": 353,
+  "privacy": "aggregate only; no annotation IDs or text",
+  "schema_version": 1
+}
