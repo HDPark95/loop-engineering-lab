@@ -208,6 +208,40 @@ DOI를 재사용하지 않는다.
       --claude-resources logs/apparatus/claude-resource-20260815.resources.json \
       --output-dir release/loop-engineering-preregistration-v1
 
+builder 뒤에는 먼저 로컬 요청 JSON만 만든다. Zenodo 상태를 바꾸는 `create-draft`는
+명시적인 production 확인과 `ZENODO_TOKEN`이 있어야 하며, 되돌릴 수 없는 `publish`는
+그에 더해 예약된 record ID와 고정 ZIP SHA-256을 명령행에서 다시 일치시켜야 한다.
+발행 도구는 공개 record의 단일 파일을 다시 내려받아 SHA-256까지 일치하는 경우에만
+외부 타임스탬프 증거 JSON을 만든다. 승인 없이 `create-draft`나 `publish`를 실행하지 않는다.
+
+    python3 zenodo_preregistration.py prepare \
+      --bundle-dir release/loop-engineering-preregistration-v1 \
+      --publication-date 2026-08-15 \
+      --output release/loop-engineering-preregistration-v1/zenodo-request.json
+
+    python3 zenodo_preregistration.py create-draft \
+      --request release/loop-engineering-preregistration-v1/zenodo-request.json \
+      --bundle release/loop-engineering-preregistration-v1/loop-engineering-preregistration-v1.zip \
+      --output release/loop-engineering-preregistration-v1/zenodo-draft-receipt.json \
+      --confirm-production zenodo.org
+
+    python3 zenodo_preregistration.py publish \
+      --request release/loop-engineering-preregistration-v1/zenodo-request.json \
+      --receipt release/loop-engineering-preregistration-v1/zenodo-draft-receipt.json \
+      --bundle release/loop-engineering-preregistration-v1/loop-engineering-preregistration-v1.zip \
+      --output release/loop-engineering-preregistration-v1/zenodo-public-evidence.json \
+      --confirm-record-id <reserved-record-id> \
+      --confirm-bundle-sha256 <frozen-zip-sha256>
+
+공개 증거를 독립적으로 다시 검사할 때는 token 없이 `verify-public`을 실행한다. 이 검증의
+성공 UTC보다 뒤에만 `run_measurement.py`의 첫 non-plan cycle을 시작한다.
+
+    python3 zenodo_preregistration.py verify-public \
+      --request release/loop-engineering-preregistration-v1/zenodo-request.json \
+      --receipt release/loop-engineering-preregistration-v1/zenodo-draft-receipt.json \
+      --bundle release/loop-engineering-preregistration-v1/loop-engineering-preregistration-v1.zip \
+      --output release/loop-engineering-preregistration-v1/zenodo-public-recheck.json
+
 실행 후에는 원시 로그만으로 결과와 무결성 상태를 재계산한다. HO-A는 gate와
 다음-cycle feedback에만 사용되고, 보고 결과는 gate가 보지 못한 HO-B에서 계산된다.
 

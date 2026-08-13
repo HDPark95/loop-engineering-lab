@@ -870,3 +870,15 @@ apparatus validation and not confirmatory evidence.
   post-outcome replication package remains a separate record. This changes
   timestamp and release mechanics, not design, sample, outcomes, or inference.
   No confirmatory run had started.
+- R37 (2026-08-14): made the external-timestamp publication path fail closed
+  before any confirmatory outcome. A dedicated Zenodo InvenioRDM client
+  converts the frozen metadata, reserves a version DOI, uploads exactly the
+  deterministic preregistration ZIP, and verifies its size and checksum. It
+  requires an explicit production confirmation to create a draft and requires
+  both the exact record ID and frozen ZIP SHA-256 before the irreversible
+  publish action. After publication it retrieves the public record and
+  redownloads the ZIP, emitting timestamp evidence only when the reserved DOI,
+  public status, file metadata, and SHA-256 all match. The first non-plan cycle
+  remains forbidden until this public verification succeeds. This changes
+  timestamp publication and verification mechanics, not design, sample,
+  outcomes, or inference. No confirmatory run had started.
