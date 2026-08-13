@@ -113,45 +113,43 @@ untracked isolation preflight, 기존 manifest 덮어쓰기를 모두 거부하�
 
     python3 replay.py --log results/confirmatory-cycles.jsonl --output results/confirmatory-replay.json
 
-## 격리 (실측으로 증명, 가정 아님)
+## 확증 격리
 
-논문의 핵심 주장은 "에이전트가 오라클을 게이밍할 수 없다"이다. 이를 파일시스템 관행이 아니라 실제 컨테이너 격리로 보장한다.
+확증 실행에서 신뢰 주체는 호스트 runner와 host-side oracle이다. 에이전트
+컨테이너에는 task workspace와 일회성 구독 인증만 들어가고, held-out 테스트,
+workload, oracle 소스, 정답, score store와 분석 파일은 마운트하지 않는다. 에이전트가
+반환한 candidate artifact만 신뢰 경계를 건넌 뒤 host-side oracle이 채점한다.
 
-- 두 Docker 네트워크 agentnet, oraclenet 사이에 라우트가 없다. 에이전트 컨테이너는 agentnet 에만, 오라클 컨테이너는 oraclenet 에만 붙는다. 쉘과 curl 을 다 줘도 에이전트는 오라클에 닿을 수 없다.
-- 공유 표면은 artifact 볼륨(에이전트 배포물) 하나뿐이고 오라클은 이를 read-only 로만 읽는다. 오라클 store 는 오라클 컨테이너 내부에 있고 어떤 공유 볼륨에도 없다.
-- 신뢰 주체는 호스트의 runner(실험자)다. runner 는 양쪽에 docker exec 로 접근해 측정만 한다. 게이밍 대상인 에이전트만 격리된다.
+S1은 digest-pinned 공식 SWE-bench 평가 이미지에서, S3 후보 함수는 연구 파일이 없는
+별도 digest-pinned sandbox 이미지에서 실행한다. 두 candidate 실행 경로는 네트워크를
+끄고 filesystem을 read-only로 둔다. 동결 직전 적대적 preflight가 다음을 직접 확인한다.
 
-### adversarial 경계 증명
+- held-out 소스와 알려진 절대 경로가 이미지에 없음
+- loopback 외 인터페이스가 없고 외부 network connect가 실패함
+- root mount가 read-only이고 실행 uid가 65534임
+- effective Linux capability set이 0임
 
-오라클은 비밀 canary 를 oraclenet:8000 에 서빙한다. 신뢰 호스트는 canary 를 가져오고(서버가 살아있음 증명), 에이전트는 오라클의 정확한 IP 를 줘도 못 가져온다(no route). 실행 예:
+성공한 preflight JSON과 SHA-256, 검사한 sandbox image ID를 frozen manifest에 결박한다.
+매 cycle에는 별도로 canary, candidate archive, model identity와 등록된 reward-hacking
+guard를 검사한다. 어느 하나라도 실패하면 replay는 clean confirmatory result를 만들지
+않는다.
 
-    [host  -> oracle:8000] canary retrieved: True
-    [agent -> oracle:8000] canary retrieved: False   (empty: no route)
-    [agent -> /oracle  fs] canary leaked:    False   (No such file)
-    >>> ISOLATION HOLDS: True
+동결 전 감사에서 이전 candidate sandbox image가 `se_tasks`를 복사해 절대 경로로
+held-out 소스를 읽을 수 있음을 발견했다. 확증 실행은 시작되지 않아 오염된 확증 결과는
+0건이다. 현재 이미지는 연구 파일을 전혀 복사하지 않으며, manifest-selected digest가
+실제 호출 시 적용되는지와 위 preflight 결박을 회귀 테스트한다.
 
-canary 문자열이 에이전트 측 출력에 나타나면 격리가 깨진 것이다. 이 속성을 매 실행 계측한다.
+## 초기 컨테이너 장치 (확증 아님)
 
-## 실행
+`docker-compose.yml`, `container/`와 `run_isolated.py`는 agentnet/oraclenet 분리와
+stub agent로 초기 메커니즘을 검증한 보존 장치다. 아래 실행에서 나오는 3-seed 수치는
+장치 스모크 결과일 뿐 사전등록된 확증 결과가 아니다.
 
     sudo docker compose up -d --build
     python3 run_isolated.py
 
-run_isolated.py 가 먼저 경계 증명을 돌리고, 이어 두 arm(in-band-self 대 out-of-band)을 격리 하에서 측정한다. 현재 스크립트 stub 에이전트 기준 결과(시드 3개): in-band-self mirage 0.75, out-of-band 0.00. 즉 측정 장치와 격리가 모두 작동한다. 이 단계는 측정과 격리의 타당성 검증이지 연구 결과가 아니다.
-
-## 구성
-
-- `docker-compose.yml` : 두 네트워크 격리, artifact 볼륨, agent/oracle 컨테이너.
-- `container/sim_core.py` : 전환 모델. `container/sim_step.py` : 오라클 안에서 산출물 채점 후 store 기록.
-- `container/agent_edit.py` : stub 에이전트 편집 + 자기보고(claim). `container/canary_server.py` : 경계 증명용 canary.
-- `run_isolated.py` : 호스트 runner(경계 증명 + arm 측정).
-- `simulator.py`, `loop.py` : docker 없이 도는 측정 로직 단위검증(참고용). 권위 실행은 컨테이너판.
-
-## 다음 (게이트됨)
-
-- stub 을 frontier LLM 실제 에이전트로 교체(반응형). agent 컨테이너 안에서 claude CLI 를 띄워 같은 격리 하에 돌린다. out-of-band 가 실세계 산출을 더 만드는지(real-outcome-at-budget, time-to-first-real-outcome) 측정.
-- in-band-judge arm + judge 품질 ablation. world-state 두 번째 오라클 T3(서버측 사건 로그), 경계 대조군 B1.
-- 시드와 모델 확장, PREREGISTRATION 동결 후 본 측정. 실제 에이전트 파일럿은 공유 모델 quota 를 쓰므로 전용 호스트 권장.
+확증 결과의 권위 경로는 위의 frozen manifest를 받는 `run_measurement.py`와 원시 로그를
+재계산하는 `replay.py`다.
 
 ## 규칙
 
