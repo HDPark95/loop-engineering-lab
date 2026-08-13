@@ -353,6 +353,18 @@ The unit column is binding: it fixes what a row of the analysis table is, and
 - gain per 1,000 tokens, gain per API-price-equivalent dollar, gain per
   incremental billed dollar where nonzero, and gain per wall-clock hour.
 
+For C-H1, the break-even value for each task and each resource (total tokens,
+API-price-equivalent dollars, and wall-clock hours) is the total grounded
+resource per trajectory at which its mean delivered-gain-per-resource equals
+the ungrounded mean. If grounded and ungrounded delivered gains are `G_g` and
+`G_u`, and their resource uses are `R_g` and `R_u`, the threshold is
+`G_g R_u / G_u` and the additional allowance is that threshold minus `R_g`.
+Both are computed from the two-cell grounding means over complete randomized
+blocks and receive whole-block percentile intervals. A nonpositive ungrounded
+gain makes the finite threshold inestimable and is reported as such rather than
+replaced by an arbitrary large number. These are descriptive decision aids and
+carry no p-values.
+
 Subscription-authenticated runs record zero incremental billed dollars. Shadow
 prices are recomputed from a source-dated manifest schedule rather than accepted
 from a CLI total. Cached reads and per-request long-context premiums are priced
@@ -691,3 +703,9 @@ apparatus validation and not confirmatory evidence.
   (20,000-trial power 0.960), empty reward-hacking logs fail closed, S1 rejects
   modified Git attributes plus added or changed symlinks, and the exploratory annotation workflow has
   deterministic disagreement packets and independent third ratings.
+- R21 (2026-08-13): completed the registered RQ-B2 and C-H1 output contract
+  before freeze. The analysis now emits the grounding-by-feedback interaction,
+  the grounded-sign versus ungrounded-numeric decision-over-coaching contrast,
+  and exact descriptive break-even totals and additional allowances for tokens,
+  API-equivalent dollars, and wall-clock hours. All use complete randomized
+  blocks and intervals only; none adds a hypothesis or p-value family.

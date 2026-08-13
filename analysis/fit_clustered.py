@@ -52,10 +52,12 @@ DESCRIPTIVE_FIELDS = (
     "edit_success_rate",
     "input_tokens",
     "output_tokens",
+    "total_tokens",
     "agent_seconds",
     "judge_seconds",
     "oracle_seconds",
     "wall_clock_seconds",
+    "wall_clock_hours",
     "api_equivalent_usd_lower_bound",
     "api_equivalent_usd",
     "api_equivalent_usd_interval_width",
@@ -182,10 +184,12 @@ def trajectory_record(rows: list[dict]) -> dict:
         "edit_success_rate": sum(1 for row in rows if row["edit_success"]) / n,
         "input_tokens": input_tokens,
         "output_tokens": output_tokens,
+        "total_tokens": total_tokens,
         "agent_seconds": agent_seconds,
         "judge_seconds": judge_seconds,
         "oracle_seconds": oracle_seconds,
         "wall_clock_seconds": wall_clock_seconds,
+        "wall_clock_hours": wall_clock_seconds / 3600.0,
         "api_equivalent_usd_lower_bound": api_equivalent_usd_lower_bound,
         "api_equivalent_usd": api_equivalent_usd,
         "api_equivalent_usd_interval_width": (
@@ -269,6 +273,168 @@ def field_contrast(blocks: list[list[dict]], field: str) -> dict:
     except ValueError as exc:
         return {"status": str(exc), "blocks": len(blocks)}
     return contrast_report(values)
+
+
+def descriptive_field_contrast(blocks: list[list[dict]], field: str) -> dict:
+    try:
+        values = [block_difference(block, field) for block in blocks]
+    except ValueError as exc:
+        return {"status": str(exc), "blocks": len(blocks)}
+    return descriptive_contrast(values)
+
+
+def block_cell(block: list[dict], cell: str) -> dict:
+    matches = [record for record in block if record["cell"] == cell]
+    if len(matches) != 1:
+        raise ValueError(f"block must contain cell {cell!r} exactly once")
+    return matches[0]
+
+
+def paired_cell_values(
+    blocks: list[list[dict]], left: str, right: str, field: str
+) -> list[float]:
+    values = []
+    for block in blocks:
+        left_value = block_cell(block, left).get(field)
+        right_value = block_cell(block, right).get(field)
+        if not all(isinstance(value, (int, float)) for value in (left_value, right_value)):
+            raise ValueError(f"field {field!r} is not estimable in every cell")
+        values.append(float(left_value) - float(right_value))
+    return values
+
+
+def descriptive_contrast(values: list[float]) -> dict:
+    """Interval-only report for a contrast outside the testing family."""
+    return {
+        "estimate": st.mean(values) if values else None,
+        "ci_95": bootstrap_mean_interval(values),
+        "blocks": len(values),
+        "block_values": values,
+        "inferential_status": "descriptive; outside the multiplicity family",
+    }
+
+
+def factorization_report(blocks: list[list[dict]], field: str) -> dict:
+    """Registered descriptive contrasts separating gate and feedback content."""
+    contrasts = {
+        "grounding_gap_numeric_ungrounded_minus_grounded": (
+            "ungrounded-numeric", "grounded-numeric"
+        ),
+        "grounding_gap_sign_ungrounded_minus_grounded": (
+            "ungrounded-sign", "grounded-sign"
+        ),
+        "feedback_effect_ungrounded_numeric_minus_sign": (
+            "ungrounded-numeric", "ungrounded-sign"
+        ),
+        "feedback_effect_grounded_numeric_minus_sign": (
+            "grounded-numeric", "grounded-sign"
+        ),
+        "decision_over_coaching_grounded_sign_minus_ungrounded_numeric": (
+            "grounded-sign", "ungrounded-numeric"
+        ),
+    }
+    report = {
+        name: descriptive_contrast(paired_cell_values(blocks, left, right, field))
+        for name, (left, right) in contrasts.items()
+    }
+    numeric_gap = paired_cell_values(
+        blocks, "ungrounded-numeric", "grounded-numeric", field
+    )
+    sign_gap = paired_cell_values(blocks, "ungrounded-sign", "grounded-sign", field)
+    report["grounding_by_feedback_interaction_numeric_minus_sign"] = (
+        descriptive_contrast(
+            [numeric - sign for numeric, sign in zip(numeric_gap, sign_gap, strict=True)]
+        )
+    )
+    return report
+
+
+def efficiency_components(
+    blocks: list[list[dict]], resource: str
+) -> tuple[list[tuple[float, float, float, float]], str]:
+    """Reduce complete blocks to grounded/ungrounded gain and resource means."""
+    components = []
+    for block in blocks:
+        grounded = [record for record in block if record["grounded"]]
+        ungrounded = [record for record in block if not record["grounded"]]
+        values = [
+            record.get(field)
+            for record in grounded + ungrounded
+            for field in ("delivered_hob_gain", resource)
+        ]
+        if len(grounded) != 2 or len(ungrounded) != 2 or not all(
+            isinstance(value, (int, float)) for value in values
+        ):
+            return [], f"{resource} or delivered gain is not estimable"
+        components.append(
+            (
+                st.mean(record["delivered_hob_gain"] for record in grounded),
+                st.mean(record["delivered_hob_gain"] for record in ungrounded),
+                st.mean(record[resource] for record in grounded),
+                st.mean(record[resource] for record in ungrounded),
+            )
+        )
+    return components, "estimable"
+
+
+def parity_from_components(
+    components: list[tuple[float, float, float, float]]
+) -> tuple[float | None, float | None, str]:
+    """Return grounded parity total and allowance from reduced block rows."""
+    if not components:
+        return None, None, "no complete blocks"
+    count = len(components)
+    mean_grounded_gain = sum(row[0] for row in components) / count
+    mean_ungrounded_gain = sum(row[1] for row in components) / count
+    mean_grounded_resource = sum(row[2] for row in components) / count
+    mean_ungrounded_resource = sum(row[3] for row in components) / count
+    if mean_ungrounded_gain <= 0:
+        return None, None, "ungrounded mean delivered gain is nonpositive"
+    if mean_grounded_gain <= 0:
+        return 0.0, -mean_grounded_resource, "grounded mean delivered gain is nonpositive"
+    threshold = mean_grounded_gain * mean_ungrounded_resource / mean_ungrounded_gain
+    return threshold, threshold - mean_grounded_resource, "estimable"
+
+
+def percentile_interval(estimates: list[float]) -> tuple[float | None, float | None]:
+    if not estimates:
+        return None, None
+    estimates = sorted(estimates)
+    n = len(estimates)
+    return (
+        estimates[int(0.025 * n)],
+        estimates[min(n - 1, int(0.975 * n))],
+    )
+
+
+def break_even_report(blocks: list[list[dict]], resource: str) -> dict:
+    components, component_status = efficiency_components(blocks, resource)
+    threshold, allowance, status = parity_from_components(components)
+    if component_status != "estimable":
+        status = component_status
+    thresholds = []
+    allowances = []
+    if len(components) >= 2:
+        rng = random.Random(BOOTSTRAP_SEED)
+        count = len(components)
+        for _ in range(BOOTSTRAP_DRAWS):
+            sample = [components[rng.randrange(count)] for _ in range(count)]
+            sampled_threshold, sampled_allowance, _ = parity_from_components(sample)
+            if isinstance(sampled_threshold, (int, float)):
+                thresholds.append(float(sampled_threshold))
+            if isinstance(sampled_allowance, (int, float)):
+                allowances.append(float(sampled_allowance))
+    return {
+        "resource": resource,
+        "grounded_total_at_efficiency_parity": threshold,
+        "grounded_total_at_efficiency_parity_ci_95": percentile_interval(thresholds),
+        "additional_grounded_allowance_at_efficiency_parity": allowance,
+        "additional_grounded_allowance_ci_95": percentile_interval(allowances),
+        "estimable_bootstrap_draws": min(len(thresholds), len(allowances)),
+        "bootstrap_draws_planned": BOOTSTRAP_DRAWS,
+        "status": status,
+        "inferential_status": "descriptive; outside the multiplicity family",
+    }
 
 
 def bootstrap_mean_interval(
@@ -381,23 +547,31 @@ def analyze(log_path: Path) -> dict:
         }
         report["tasks"][task] = {
             "harmful_acceptance": contrast_report(harmful),
-            "false_rejection": field_contrast(
+            "false_rejection": descriptive_field_contrast(
                 task_group, "false_rejection_incidence"
             ),
-            "final_hob_score": field_contrast(task_group, "final_hob_score"),
-            "delivered_hob_gain": field_contrast(
+            "final_hob_score": descriptive_field_contrast(task_group, "final_hob_score"),
+            "delivered_hob_gain": descriptive_field_contrast(
                 task_group, "delivered_hob_gain"
             ),
-            "erosion_hob": field_contrast(task_group, "erosion_hob"),
-            "cycles_to_first_positive_hob": field_contrast(
+            "erosion_hob": descriptive_field_contrast(task_group, "erosion_hob"),
+            "cycles_to_first_positive_hob": descriptive_field_contrast(
                 task_group, "cycles_to_first_positive_hob"
             ),
-            "first_positive_censor_incidence": field_contrast(
+            "first_positive_censor_incidence": descriptive_field_contrast(
                 task_group, "first_positive_censor_incidence"
             ),
-            "edit_success_rate": field_contrast(task_group, "edit_success_rate"),
+            "edit_success_rate": descriptive_field_contrast(task_group, "edit_success_rate"),
+            "factorization_descriptive": {
+                field: factorization_report(task_group, field)
+                for field in (
+                    "harmful_acceptance_incidence",
+                    "false_rejection_incidence",
+                    "delivered_hob_gain",
+                )
+            },
             "cost_and_efficiency": {
-                field: field_contrast(task_group, field)
+                field: descriptive_field_contrast(task_group, field)
                 for field in (
                     "input_tokens",
                     "output_tokens",
@@ -416,6 +590,14 @@ def analyze(log_path: Path) -> dict:
                 )
             },
             "cell_means_descriptive": cell_summaries(task_group),
+            "break_even_descriptive": {
+                resource: break_even_report(task_group, resource)
+                for resource in (
+                    "total_tokens",
+                    "api_equivalent_usd",
+                    "wall_clock_hours",
+                )
+            },
             "cycle1_adjustment": (
                 "the four cells share the same cycle-one candidate within each block; "
                 "the paired block contrast therefore conditions exactly on its HO-B score"

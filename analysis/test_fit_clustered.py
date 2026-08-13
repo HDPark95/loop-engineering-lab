@@ -87,7 +87,9 @@ class TrajectoryReductionTest(unittest.TestCase):
         self.assertEqual(record["gate_mirage_rate"], 0.0)
         self.assertEqual(record["edit_success_rate"], 0.5)
         self.assertEqual(record["input_tokens"], 200.0)
+        self.assertEqual(record["total_tokens"], 220.0)
         self.assertEqual(record["wall_clock_seconds"], 3.0)
+        self.assertAlmostEqual(record["wall_clock_hours"], 3.0 / 3600.0)
         self.assertIsNone(record["gain_per_incremental_billed_usd"])
 
     def test_missing_edit_success_contract_is_refused(self):
@@ -150,6 +152,31 @@ class BlockInferenceTest(unittest.TestCase):
         self.assertTrue(verdicts["B-H1b"]["reject_null"])
         with self.assertRaisesRegex(ValueError, "exactly"):
             MODULE.holm({"B-H1a": 0.01})
+
+    def test_factorization_and_break_even_are_complete_block_descriptives(self):
+        records = [
+            MODULE.trajectory_record(rows(cell))
+            for cell in sorted(MODULE.EXPECTED_CELLS)
+        ]
+        blocks = list(MODULE.make_blocks(records).values())
+        factor = MODULE.factorization_report(blocks, "delivered_hob_gain")
+        self.assertEqual(
+            set(factor),
+            {
+                "grounding_gap_numeric_ungrounded_minus_grounded",
+                "grounding_gap_sign_ungrounded_minus_grounded",
+                "feedback_effect_ungrounded_numeric_minus_sign",
+                "feedback_effect_grounded_numeric_minus_sign",
+                "decision_over_coaching_grounded_sign_minus_ungrounded_numeric",
+                "grounding_by_feedback_interaction_numeric_minus_sign",
+            },
+        )
+        report = MODULE.break_even_report(blocks, "total_tokens")
+        self.assertAlmostEqual(report["grounded_total_at_efficiency_parity"], 220.0)
+        self.assertAlmostEqual(
+            report["additional_grounded_allowance_at_efficiency_parity"], 0.0
+        )
+        self.assertNotIn("p_value", report)
 
     def test_full_grid_emits_primary_secondary_and_cost_outputs(self):
         harmful_cycles = {
@@ -239,6 +266,22 @@ class BlockInferenceTest(unittest.TestCase):
         self.assertIn(
             "gain_per_wall_clock_hour",
             report["tasks"]["s1_swebench"]["cost_and_efficiency"],
+        )
+        self.assertIn(
+            "decision_over_coaching_grounded_sign_minus_ungrounded_numeric",
+            report["tasks"]["s1_swebench"]["factorization_descriptive"][
+                "delivered_hob_gain"
+            ],
+        )
+        self.assertIn(
+            "total_tokens",
+            report["tasks"]["s1_swebench"]["break_even_descriptive"],
+        )
+        self.assertNotIn(
+            "p_one_sided_exact",
+            report["tasks"]["s1_swebench"]["cost_and_efficiency"][
+                "gain_per_1k_tokens"
+            ],
         )
 
 
