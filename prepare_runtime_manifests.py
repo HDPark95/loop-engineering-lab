@@ -298,6 +298,96 @@ def completed_apparatus_rows(
     return cycles
 
 
+def parse_utc(value: object, field: str) -> datetime.datetime:
+    if not isinstance(value, str):
+        fail(f"{field} must be second-precision UTC")
+    try:
+        parsed = datetime.datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ")
+    except ValueError as exc:
+        raise RuntimeError(f"{field} must be second-precision UTC") from exc
+    if parsed.strftime("%Y-%m-%dT%H:%M:%SZ") != value:
+        fail(f"{field} must be second-precision UTC")
+    return parsed
+
+
+def validate_resource_record(path: Path, rows: list[dict]) -> dict:
+    record = read_object(path)
+    required = {
+        "schema_version",
+        "status",
+        "started_utc",
+        "finished_utc",
+        "elapsed_seconds",
+        "architecture",
+        "cpu_count",
+        "samples",
+        "docker_stats_failures",
+        "container_observations",
+        "peak_concurrent_containers",
+        "peak_single_container_memory_bytes",
+        "peak_total_container_memory_bytes",
+        "peak_container_cpu_percent",
+        "host_memory_total_bytes",
+        "minimum_host_memory_available_bytes",
+        "host_swap_total_bytes",
+        "peak_host_swap_used_bytes",
+        "peak_host_load_1m",
+        "passed",
+    }
+    if set(record) != required or record.get("schema_version") != 1:
+        fail("Claude resource record has the wrong schema or field set")
+    if (
+        record.get("status")
+        != "apparatus resource observation; not a research result"
+        or record.get("passed") is not True
+        or record.get("architecture") != "x86_64"
+        or record.get("cpu_count") != 8
+    ):
+        fail("Claude resource record violates the registered host contract")
+    integer_fields = (
+        "samples",
+        "docker_stats_failures",
+        "container_observations",
+        "peak_concurrent_containers",
+        "peak_single_container_memory_bytes",
+        "peak_total_container_memory_bytes",
+        "host_memory_total_bytes",
+        "minimum_host_memory_available_bytes",
+        "host_swap_total_bytes",
+        "peak_host_swap_used_bytes",
+    )
+    for field in integer_fields:
+        value = record[field]
+        if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+            fail(f"Claude resource record has invalid {field}")
+    for field in ("elapsed_seconds", "peak_container_cpu_percent", "peak_host_load_1m"):
+        finite_nonnegative(record[field], field)
+    if (
+        record["samples"] <= 0
+        or record["docker_stats_failures"] != 0
+        or record["container_observations"] <= 0
+        or record["peak_concurrent_containers"] != 1
+        or record["peak_single_container_memory_bytes"] <= 0
+        or record["peak_total_container_memory_bytes"]
+        != record["peak_single_container_memory_bytes"]
+        or not 30_000_000_000 <= record["host_memory_total_bytes"] <= 40_000_000_000
+        or not 0 < record["minimum_host_memory_available_bytes"]
+        <= record["host_memory_total_bytes"]
+        or record["peak_host_swap_used_bytes"] > record["host_swap_total_bytes"]
+    ):
+        fail("Claude resource record did not capture a clean single-lane apparatus")
+    started = parse_utc(record["started_utc"], "resource started_utc")
+    finished = parse_utc(record["finished_utc"], "resource finished_utc")
+    row_times = [parse_utc(row.get("wall_clock_utc"), "apparatus wall_clock_utc") for row in rows]
+    if not started < finished or not started <= min(row_times) <= max(row_times) <= finished:
+        fail("Claude resource observation does not enclose the apparatus log")
+    elapsed = finite_nonnegative(record["elapsed_seconds"], "elapsed_seconds")
+    timestamp_elapsed = (finished - started).total_seconds()
+    if elapsed <= 0 or abs(elapsed - timestamp_elapsed) > 2.0:
+        fail("Claude resource elapsed time disagrees with its UTC interval")
+    return record
+
+
 def all_long_context_upper(row: dict, pricing: dict) -> float:
     uncached = finite_nonnegative(row.get("uncached_input_tokens"), "uncached tokens")
     cached = finite_nonnegative(row.get("cached_input_tokens"), "cached tokens")
@@ -458,6 +548,7 @@ def build_confirmatory_template(args: argparse.Namespace) -> dict:
     rows = completed_apparatus_rows(
         args.claude_log, exact_model, apparatus_manifest_digest
     )
+    validate_resource_record(args.claude_resources, rows)
     claude_upper = sum(all_long_context_upper(row, pricing) for row in rows)
     codex_upper = codex_reference_upper()
     estimate = conservative_estimate(claude_upper, codex_upper)
@@ -481,6 +572,7 @@ def build_confirmatory_template(args: argparse.Namespace) -> dict:
         "claude_apparatus_manifest_sha256": file_sha256(args.claude_manifest),
         "claude_apparatus_manifest_digest": apparatus_manifest_digest,
         "claude_apparatus_log_sha256": file_sha256(args.claude_log),
+        "claude_apparatus_resources_sha256": file_sha256(args.claude_resources),
         "codex_reference_log_sha256": CODEX_REFERENCE_LOG_SHA256,
         "claude_all_long_context_upper_usd": round(claude_upper, 6),
         "codex_base_to_all_long_context_factor": CODEX_ALL_LONG_CONTEXT_FACTOR,
@@ -513,6 +605,7 @@ def main() -> int:
     confirmatory = subparsers.choices["confirmatory"]
     confirmatory.add_argument("--claude-manifest", type=Path, required=True)
     confirmatory.add_argument("--claude-log", type=Path, required=True)
+    confirmatory.add_argument("--claude-resources", type=Path, required=True)
     confirmatory.add_argument("--evidence-output", type=Path, required=True)
     args = parser.parse_args()
     try:

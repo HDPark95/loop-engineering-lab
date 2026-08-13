@@ -849,10 +849,24 @@ apparatus validation and not confirmatory evidence.
   all-long-context transformation of the existing Codex six-cycle reference
   whose log SHA-256 is
   `7f53d641513bc17348780d65d70655f60d3bcb70e34627106ed18d79624b4934`.
-  It records every input digest and refuses incomplete token telemetry,
-  mismatched pricing, invalid manifests, or existing outputs. This value is an
+  It records every input digest, including a clean single-lane aggregate
+  resource observation that encloses the apparatus log, and refuses incomplete
+  token telemetry, mismatched pricing, invalid manifests, resource-monitor
+  failures, or existing outputs. This value is an
   anomaly guard for API-equivalent shadow telemetry: subscription prompt mode
   still records zero incremental billed cost and never converts to API billing.
   This removes post-apparatus discretion over a safety threshold without
   changing tasks, treatments, sample, outcomes, or inference. No confirmatory
   run had started.
+- R36 (2026-08-14): added deterministic pre-outcome external-timestamp
+  packaging before freeze. After the annotated `prereg-v1` tag is created and
+  its commit is bound into the measurement manifest, a fail-closed builder
+  requires HEAD and every runtime input to match that tag. It rechecks the
+  runtime evidence digests, exact manifest binding, and isolation preflight,
+  then emits a single deterministic ZIP containing the tagged source, frozen
+  manifest, model and pricing probes, resource apparatus, and checksums. This
+  package must be published as a distinct public Zenodo record before the first
+  confirmatory cycle, giving the frozen design an external timestamp. The
+  post-outcome replication package remains a separate record. This changes
+  timestamp and release mechanics, not design, sample, outcomes, or inference.
+  No confirmatory run had started.

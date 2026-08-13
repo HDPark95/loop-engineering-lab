@@ -29,6 +29,7 @@ class PrepareRuntimeManifestsTest(unittest.TestCase):
         self.pricing = self.root / "pricing.json"
         self.apparatus_manifest = self.root / "apparatus.manifest.json"
         self.claude_log = self.root / "claude.cycles.jsonl"
+        self.claude_resources = self.root / "claude.resources.json"
         self.write_json(self.alias_smoke, self.smoke("sonnet", self.model))
         self.write_json(self.exact_smoke, self.smoke(self.model, self.model))
         self.write_json(self.pricing, self.pricing_record())
@@ -44,6 +45,7 @@ class PrepareRuntimeManifestsTest(unittest.TestCase):
             self.claude_log,
             [self.claude_row(cycle) for cycle in range(1, 7)],
         )
+        self.write_json(self.claude_resources, self.resource_record())
 
     def tearDown(self):
         self.temporary.cleanup()
@@ -108,6 +110,7 @@ class PrepareRuntimeManifestsTest(unittest.TestCase):
             "model_identity_matches": True,
             "credential_leak_scan_passed": True,
             "cost_allocation_fraction": 1.0,
+            "wall_clock_utc": f"2026-08-15T09:0{cycle - 1}:00Z",
             "input_tokens": 1100,
             "uncached_input_tokens": 1000,
             "cached_input_tokens": 100,
@@ -116,6 +119,31 @@ class PrepareRuntimeManifestsTest(unittest.TestCase):
             "cache_write_1h_input_tokens": 100,
             "cache_write_input_tokens_exact": True,
             "output_tokens": 100,
+        }
+
+    @staticmethod
+    def resource_record() -> dict:
+        return {
+            "schema_version": 1,
+            "status": "apparatus resource observation; not a research result",
+            "started_utc": "2026-08-15T08:59:59Z",
+            "finished_utc": "2026-08-15T09:06:01Z",
+            "elapsed_seconds": 362.0,
+            "architecture": "x86_64",
+            "cpu_count": 8,
+            "samples": 360,
+            "docker_stats_failures": 0,
+            "container_observations": 359,
+            "peak_concurrent_containers": 1,
+            "peak_single_container_memory_bytes": 1_000_000_000,
+            "peak_total_container_memory_bytes": 1_000_000_000,
+            "peak_container_cpu_percent": 100.0,
+            "host_memory_total_bytes": 33_000_000_000,
+            "minimum_host_memory_available_bytes": 20_000_000_000,
+            "host_swap_total_bytes": 1_000_000_000,
+            "peak_host_swap_used_bytes": 0,
+            "peak_host_load_1m": 2.0,
+            "passed": True,
         }
 
     def test_alias_and_exact_model_evidence_must_agree(self):
@@ -173,6 +201,18 @@ class PrepareRuntimeManifestsTest(unittest.TestCase):
                 self.claude_log, self.model, self.apparatus_digest
             )
 
+    def test_resource_record_must_be_clean_and_enclose_the_log(self):
+        rows = [self.claude_row(cycle) for cycle in range(1, 7)]
+        self.assertEqual(
+            prepare.validate_resource_record(self.claude_resources, rows)["samples"],
+            360,
+        )
+        invalid = self.resource_record()
+        invalid["docker_stats_failures"] = 1
+        self.write_json(self.claude_resources, invalid)
+        with self.assertRaisesRegex(RuntimeError, "clean single-lane"):
+            prepare.validate_resource_record(self.claude_resources, rows)
+
     def test_conservative_estimate_is_deterministic_and_has_a_floor(self):
         self.assertEqual(prepare.conservative_estimate(2.0, 3.0), 20.0)
         self.assertEqual(prepare.conservative_estimate(5.01, 3.0), 21.0)
@@ -214,6 +254,7 @@ class PrepareRuntimeManifestsTest(unittest.TestCase):
             pricing=self.pricing,
             claude_manifest=self.apparatus_manifest,
             claude_log=self.claude_log,
+            claude_resources=self.claude_resources,
             template=template,
             output=output,
             evidence_output=evidence_output,

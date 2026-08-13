@@ -1,0 +1,40 @@
+{
+  "access_right": "open",
+  "creators": [
+    {
+      "affiliation": "Independent Researcher",
+      "name": "Park, Hyundoo",
+      "orcid": "0009-0005-4870-8803"
+    },
+    {
+      "affiliation": "Independent Researcher",
+      "name": "Choi, Byungho",
+      "orcid": "0009-0004-4987-3897"
+    }
+  ],
+  "description": "Immutable pre-outcome snapshot of the revised LOOP confirmatory preregistration, executable measurement harness, frozen runtime manifest, isolation evidence, model-identity probes, official shadow-pricing record, and resource-apparatus evidence.",
+  "keywords": [
+    "agentic software engineering",
+    "coding agents",
+    "evaluation grounding",
+    "preregistration",
+    "confirmatory study"
+  ],
+  "language": "eng",
+  "license": "mit",
+  "related_identifiers": [
+    {
+      "identifier": "10.5281/zenodo.21594735",
+      "relation": "isSupplementTo",
+      "resource_type": "publication-preprint"
+    },
+    {
+      "identifier": "https://github.com/HDPark95/loop-engineering-lab",
+      "relation": "isDerivedFrom",
+      "resource_type": "software"
+    }
+  ],
+  "title": "LOOP Confirmatory Study: Frozen Preregistration and Pre-Outcome Apparatus Evidence",
+  "upload_type": "software",
+  "version": "prereg-v1"
+}

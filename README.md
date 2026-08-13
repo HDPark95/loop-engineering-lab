@@ -170,6 +170,7 @@ JSON에 남고, 둘 중 어느 출력도 기존 파일을 덮어쓰지 않는다
       --pricing logs/apparatus/claude-official-pricing-20260815.json \
       --claude-manifest logs/apparatus/claude-resource-20260815.manifest.json \
       --claude-log logs/apparatus/claude-resource-20260815.cycles.jsonl \
+      --claude-resources logs/apparatus/claude-resource-20260815.resources.json \
       --template measurement-manifest.template.json \
       --output measurement-manifest.runtime.template.json \
       --evidence-output logs/apparatus/runtime-shadow-budget-20260815.json
@@ -187,6 +188,25 @@ untracked isolation preflight, 기존 manifest 덮어쓰기를 모두 거부하�
 finalizer가 동결 commit을 결박한 뒤, 실제 agent 호출 없이 계획부터 확인한다.
 
     python3 run_measurement.py --manifest measurement-manifest.json --log results/confirmatory-cycles.jsonl --run-id confirmatory-01 --plan-only
+
+첫 확증 호출 전에는 태그만으로 끝내지 않고 외부 동결 타임스탬프를 만든다. 아래
+builder는 annotated tag와 현재 HEAD, 최종 manifest, R35 입력·digest, 격리 preflight를
+다시 확인하고 단일 deterministic ZIP과 sidecar SHA-256, Zenodo metadata를 만든다.
+Zenodo에는 이 ZIP 하나만 별도 공개 record로 발행하며, record의 공개 UTC가 첫 cycle의
+`wall_clock_utc`보다 앞서야 한다. 결과가 들어가는 confirmatory replication record와
+DOI를 재사용하지 않는다.
+
+    python3 build_preregistration_bundle.py \
+      --manifest measurement-manifest.json \
+      --runtime-template measurement-manifest.runtime.template.json \
+      --runtime-evidence logs/apparatus/runtime-shadow-budget-20260815.json \
+      --alias-smoke logs/apparatus/claude-sonnet-alias-smoke-20260815.json \
+      --exact-smoke logs/apparatus/claude-exact-smoke-20260815.json \
+      --pricing logs/apparatus/claude-official-pricing-20260815.json \
+      --claude-manifest logs/apparatus/claude-resource-20260815.manifest.json \
+      --claude-log logs/apparatus/claude-resource-20260815.cycles.jsonl \
+      --claude-resources logs/apparatus/claude-resource-20260815.resources.json \
+      --output-dir release/loop-engineering-preregistration-v1
 
 실행 후에는 원시 로그만으로 결과와 무결성 상태를 재계산한다. HO-A는 gate와
 다음-cycle feedback에만 사용되고, 보고 결과는 gate가 보지 못한 HO-B에서 계산된다.

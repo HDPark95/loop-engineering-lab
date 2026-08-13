@@ -256,13 +256,17 @@ def verify_candidate_tar(path: Path, expected_names: set[str]) -> None:
                     fail("candidate archive tar manifest digest mismatch")
 
 
-def deterministic_zip(output: Path, files: list[Path]) -> None:
+def deterministic_zip(
+    output: Path,
+    files: list[Path],
+    prefix: str = "loop-engineering-confirmatory-v1",
+) -> None:
     with zipfile.ZipFile(
         output, mode="w", compression=zipfile.ZIP_DEFLATED, compresslevel=9
     ) as archive:
         for path in sorted(files, key=lambda item: item.name):
             info = zipfile.ZipInfo(
-                f"loop-engineering-confirmatory-v1/{path.name}",
+                f"{prefix}/{path.name}",
                 date_time=(1980, 1, 1, 0, 0, 0),
             )
             info.compress_type = zipfile.ZIP_DEFLATED
