@@ -361,12 +361,18 @@ def reported_model(agent: str, stdout: str) -> str | None:
             event = json.loads(stdout)
         except json.JSONDecodeError:
             return None
-        direct = event.get("model")
-        if isinstance(direct, str) and direct:
-            return direct
         model_usage = event.get("modelUsage") or {}
         if isinstance(model_usage, dict) and len(model_usage) == 1:
-            return next(iter(model_usage))
+            model = next(iter(model_usage))
+            if isinstance(model, str) and model not in {
+                "sonnet", "opus", "haiku", "session-default", "default"
+            }:
+                return model
+        direct = event.get("model")
+        if isinstance(direct, str) and direct not in {
+            "sonnet", "opus", "haiku", "session-default", "default"
+        }:
+            return direct
         return None
 
     models = set()
@@ -659,11 +665,16 @@ def run_smoke(
         public_tests = run_public_tests(workspace)
         final, final_seconds = se_experiment.run_oracle(task, workspace)
         usage = parse_codex_usage(process.stdout) if agent == "codex" else parse_claude_usage(process.stdout)
+        model_served = reported_model(agent, process.stdout)
         return {
             "schema_version": 2,
             "status": "adapter smoke test; not a research result",
             "agent": agent,
             "model_requested": model or "session-default",
+            "model_served": model_served,
+            "model_identity_evidence": (
+                "runtime_cli_output" if model_served else "unreported"
+            ),
             "task": task,
             "process_returncode": process.returncode,
             "execution": execution_status(agent, process.stdout, process.returncode),

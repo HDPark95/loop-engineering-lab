@@ -42,6 +42,11 @@ SE 장치 스모크 검증:
     python3 agent_adapters.py --agent codex --task s1 --billing-mode subscription --container-image loop-eng-se-lab-agent:latest --auth-file "$CODEX_AUTH_FILE" --output results/codex_adapter_smoke.json
     python3 agent_adapters.py --agent claude --task s1 --model sonnet --billing-mode subscription --container-image loop-eng-se-lab-agent:latest --auth-file "$CLAUDE_AUTH_FILE" --state-file "$CLAUDE_STATE_FILE" --max-budget-usd 0.25 --output results/claude_adapter_smoke.json
 
+Claude 쿼터 리셋 뒤 두 번째 명령을 한 번 실행해 alias 요청과 별도로
+`model_served`에 기록된 런타임 모델 ID를 동결한다. `model_served`가 null이거나
+alias면 불변 모델 식별 근거가 아니므로 manifest를 만들지 않는다. 스모크 파일은
+장치 검증 기록일 뿐 확증 결과에는 포함하지 않는다.
+
 ### 본 측정 러너
 
 `run_measurement.py`는 동결된 manifest를 받아 공통 cycle-1을 공유하는
