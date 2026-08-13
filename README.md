@@ -100,6 +100,8 @@ retry 소진 때문에 대기 중인 전체 block을 연속 폐기하지 않는�
 8월 15일 pre-freeze Claude 6-cycle resource trajectory도
 `logs/apparatus/claude-resource-20260815.manifest.template.json`에 미리 고정돼 있다.
 exact model과 그 모델의 공식 입력·출력 shadow 단가 세 값만 확인 후 채운다.
+alias/exact-ID adapter smoke JSON은 최초 증거를 보존하기 위해 기존 출력 경로를 절대
+덮어쓰지 않는다. 재시도가 필요하면 새 run ID가 드러나는 새 파일명을 사용한다.
 
     python3 preflight_isolation.py --sandbox-image sha256:<image-id> --output preflight/sandbox-isolation.json
 

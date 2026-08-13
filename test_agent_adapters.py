@@ -60,6 +60,18 @@ def codex_credentials(
 
 
 class AdapterTest(unittest.TestCase):
+    def test_adapter_evidence_is_exclusive_and_complete(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "evidence.json"
+            agent_adapters.write_json_exclusive(path, {"model_served": "model-v1"})
+            self.assertEqual(
+                json.loads(path.read_text(encoding="utf-8")),
+                {"model_served": "model-v1"},
+            )
+            self.assertEqual(path.stat().st_mode & 0o777, 0o444)
+            with self.assertRaisesRegex(FileExistsError, "refusing to overwrite"):
+                agent_adapters.write_json_exclusive(path, {"model_served": "model-v2"})
+
     def test_exact_credentials_are_rejected_from_output_and_candidate(self):
         secret = "exact-refresh-token-for-leak-test"
         with tempfile.TemporaryDirectory() as tmp:

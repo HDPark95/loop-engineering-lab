@@ -1036,6 +1036,23 @@ def run_public_tests(workspace: Path) -> dict:
     return {"passed": process.returncode == 0, "returncode": process.returncode}
 
 
+def write_json_exclusive(path: Path, value: dict) -> None:
+    payload = (json.dumps(value, indent=2, sort_keys=True) + "\n").encode()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o444)
+    except FileExistsError as exc:
+        raise FileExistsError(f"refusing to overwrite adapter evidence: {path}") from exc
+    try:
+        with os.fdopen(descriptor, "wb") as output:
+            output.write(payload)
+            output.flush()
+            os.fsync(output.fileno())
+    except Exception:
+        path.unlink(missing_ok=True)
+        raise
+
+
 def _run_smoke_unlocked(
     agent: str,
     task: str,
@@ -1289,8 +1306,7 @@ def main() -> None:
         billing_mode=args.billing_mode,
         persist_refreshed_credentials=args.persist_refreshed_credentials,
     )
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(output, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    write_json_exclusive(args.output, output)
     print(
         f"{args.agent}: returncode={output['process_returncode']} "
         f"public_tests={output['public_tests']['passed']} gain={output['real_gain']}"

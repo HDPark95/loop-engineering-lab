@@ -833,3 +833,9 @@ apparatus validation and not confirmatory evidence.
   append-only log and never overwrites an existing release directory. This
   changes release mechanics, not the design, outcome, or inference. No
   confirmatory run had started.
+- R34 (2026-08-14): made model-identity smoke evidence append-only before
+  freeze. The adapter CLI now creates its JSON output exclusively, fsyncs it,
+  and refuses an existing path, so a repeated alias or exact-ID probe cannot
+  silently replace the first runtime record. A retry must use a new explicit
+  filename. This changes evidence retention, not the design, outcome, or
+  inference. No confirmatory run had started.
