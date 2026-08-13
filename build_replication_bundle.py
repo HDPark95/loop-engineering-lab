@@ -17,6 +17,7 @@ from pathlib import Path
 
 import replay
 import run_measurement
+import zenodo_preregistration
 
 
 ROOT = Path(__file__).resolve().parent
@@ -68,6 +69,8 @@ def validate_inputs(
     audit_path: Path,
     analysis_path: Path,
     archive_root: Path,
+    preregistration_evidence_path: Path,
+    preregistration_bundle_path: Path,
 ) -> dict:
     source_log_sha256 = file_sha256(log_path)
     manifest_file_sha256 = file_sha256(manifest_path)
@@ -76,6 +79,11 @@ def validate_inputs(
         fail("measurement manifest changed during release validation")
     if manifest.get("apparatus_test") is not False:
         fail("replication bundle requires a confirmatory manifest")
+    external_publication = zenodo_preregistration.validate_publication_evidence(
+        preregistration_evidence_path,
+        preregistration_bundle_path,
+        manifest,
+    )
     configured_archive = (manifest_path.parent / manifest["artifact_archive_dir"]).resolve()
     if configured_archive != archive_root.resolve():
         fail("archive root does not match the frozen measurement manifest")
@@ -105,6 +113,10 @@ def validate_inputs(
             fail("a raw-log row has a different measurement manifest digest")
         if record.get("preregistration_commit") != preregistration_commit:
             fail("a raw-log row has a different preregistration commit")
+        if record.get("schema_version") != run_measurement.SCHEMA_VERSION:
+            fail("a raw-log row does not use the current provenance schema")
+        if any(record.get(field) != value for field, value in external_publication.items()):
+            fail("a raw-log row has different external preregistration evidence")
 
     tag_commit = git_output("rev-parse", f"{PREREG_TAG}^{{commit}}")
     if tag_commit != preregistration_commit:
@@ -161,12 +173,19 @@ def validate_inputs(
     log_payload = log_path.read_bytes()
     if sha256_bytes(log_payload) != source_log_sha256:
         fail("raw log changed while its release snapshot was read")
+    preregistration_evidence_payload = preregistration_evidence_path.read_bytes()
+    if (
+        sha256_bytes(preregistration_evidence_payload)
+        != external_publication["external_preregistration_evidence_sha256"]
+    ):
+        fail("external preregistration evidence changed during release validation")
 
     return {
         "manifest": manifest,
         "manifest_digest": manifest_digest,
         "preregistration_commit": preregistration_commit,
         "source_log_sha256": source_log_sha256,
+        "external_publication": external_publication,
         "preflight_path": preflight_path,
         "cycles": cycles,
         "snapshots": {
@@ -176,6 +195,9 @@ def validate_inputs(
             "confirmatory-replay.json": replay_payload,
             "confirmatory-reward-hacking.json": audit_payload,
             "confirmatory-analysis.json": analysis_payload,
+            "external-preregistration-publication.json": (
+                preregistration_evidence_payload
+            ),
         },
     }
 
@@ -314,6 +336,8 @@ def build(args: argparse.Namespace) -> Path:
         args.reward_audit.resolve(),
         args.analysis.resolve(),
         args.archive_root.resolve(),
+        args.preregistration_evidence.resolve(),
+        args.preregistration_bundle.resolve(),
     )
     stage = Path(tempfile.mkdtemp(prefix=f".{output_dir.name}.", dir=output_dir.parent))
     try:
@@ -340,6 +364,7 @@ def build(args: argparse.Namespace) -> Path:
             "preregistration_commit": validated["preregistration_commit"],
             "measurement_manifest_digest": validated["manifest_digest"],
             "source_log_sha256": validated["source_log_sha256"],
+            **validated["external_publication"],
             "completed_trajectories": EXPECTED_TRAJECTORIES,
             "completed_logical_cycle_rows": EXPECTED_LOGICAL_ROWS,
             "candidate_archive_members": len(candidate_files),
@@ -371,6 +396,13 @@ def build(args: argparse.Namespace) -> Path:
         shutil.rmtree(payload_dir)
         if file_sha256(args.log.resolve()) != validated["source_log_sha256"]:
             fail("raw log changed while the replication bundle was being built")
+        if (
+            file_sha256(args.preregistration_bundle.resolve())
+            != validated["external_publication"][
+                "external_preregistration_bundle_sha256"
+            ]
+        ):
+            fail("external preregistration ZIP changed during release packaging")
         os.replace(stage, output_dir)
     except Exception:
         shutil.rmtree(stage, ignore_errors=True)
@@ -386,6 +418,8 @@ def main() -> int:
     parser.add_argument("--reward-audit", type=Path, required=True)
     parser.add_argument("--analysis", type=Path, required=True)
     parser.add_argument("--archive-root", type=Path, required=True)
+    parser.add_argument("--preregistration-evidence", type=Path, required=True)
+    parser.add_argument("--preregistration-bundle", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
     args = parser.parse_args()
     try:

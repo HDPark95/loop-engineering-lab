@@ -22,6 +22,7 @@ HO-B and the outcome is no longer fixed by the gate rule.
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import hashlib
 import json
 import re
@@ -32,7 +33,7 @@ from statistics import median
 
 
 def shadow_bounds_from_row(row: dict) -> tuple[float, float]:
-    """Independently reconstruct schema-five shadow-price endpoints."""
+    """Independently reconstruct schema-five-or-newer shadow-price endpoints."""
     schedule = row["shadow_price_schedule"]
     input_rate = float(schedule["usd_per_1k_input"]) / 1000.0
     cached_rate = float(schedule["usd_per_1k_cached_input"]) / 1000.0
@@ -586,6 +587,41 @@ def integrity(
                     and row["api_equivalent_price_exact"]
                     == (abs(expected_upper - expected_lower) <= 1e-12)
                 )
+        if valid and row.get("schema_version", 0) >= 6 and not row.get("apparatus_test"):
+            valid = bool(
+                re.fullmatch(
+                    r"10\.5281/zenodo\.\d+",
+                    str(row.get("external_preregistration_doi", "")),
+                )
+                and isinstance(row.get("external_preregistration_record_id"), str)
+                and bool(row["external_preregistration_record_id"])
+                and all(
+                    re.fullmatch(r"[0-9a-f]{64}", str(row.get(field, "")))
+                    for field in (
+                        "external_preregistration_evidence_sha256",
+                        "external_preregistration_bundle_sha256",
+                    )
+                )
+                and isinstance(row.get("external_preregistration_verified_utc"), str)
+                and row["external_preregistration_verified_utc"].endswith("Z")
+            )
+            if valid:
+                try:
+                    verified_utc = dt.datetime.fromisoformat(
+                        row["external_preregistration_verified_utc"].removesuffix("Z")
+                        + "+00:00"
+                    )
+                    row_utc = dt.datetime.fromisoformat(
+                        str(row.get("wall_clock_utc", "")).removesuffix("Z")
+                        + "+00:00"
+                    )
+                    valid = bool(
+                        verified_utc.tzinfo == dt.timezone.utc
+                        and row_utc.tzinfo == dt.timezone.utc
+                        and row_utc >= verified_utc
+                    )
+                except ValueError:
+                    valid = False
         if not valid:
             invalid_measurement_contracts.append(row["trajectory"])
     ungraded = [
@@ -601,6 +637,25 @@ def integrity(
     manifest_mixed = len(manifest_digests) > 1 or None in manifest_digests
     preregistration_mixed = (
         len(preregistration_commits) > 1 or None in preregistration_commits
+    )
+    schema_six_confirmatory_rows = [
+        row
+        for row in [*identified_cycles, *identified_abandoned]
+        if row.get("schema_version", 0) >= 6 and not row.get("apparatus_test")
+    ]
+    external_publication_fields = {
+        field: {row.get(field) for row in schema_six_confirmatory_rows}
+        for field in (
+            "external_preregistration_doi",
+            "external_preregistration_record_id",
+            "external_preregistration_evidence_sha256",
+            "external_preregistration_bundle_sha256",
+            "external_preregistration_verified_utc",
+        )
+    }
+    external_publication_mixed = bool(schema_six_confirmatory_rows) and any(
+        len(values) != 1 or None in values
+        for values in external_publication_fields.values()
     )
     incomplete = []
     completed_tokens = set()
@@ -647,6 +702,13 @@ def integrity(
             value for value in preregistration_commits if value
         ),
         "mixed_or_missing_preregistration_commit": preregistration_mixed,
+        "external_preregistration_publication": {
+            field: sorted(value for value in values if value)
+            for field, values in external_publication_fields.items()
+        },
+        "mixed_or_missing_external_preregistration_publication": (
+            external_publication_mixed
+        ),
         "unparsable_log_lines": unparsable,
         "missing_trajectory_records": missing_trajectory_records,
         "clean": not any(
@@ -664,6 +726,7 @@ def integrity(
                 incomplete,
                 manifest_mixed,
                 preregistration_mixed,
+                external_publication_mixed,
                 unparsable,
                 missing_trajectory_records,
                 not identified_cycles,

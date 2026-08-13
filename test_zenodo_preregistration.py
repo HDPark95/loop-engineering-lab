@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 from unittest import mock
 
@@ -51,6 +52,60 @@ class ZenodoPreregistrationTest(unittest.TestCase):
             json.dumps(METADATA), encoding="utf-8"
         )
         return bundle_dir, payload
+
+    def make_publication_gate(self, root: Path) -> tuple[dict, Path, Path]:
+        root.mkdir(parents=True, exist_ok=True)
+        measurement_manifest = {
+            "preregistration_commit": "a" * 40,
+            "frozen": "contract",
+        }
+        manifest_digest = zenodo.sha256_bytes(
+            json.dumps(
+                measurement_manifest, sort_keys=True, separators=(",", ":")
+            ).encode()
+        )
+        bundle = root / zenodo.BUNDLE_NAME
+        member = (
+            "loop-engineering-preregistration-v1/"
+            "preregistration-bundle-manifest.json"
+        )
+        with zipfile.ZipFile(bundle, "w") as archive:
+            archive.writestr(
+                member,
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "preregistration_commit": measurement_manifest[
+                            "preregistration_commit"
+                        ],
+                        "measurement_manifest_digest": manifest_digest,
+                    }
+                ),
+            )
+        payload = bundle.read_bytes()
+        evidence = root / "public.json"
+        evidence.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "status": "public-preregistration-verified",
+                    "record_role": "pre-outcome preregistration timestamp",
+                    "record_id": "12345678",
+                    "doi": "10.5281/zenodo.12345678",
+                    "record_url": "https://zenodo.org/records/12345678",
+                    "doi_url": "https://doi.org/10.5281/zenodo.12345678",
+                    "public_verification_utc": "2026-08-13T00:00:00Z",
+                    "bundle": {
+                        "name": zenodo.BUNDLE_NAME,
+                        "bytes": len(payload),
+                        "sha256": zenodo.sha256_bytes(payload),
+                        "md5": zenodo.md5_bytes(payload),
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        return measurement_manifest, evidence, bundle
 
     def test_prepare_converts_metadata_and_binds_both_hashes(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -169,6 +224,43 @@ class ZenodoPreregistrationTest(unittest.TestCase):
                 receipt["record_id"],
                 request["bundle"]["sha256"],
             )
+
+    def test_publication_gate_binds_evidence_zip_and_measurement_manifest(self):
+        with tempfile.TemporaryDirectory() as directory:
+            manifest, evidence, bundle = self.make_publication_gate(Path(directory))
+            fields = zenodo.validate_publication_evidence(
+                evidence, bundle, manifest
+            )
+            self.assertEqual(
+                fields["external_preregistration_doi"],
+                "10.5281/zenodo.12345678",
+            )
+            self.assertEqual(
+                fields["external_preregistration_bundle_sha256"],
+                zenodo.sha256_bytes(bundle.read_bytes()),
+            )
+
+    def test_publication_gate_rejects_a_different_measurement_manifest(self):
+        with tempfile.TemporaryDirectory() as directory:
+            manifest, evidence, bundle = self.make_publication_gate(Path(directory))
+            manifest["frozen"] = "changed"
+            with self.assertRaisesRegex(zenodo.ZenodoError, "measurement manifest"):
+                zenodo.validate_publication_evidence(evidence, bundle, manifest)
+
+    def test_publication_gate_rejects_tampered_evidence_or_zip(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest, evidence, bundle = self.make_publication_gate(root)
+            document = json.loads(evidence.read_text(encoding="utf-8"))
+            document["status"] = "draft"
+            evidence.write_text(json.dumps(document), encoding="utf-8")
+            with self.assertRaisesRegex(zenodo.ZenodoError, "wrong contract"):
+                zenodo.validate_publication_evidence(evidence, bundle, manifest)
+
+            _, evidence, bundle = self.make_publication_gate(root / "second")
+            bundle.write_bytes(bundle.read_bytes() + b"tampered")
+            with self.assertRaisesRegex(zenodo.ZenodoError, "does not match"):
+                zenodo.validate_publication_evidence(evidence, bundle, manifest)
 
 
 if __name__ == "__main__":

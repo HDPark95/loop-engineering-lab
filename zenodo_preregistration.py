@@ -18,6 +18,7 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+import zipfile
 from pathlib import Path
 
 
@@ -60,6 +61,18 @@ def load_object(path: Path) -> dict:
     if not isinstance(value, dict):
         fail(f"JSON root must be an object: {path}")
     return value
+
+
+def parse_utc(value: object, field: str) -> dt.datetime:
+    if not isinstance(value, str) or not value.endswith("Z"):
+        fail(f"{field} must be a UTC timestamp ending in Z")
+    try:
+        parsed = dt.datetime.fromisoformat(value.removesuffix("Z") + "+00:00")
+    except ValueError as exc:
+        raise ZenodoError(f"{field} is not a valid ISO-8601 timestamp") from exc
+    if parsed.tzinfo != dt.timezone.utc:
+        fail(f"{field} must be UTC")
+    return parsed
 
 
 def write_new_json(path: Path, value: dict) -> None:
@@ -315,6 +328,93 @@ def validate_receipt(request: dict, receipt: dict, bundle: Path) -> tuple[str, s
     if not DOI_RE.fullmatch(doi):
         fail("draft receipt DOI is invalid")
     return record_id, doi
+
+
+def validate_publication_evidence(
+    evidence_path: Path,
+    bundle_path: Path,
+    measurement_manifest: dict,
+) -> dict:
+    """Bind a public Zenodo verification to the exact frozen measurement contract."""
+    evidence_payload = evidence_path.read_bytes()
+    try:
+        evidence = json.loads(evidence_payload)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ZenodoError("public preregistration evidence is invalid JSON") from exc
+    if not isinstance(evidence, dict):
+        fail("public preregistration evidence must be a JSON object")
+    if (
+        evidence.get("schema_version") != 1
+        or evidence.get("status") != "public-preregistration-verified"
+        or evidence.get("record_role") != "pre-outcome preregistration timestamp"
+    ):
+        fail("public preregistration evidence has the wrong contract")
+    record_id = evidence.get("record_id")
+    doi = evidence.get("doi")
+    if not isinstance(record_id, str) or not record_id:
+        fail("public preregistration evidence lacks a record id")
+    if not isinstance(doi, str) or not DOI_RE.fullmatch(doi):
+        fail("public preregistration evidence lacks a valid Zenodo DOI")
+    if evidence.get("record_url") != f"https://zenodo.org/records/{record_id}":
+        fail("public preregistration record URL does not match its id")
+    if evidence.get("doi_url") != f"https://doi.org/{doi}":
+        fail("public preregistration DOI URL does not match its DOI")
+    related_dois = {
+        item.get("identifier")
+        for item in json.loads((ROOT / ".zenodo-prereg.json").read_text(encoding="utf-8"))[
+            "related_identifiers"
+        ]
+        if isinstance(item, dict) and str(item.get("identifier", "")).startswith("10.")
+    }
+    if doi in related_dois:
+        fail("public preregistration DOI must differ from the existing preprint DOI")
+    verified = parse_utc(
+        evidence.get("public_verification_utc"), "public_verification_utc"
+    )
+    if verified > dt.datetime.now(dt.timezone.utc) + dt.timedelta(minutes=5):
+        fail("public preregistration verification timestamp is in the future")
+
+    bundle_payload = bundle_path.read_bytes()
+    bundle = evidence.get("bundle")
+    if not isinstance(bundle, dict) or (
+        bundle_path.name != bundle.get("name")
+        or len(bundle_payload) != bundle.get("bytes")
+        or sha256_bytes(bundle_payload) != bundle.get("sha256")
+        or md5_bytes(bundle_payload) != bundle.get("md5")
+    ):
+        fail("public preregistration evidence does not match the local ZIP")
+    member = (
+        "loop-engineering-preregistration-v1/"
+        "preregistration-bundle-manifest.json"
+    )
+    try:
+        with zipfile.ZipFile(bundle_path) as archive:
+            names = archive.namelist()
+            if names.count(member) != 1:
+                fail("preregistration ZIP lacks one bundle manifest")
+            frozen = json.loads(archive.read(member))
+    except (OSError, KeyError, UnicodeDecodeError, json.JSONDecodeError, zipfile.BadZipFile) as exc:
+        raise ZenodoError("preregistration ZIP is invalid") from exc
+    if not isinstance(frozen, dict) or frozen.get("schema_version") != 1:
+        fail("preregistration ZIP manifest must use schema 1")
+    expected_manifest_digest = hashlib.sha256(
+        json.dumps(
+            measurement_manifest, sort_keys=True, separators=(",", ":")
+        ).encode()
+    ).hexdigest()
+    if (
+        frozen.get("preregistration_commit")
+        != measurement_manifest.get("preregistration_commit")
+        or frozen.get("measurement_manifest_digest") != expected_manifest_digest
+    ):
+        fail("public preregistration ZIP does not bind the measurement manifest")
+    return {
+        "external_preregistration_doi": doi,
+        "external_preregistration_record_id": record_id,
+        "external_preregistration_evidence_sha256": sha256_bytes(evidence_payload),
+        "external_preregistration_bundle_sha256": bundle["sha256"],
+        "external_preregistration_verified_utc": evidence["public_verification_utc"],
+    }
 
 
 def confirm_publication(

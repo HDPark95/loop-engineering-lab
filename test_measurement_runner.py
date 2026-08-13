@@ -114,6 +114,56 @@ def run_cli(manifest_path: Path, log_path: Path, run_id: str, *extra) -> subproc
 
 
 class ManifestGateTest(unittest.TestCase):
+    def test_nonplan_confirmatory_run_requires_public_preregistration(self):
+        with self.assertRaisesRegex(
+            run_measurement.zenodo_preregistration.ZenodoError,
+            "public preregistration",
+        ):
+            run_measurement.enforce_external_preregistration_gate(
+                {"apparatus_test": False}, False, None
+            )
+        run_measurement.enforce_external_preregistration_gate(
+            {"apparatus_test": False}, True, None
+        )
+        run_measurement.enforce_external_preregistration_gate(
+            {"apparatus_test": True}, False, None
+        )
+        run_measurement.enforce_external_preregistration_gate(
+            {"apparatus_test": False}, False, {"verified": True}
+        )
+
+    def test_resume_refuses_different_external_preregistration(self):
+        publication = {
+            "external_preregistration_doi": "10.5281/zenodo.12345678",
+            "external_preregistration_evidence_sha256": "a" * 64,
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            log = Path(tmp) / "cycles.jsonl"
+            log.write_text(
+                json.dumps(
+                    {
+                        "schema_version": run_measurement.SCHEMA_VERSION,
+                        "manifest_digest": "manifest",
+                        **publication,
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            run_measurement.validate_existing_external_preregistration(
+                log, "manifest", publication
+            )
+            changed = publication | {
+                "external_preregistration_doi": "10.5281/zenodo.87654321"
+            }
+            with self.assertRaisesRegex(
+                run_measurement.zenodo_preregistration.ZenodoError,
+                "different external",
+            ):
+                run_measurement.validate_existing_external_preregistration(
+                    log, "manifest", changed
+                )
+
     def test_confirmatory_run_requires_candidate_archive(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = write_manifest(
@@ -1296,6 +1346,37 @@ class ReplayTest(unittest.TestCase):
         }
         report = replay.integrity([row], [], [])
         self.assertTrue(report["clean"])
+
+        schema_six = json.loads(json.dumps(row))
+        schema_six["schema_version"] = 6
+        missing_publication = replay.integrity([schema_six], [], [])
+        self.assertEqual(
+            missing_publication["invalid_measurement_contract_trajectories"],
+            ["t1"],
+        )
+        schema_six.update(
+            {
+                "external_preregistration_doi": "10.5281/zenodo.12345678",
+                "external_preregistration_record_id": "12345678",
+                "external_preregistration_evidence_sha256": "a" * 64,
+                "external_preregistration_bundle_sha256": "b" * 64,
+                "external_preregistration_verified_utc": "2026-08-13T00:00:00Z",
+                "wall_clock_utc": "2026-08-13T00:00:01Z",
+            }
+        )
+        valid_publication = replay.integrity([schema_six], [], [])
+        self.assertTrue(valid_publication["clean"])
+        self.assertFalse(
+            valid_publication[
+                "mixed_or_missing_external_preregistration_publication"
+            ]
+        )
+        schema_six["wall_clock_utc"] = "2026-08-12T23:59:59Z"
+        prepublication_row = replay.integrity([schema_six], [], [])
+        self.assertEqual(
+            prepublication_row["invalid_measurement_contract_trajectories"],
+            ["t1"],
+        )
 
         row["credential_leak_scan_passed"] = False
         report = replay.integrity([row], [], [])

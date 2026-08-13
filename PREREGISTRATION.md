@@ -882,3 +882,14 @@ apparatus validation and not confirmatory evidence.
   remains forbidden until this public verification succeeds. This changes
   timestamp publication and verification mechanics, not design, sample,
   outcomes, or inference. No confirmatory run had started.
+- R38 (2026-08-14): closed the runner-side enforcement gap in R37 before any
+  confirmatory outcome. A non-plan confirmatory command now refuses to create
+  a log unless it receives both the verified public-record evidence and the
+  exact preregistration ZIP. It checks the public DOI and URLs, evidence and
+  ZIP digests, verification UTC, and the ZIP-internal preregistration commit
+  and measurement-manifest digest. Schema-six cycle and abandonment rows carry
+  that external-record identity and provenance, replay rejects missing or
+  mixed publication fields, and the final replication builder revalidates and
+  includes the public evidence. This changes timestamp enforcement and
+  provenance, not design, sample, outcomes, or inference. No confirmatory run
+  had started.

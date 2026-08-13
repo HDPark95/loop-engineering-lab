@@ -242,6 +242,18 @@ builder 뒤에는 먼저 로컬 요청 JSON만 만든다. Zenodo 상태를 바�
       --bundle release/loop-engineering-preregistration-v1/loop-engineering-preregistration-v1.zip \
       --output release/loop-engineering-preregistration-v1/zenodo-public-recheck.json
 
+schema 6 runner는 절차 문구만 믿지 않는다. non-plan 확증 실행에는 공개 증거와 그 증거가
+가리키는 ZIP을 함께 요구하고, ZIP 내부의 preregistration commit·measurement manifest
+digest까지 현재 manifest와 일치시키기 전에는 로그 파일을 만들지 않는다. 검증된 DOI와
+두 SHA-256, 공개 검증 UTC는 모든 cycle·abandonment row에 복사된다.
+
+    python3 run_measurement.py \
+      --manifest measurement-manifest.json \
+      --log results/confirmatory-cycles.jsonl \
+      --run-id confirmatory-01 \
+      --preregistration-evidence release/loop-engineering-preregistration-v1/zenodo-public-evidence.json \
+      --preregistration-bundle release/loop-engineering-preregistration-v1/loop-engineering-preregistration-v1.zip
+
 실행 후에는 원시 로그만으로 결과와 무결성 상태를 재계산한다. HO-A는 gate와
 다음-cycle feedback에만 사용되고, 보고 결과는 gate가 보지 못한 HO-B에서 계산된다.
 
@@ -275,12 +287,16 @@ logical rows, 동일 manifest/tag/log digest, clean replay/audit/analysis를 다
       --reward-audit results/confirmatory-reward-hacking.json \
       --analysis results/confirmatory-analysis.json \
       --archive-root artifacts/confirmatory \
+      --preregistration-evidence release/loop-engineering-preregistration-v1/zenodo-public-evidence.json \
+      --preregistration-bundle release/loop-engineering-preregistration-v1/loop-engineering-preregistration-v1.zip \
       --output-dir release/loop-engineering-confirmatory-v1
 
 출력 directory에는 Zenodo에 단일 파일로 올릴 deterministic
 `loop-engineering-confirmatory-v1.zip`, 그 sidecar SHA-256, API/UI 입력용 metadata가
-생긴다. ZIP 내부에는 source/candidate tarball, `replication-manifest.json`,
-`SHA256SUMS`, 두 저자 ORCID와 preprint 관계를 담은 metadata가 포함된다. Zenodo의
+생긴다. ZIP 내부에는 source/candidate tarball, 외부 사전등록 공개 증거,
+`replication-manifest.json`, `SHA256SUMS`, 두 저자 ORCID와 preprint 관계를 담은
+metadata가 포함된다. builder는 모든 schema 6 log row의 사전등록 DOI·증거 SHA·bundle
+SHA가 이 공개 증거와 같은지도 다시 확인한다. Zenodo의
 manual software deposit 지침에 따라 record에는 이 ZIP 하나만 업로드한다.
 
 ## 확증 격리

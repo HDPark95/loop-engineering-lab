@@ -55,9 +55,10 @@ from pathlib import Path
 
 import agent_adapters
 import se_experiment
+import zenodo_preregistration
 
 ROOT = Path(__file__).resolve().parent
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 # Founder-approved lane rule: at most three agent processes at once. Quota or
 # rate-limit responses wait and retry; they never trigger a switch to API billing.
@@ -132,6 +133,17 @@ def image_is_digest_pinned(image: object) -> bool:
     return len(pinned_digest) == 64 and all(
         character in "0123456789abcdef" for character in pinned_digest.lower()
     )
+
+
+def enforce_external_preregistration_gate(
+    manifest: dict,
+    plan_only: bool,
+    publication: dict | None,
+) -> None:
+    if not manifest.get("apparatus_test", False) and not plan_only and publication is None:
+        raise zenodo_preregistration.ZenodoError(
+            "a public preregistration verification is required"
+        )
 
 
 def verify_isolation_preflight(manifest_path: Path, manifest: dict) -> None:
@@ -539,6 +551,31 @@ def common_attempt_states(
             elif isinstance(record.get("cycle"), int):
                 state["cycles"].setdefault(token, set()).add(record["cycle"])
     return states
+
+
+def validate_existing_external_preregistration(
+    log_path: Path,
+    expected_manifest_digest: str,
+    publication: dict | None,
+) -> None:
+    """Refuse a resume that would mix external preregistration provenance."""
+    if publication is None or not log_path.exists():
+        return
+    with log_path.open(encoding="utf-8") as handle:
+        for line_number, line in enumerate(handle, 1):
+            try:
+                record = json.loads(line)
+            except ValueError:
+                continue
+            if record.get("manifest_digest") != expected_manifest_digest:
+                continue
+            if record.get("schema_version") != SCHEMA_VERSION or any(
+                record.get(field) != value for field, value in publication.items()
+            ):
+                raise zenodo_preregistration.ZenodoError(
+                    "existing log row has different external preregistration "
+                    f"provenance at line {line_number}"
+                )
 
 
 def expected_common_groups(manifest: dict) -> dict[tuple[str, str, str, int], set[str]]:
@@ -1142,7 +1179,7 @@ def digest_of(root: Path) -> str:
 
 
 def price_schedule(agent_entry: dict) -> dict:
-    """Return the complete frozen schedule copied into every schema-five row."""
+    """Return the complete frozen schedule copied into every schema-five-plus row."""
     return {
         "pricing_schedule_id": agent_entry.get("pricing_schedule_id", "legacy-apparatus"),
         "pricing_source_url": agent_entry.get("pricing_source_url", "apparatus-only"),
@@ -1288,6 +1325,7 @@ def run_trajectory(
     common_first_cycle: CommonFirstCycleCache,
     common_consumers: int,
     archive_root: Path | None,
+    preregistration_publication: dict | None,
 ) -> dict:
     """Drive one trajectory and write one record per cycle.
 
@@ -1491,6 +1529,7 @@ def run_trajectory(
                     "credential_leak_scan_passed", False
                 ),
                 "wall_clock_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                **(preregistration_publication or {}),
             }
             try:
                 usage_record["candidate_archive_manifest_sha256"] = (
@@ -1638,6 +1677,8 @@ def main() -> int:
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--log", type=Path, required=True)
     parser.add_argument("--run-id", required=True)
+    parser.add_argument("--preregistration-evidence", type=Path)
+    parser.add_argument("--preregistration-bundle", type=Path)
     parser.add_argument(
         "--plan-only",
         action="store_true",
@@ -1646,6 +1687,41 @@ def main() -> int:
     args = parser.parse_args()
 
     manifest = load_manifest(args.manifest)
+    preregistration_publication = None
+    supplied_publication_paths = (
+        args.preregistration_evidence is not None,
+        args.preregistration_bundle is not None,
+    )
+    if supplied_publication_paths[0] == supplied_publication_paths[1]:
+        try:
+            preregistration_publication = (
+                zenodo_preregistration.validate_publication_evidence(
+                    args.preregistration_evidence.resolve(),
+                    args.preregistration_bundle.resolve(),
+                    manifest,
+                )
+                if all(supplied_publication_paths)
+                else None
+            )
+        except (OSError, zenodo_preregistration.ZenodoError) as exc:
+            print(f"refusing to start: {exc}", file=sys.stderr)
+            return 5
+    else:
+        print(
+            "refusing to start: preregistration evidence and bundle must be supplied together",
+            file=sys.stderr,
+        )
+        return 5
+    try:
+        enforce_external_preregistration_gate(
+            manifest, args.plan_only, preregistration_publication
+        )
+    except zenodo_preregistration.ZenodoError as exc:
+        print(
+            f"refusing to start: {exc}",
+            file=sys.stderr,
+        )
+        return 5
     if manifest.get("candidate_sandbox_image"):
         os.environ["LOOP_SANDBOX_IMAGE"] = manifest["candidate_sandbox_image"]
     cycles = int(manifest["cycles"])
@@ -1656,6 +1732,13 @@ def main() -> int:
     logical_cycle_rows = len(everything) * cycles
     unique_agent_executions = len(common_groups_total) + len(everything) * max(0, cycles - 1)
     digest = manifest_digest(manifest)
+    try:
+        validate_existing_external_preregistration(
+            args.log, digest, preregistration_publication
+        )
+    except (OSError, zenodo_preregistration.ZenodoError) as exc:
+        print(f"refusing to resume: {exc}", file=sys.stderr)
+        return 5
     done = completed_common_group_trajectories(args.log, manifest, cycles, digest)
     todo = [key for key in everything if key.token() not in done]
     incomplete_markers = incomplete_common_attempt_markers(
@@ -1707,6 +1790,11 @@ def main() -> int:
                 "worker_lane_limits": lane_limits,
                 "quota_wait_seconds": float(manifest["quota_wait_seconds"]),
                 "quota_max_retries": int(manifest["quota_max_retries"]),
+                "external_preregistration_gate": (
+                    preregistration_publication
+                    if preregistration_publication is not None
+                    else "not_checked_plan_only_or_apparatus"
+                ),
             },
             indent=2,
             sort_keys=True,
@@ -1725,7 +1813,7 @@ def main() -> int:
 
     log = CycleLog(args.log)
     for marker in incomplete_markers:
-        log.write(marker)
+        log.write({**marker, **(preregistration_publication or {})})
     budget = Budget(billing_mode, ceiling, prior_shadow, prior_billed)
     agents_by_name = {entry["name"]: entry for entry in manifest["agents"]}
     stopped_for_budget = []
@@ -1780,6 +1868,7 @@ def main() -> int:
                         common_first_cycle,
                         common_consumer_counts[group],
                         archive_root,
+                        preregistration_publication,
                     )
                 ] = (key, group, attempt_id, estimate_per_trajectory)
             for future in as_completed(futures):
@@ -1815,6 +1904,7 @@ def main() -> int:
                             "abandoned": True,
                             "error": f"{type(exc).__name__}: {exc}",
                             "wall_clock_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                            **(preregistration_publication or {}),
                         }
                     )
                     print(f"abandoned {key.token()}: {type(exc).__name__}", file=sys.stderr)
@@ -1842,6 +1932,7 @@ def main() -> int:
                             "wall_clock_utc": time.strftime(
                                 "%Y-%m-%dT%H:%M:%SZ", time.gmtime()
                             ),
+                            **(preregistration_publication or {}),
                         }
                     )
     finally:
@@ -1855,6 +1946,9 @@ def main() -> int:
         "cost_ceiling_usd": ceiling,
         "trajectories_not_started_for_budget": len(stopped_for_budget),
         "abandoned_attempts": abandoned_attempts,
+        "external_preregistration_doi": (
+            preregistration_publication or {}
+        ).get("external_preregistration_doi"),
     }
     print(json.dumps(summary, indent=2, sort_keys=True))
     if stopped_for_budget:
