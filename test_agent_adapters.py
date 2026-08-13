@@ -182,6 +182,20 @@ class AdapterTest(unittest.TestCase):
             "claude-test-20260801",
         )
 
+        claude_alias_output = json.dumps({
+            "model": "sonnet",
+            "modelUsage": {"claude-sonnet-4-test-20260801": {}},
+        })
+        self.assertEqual(
+            agent_adapters.reported_model("claude", claude_alias_output),
+            "claude-sonnet-4-test-20260801",
+        )
+        self.assertIsNone(
+            agent_adapters.reported_model(
+                "claude", json.dumps({"model": "sonnet", "modelUsage": {}})
+            )
+        )
+
     def test_measurement_cycle_retains_only_structured_output_and_usage(self):
         report = {"improved": False, "confidence": 0.7, "evidence": "tests still fail"}
         stdout = json.dumps({
