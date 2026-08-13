@@ -173,8 +173,10 @@ def run_calls(
             text=True,
             start_new_session=True,
         )
+        remove_container = True
         try:
             stdout, stderr = process.communicate(payload, timeout=timeout)
+            remove_container = process.returncode != 0
         except subprocess.TimeoutExpired as exc:
             _bounded_docker_cleanup(["docker", "kill", container_name])
             try:
@@ -184,7 +186,8 @@ def run_calls(
             process.communicate()
             raise SandboxTimeout(f"candidate exceeded {timeout}s") from exc
         finally:
-            _bounded_docker_cleanup(["docker", "rm", "-f", container_name])
+            if remove_container:
+                _bounded_docker_cleanup(["docker", "rm", "-f", container_name])
 
     if process.returncode != 0:
         return {

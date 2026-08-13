@@ -740,7 +740,7 @@ def run_trajectory(
                         common_first_cycle.get(key, driver, manifest)
                     )
                 except Exception as exc:
-                    raise SharedCycleOneError(str(exc)) from exc
+                    raise SharedCycleOneError(f"{type(exc).__name__}: {exc}") from exc
                 shutil.copytree(common_path, candidate_dir, symlinks=True)
                 cost_share = 1.0 / common_consumers
             else:

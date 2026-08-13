@@ -576,13 +576,16 @@ class RunnerTest(unittest.TestCase):
             log = directory / "cycles.jsonl"
             oracle = ({"score": 0.5, "metrics": {}, "valid": True}, 0.01)
             cycle_two_calls = 0
+            cycle_two_lock = threading.Lock()
 
             def oracle_with_one_late_failure(*args, **kwargs):
                 nonlocal cycle_two_calls
                 candidate = Path(args[1])
                 if candidate.name == "candidate-2":
-                    cycle_two_calls += 1
-                    if cycle_two_calls == 1:
+                    with cycle_two_lock:
+                        cycle_two_calls += 1
+                        fail_this_call = cycle_two_calls == 1
+                    if fail_this_call:
                         raise RuntimeError("one cycle-two oracle failed")
                 return oracle
 

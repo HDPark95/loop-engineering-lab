@@ -23,6 +23,7 @@ from pathlib import Path
 import se_experiment
 
 APP_SERVER_CLIENT_SOURCE = Path(__file__).resolve().parent / "codex_app_server_client.py"
+DOCKER_CLEANUP_TIMEOUT_SECONDS = 5
 
 PROMPT = """Repair the issue in ISSUE.md in the current isolated directory.
 Work only in the current directory. Inspect the implementation and public tests,
@@ -48,6 +49,19 @@ class AgentInvocationError(RuntimeError):
     def __init__(self, message: str, kind: str = "command") -> None:
         super().__init__(message)
         self.kind = kind
+
+
+def _bounded_docker_cleanup(container_name: str) -> None:
+    """Best-effort cleanup that cannot replace or delay the timeout error."""
+    try:
+        subprocess.run(
+            ["docker", "rm", "-f", container_name],
+            capture_output=True,
+            text=True,
+            timeout=DOCKER_CLEANUP_TIMEOUT_SECONDS,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        pass
 
 
 def measurement_prompt(task: str, cycle: int, feedback: str) -> str:
@@ -430,9 +444,7 @@ def run_measurement_cycle(
                     timeout=timeout_seconds,
                 )
             except subprocess.TimeoutExpired as exc:
-                subprocess.run(
-                    ["docker", "rm", "-f", container_name], capture_output=True, text=True
-                )
+                _bounded_docker_cleanup(container_name)
                 raise AgentInvocationError("agent invocation timed out", "timeout") from exc
     finally:
         schema_path.unlink(missing_ok=True)

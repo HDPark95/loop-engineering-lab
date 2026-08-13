@@ -18,6 +18,9 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Callable
 
+from se_tasks._sandbox.harness import DEFAULT_TIMEOUT_SECONDS
+from se_tasks.s3_production_ops.oracle import TIMING_REPEATS
+
 
 ROOT = Path(__file__).resolve().parent
 
@@ -79,10 +82,11 @@ def run_oracle(
         check=True,
         capture_output=True,
         text=True,
-        # S3 performs nine serialized sandbox evaluations, each with its own
-        # 60-second candidate boundary. The parent must outlive those child
-        # boundaries so it cannot truncate a valid slow-or-timeout result.
-        timeout=600 if task == "s3" else 60,
+        # S3 performs three candidate, three reference, and three floor
+        # evaluations. One additional child boundary is the parent margin.
+        timeout=(3 * TIMING_REPEATS + 1) * DEFAULT_TIMEOUT_SECONDS
+        if task == "s3"
+        else DEFAULT_TIMEOUT_SECONDS,
     )
     elapsed = time.perf_counter() - started
     result = json.loads(process.stdout)

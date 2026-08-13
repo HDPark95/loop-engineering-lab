@@ -3,6 +3,7 @@
 
 import json
 import os
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -236,6 +237,46 @@ class AdapterTest(unittest.TestCase):
                     billing_mode="subscription",
                     max_budget_usd=1.0,
                 )
+            self.assertFalse((workspace / ".loop-verdict-schema.json").exists())
+
+    def test_measurement_timeout_cleanup_is_bounded(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp) / "workspace"
+            workspace.mkdir()
+            auth = Path(tmp) / "auth.json"
+            auth.write_text("{}", encoding="utf-8")
+            timeout = subprocess.TimeoutExpired("docker", 10)
+            with (
+                mock.patch.object(
+                    agent_adapters.shutil, "which", return_value="/usr/bin/docker"
+                ),
+                mock.patch.object(
+                    agent_adapters.subprocess,
+                    "run",
+                    side_effect=[timeout, subprocess.TimeoutExpired("docker rm", 5)],
+                ) as run,
+                self.assertRaisesRegex(
+                    agent_adapters.AgentInvocationError, "agent invocation timed out"
+                ),
+            ):
+                agent_adapters.run_measurement_cycle(
+                    agent="codex",
+                    model="gpt-test",
+                    task="s1",
+                    workspace=workspace,
+                    cycle=1,
+                    feedback="",
+                    container_image="image@sha256:" + "a" * 64,
+                    auth_file=auth,
+                    state_file=None,
+                    timeout_seconds=10,
+                    billing_mode="subscription",
+                    max_budget_usd=1.0,
+                )
+            self.assertEqual(
+                run.call_args_list[-1].kwargs["timeout"],
+                agent_adapters.DOCKER_CLEANUP_TIMEOUT_SECONDS,
+            )
             self.assertFalse((workspace / ".loop-verdict-schema.json").exists())
 
     def test_container_can_forward_auth_environment_by_name(self):
