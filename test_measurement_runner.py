@@ -705,6 +705,25 @@ class ReplayTest(unittest.TestCase):
             self.assertEqual(metrics["ungraded_cycles"], 1)
             self.assertIsNone(metrics["mirage_rate"])
 
+    def test_replay_reports_registered_fixed_denominator_incidences(self):
+        cycles = [
+            {
+                "cycle": 1,
+                "cycles_planned": 6,
+                "oracle_delta": -1.0,
+                "accepted": True,
+            },
+            {
+                "cycle": 2,
+                "cycles_planned": 6,
+                "oracle_delta": 1.0,
+                "accepted": False,
+            },
+        ]
+        metrics = replay.trajectory_metrics(cycles)
+        self.assertAlmostEqual(metrics["harmful_acceptance_incidence"], 1 / 6, places=6)
+        self.assertAlmostEqual(metrics["false_rejection_incidence"], 1 / 6, places=6)
+
     def test_abandoned_attempt_rows_are_excluded_from_cell_statistics(self):
         cycles = [
             {

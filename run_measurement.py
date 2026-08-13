@@ -897,7 +897,7 @@ def run_trajectory(
                     deployed_score_a = oracle_a
                     deployed_score_b = oracle_b
                 feedback = se_experiment.feedback_text(
-                    cell, accepted, delta_a, oracle_a_result["metrics"]
+                    cell, accepted, delta_a, oracle_a
                 )
 
                 log.write(

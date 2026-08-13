@@ -1,279 +1,270 @@
 #!/usr/bin/env python3
-"""Confirmatory inference with the trajectory as the unit.
+"""Confirmatory analysis with task-agent-seed blocks as resampling units.
 
-Registered in PREREGISTRATION.md section 8. The registration used to name no
-analysis unit, and the released `analyze.py` pools cycles across trajectories to
-compute conditional acceptance rates. Cycles inside a trajectory are not
-independent: the candidate accepted at cycle t is the deployed baseline at t+1,
-the agent carries its own history, and one seed governs the whole trajectory.
-Pooling them and reporting an interval is pseudo-replication. At six cycles and
-an intra-trajectory correlation of 0.3 the design effect is 2.5, so the effective
-sample would be overstated 2.5-fold.
+The measurement runner writes six dependent cycle rows per trajectory and
+branches the same cycle-one candidate into four cells. This script never treats
+those rows, or the four branches of one task-agent-seed block, as independent.
+It verifies the replay integrity contract, reduces each trajectory to registered
+outcomes, forms within-block grounded-versus-ungrounded contrasts, bootstraps
+whole blocks, and computes exact one-sided sign-flip p-values.
 
-The estimator here is therefore trajectory-level throughout. A cycle-level binary
-outcome is first reduced to a per-trajectory proportion, and every interval comes
-from resampling trajectories with replacement, never cycles. This is stdlib-only,
-matching the rest of the analysis code; a mixed model with a random intercept per
-trajectory targets the same estimand and is available as a sensitivity analysis,
-but at 20 clusters per arm it buys nothing a cluster bootstrap does not already
-give and it would add a scientific stack to the replication package.
-
-Multiplicity follows section 8.2: a primary family of exactly three tests, Holm
-at a family-wise 0.05, evaluated in the registered fixed sequence, with everything
-else reported as secondary.
-
-    python3 fit_clustered.py [LOGDIR]
-    python3 fit_clustered.py --json      # machine-readable verdicts
+    python3 analysis/fit_clustered.py --log results/confirmatory-cycles.jsonl
+    python3 analysis/fit_clustered.py --log results/confirmatory-cycles.jsonl --json
 """
 
 from __future__ import annotations
 
 import argparse
-import glob
+import itertools
 import json
-import os
 import random
 import statistics as st
 import sys
+from collections import defaultdict
+from pathlib import Path
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-DEFAULT_LOGS = os.path.join(os.path.dirname(HERE), "logs")
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+import replay  # noqa: E402
+
 
 ALPHA = 0.05
-BOOTSTRAP_DRAWS = 20000
-BOOTSTRAP_SEED = 20260810
-
-# Section 8.2: the confirmatory primary family, in the registered order. A later
-# test is read only if the earlier ones pass.
-FIXED_SEQUENCE = ("B-H1a", "B-H1b", "A-H1")
-
-
-def load_trajectories(logdir):
-    """One record per trajectory. The trajectory is the row of every analysis."""
-    trajectories = []
-    for path in sorted(glob.glob(os.path.join(logdir, "pilot_*_r*.jsonl"))):
-        name = os.path.basename(path)[len("pilot_"):-len(".jsonl")]
-        arm, rep = name.rsplit("_r", 1)
-        rows = [json.loads(line) for line in open(path, encoding="utf-8") if line.strip()]
-        if rows:
-            trajectories.append({"arm": arm, "rep": int(rep), "rows": rows})
-    return trajectories
+BOOTSTRAP_DRAWS = 20_000
+BOOTSTRAP_SEED = 20260813
+PRIMARY_TESTS = ("B-H1a", "B-H1b")
+TASK_TO_TEST = {"s1": "B-H1a", "s3": "B-H1b"}
+EXPECTED_CELLS = {
+    "grounded-numeric",
+    "grounded-sign",
+    "ungrounded-numeric",
+    "ungrounded-sign",
+}
 
 
-def outcome_field(rows):
-    """Which delta the outcome is computed on, refusing a mixed trajectory.
+def require_confirmatory_rows(rows: list[dict]) -> None:
+    """Fail closed on apparatus, missing HO-B, or incomplete eligibility."""
+    if not rows:
+        raise ValueError("trajectory has no cycle rows")
+    missing_hob = [row.get("cycle") for row in rows if row.get("delta_hob") is None]
+    if missing_hob:
+        raise ValueError(f"trajectory lacks delta_hob on cycles {missing_hob}")
+    if any(row.get("apparatus_test") for row in rows):
+        raise ValueError("apparatus rows cannot enter confirmatory analysis")
+    if any(row.get("confirmatory_eligible") is not True for row in rows):
+        raise ValueError("every cycle must be confirmatory_eligible")
+    planned = rows[0].get("cycles_planned")
+    observed = {row.get("cycle") for row in rows}
+    if not isinstance(planned, int) or observed != set(range(1, planned + 1)):
+        raise ValueError("trajectory is incomplete")
 
-    `delta_hob` is the outcome half of section 4.1. A trajectory that carries it
-    on some cycles and not others is a harness bug, and silently falling back to
-    `delta` on the missing ones would compute the primary variable partly on the
-    half the gate read. That is the exact confusion the split exists to prevent,
-    so it raises instead.
-    """
-    present = sum(1 for r in rows if "delta_hob" in r)
-    if present == 0:
-        return "delta"
-    if present != len(rows):
+
+def trajectory_record(rows: list[dict]) -> dict:
+    """Reduce one trajectory without treatment-dependent denominators."""
+    require_confirmatory_rows(rows)
+    head = rows[0]
+    n = len(rows)
+    harmful = sum(
+        1 for row in rows if row.get("accepted") and row["delta_hob"] <= 0
+    )
+    false_rejections = sum(
+        1 for row in rows if not row.get("accepted") and row["delta_hob"] > 0
+    )
+    final = rows[-1].get("deployed_score_hob")
+    baseline = head.get("baseline_score_hob")
+    cycle_one = head.get("oracle_score_hob")
+    if not all(isinstance(value, (int, float)) for value in (final, baseline, cycle_one)):
+        raise ValueError("trajectory lacks baseline, cycle-one, or final HO-B score")
+    return {
+        "trajectory": head["trajectory"],
+        "task": head["task"],
+        "agent": head["agent"],
+        "seed": head["seed"],
+        "cell": head["cell"],
+        "grounded": bool(head.get("cell_gate_grounded")),
+        "feedback": head.get("cell_feedback"),
+        "harmful_acceptance_incidence": harmful / n,
+        "false_rejection_incidence": false_rejections / n,
+        "final_hob_score": float(final),
+        "delivered_hob_gain": float(final) - float(baseline),
+        "cycle1_hob_score": float(cycle_one),
+        "cycles": n,
+    }
+
+
+def make_blocks(records: list[dict]) -> dict[tuple, list[dict]]:
+    """Validate the four-cell randomized block for every task-agent-seed."""
+    blocks: dict[tuple, list[dict]] = defaultdict(list)
+    for record in records:
+        blocks[(record["task"], record["agent"], record["seed"])].append(record)
+    for key, block in blocks.items():
+        cells = {record["cell"] for record in block}
+        if cells != EXPECTED_CELLS or len(block) != len(EXPECTED_CELLS):
+            raise ValueError(
+                f"block {key!r} has cells {sorted(cells)!r}; expected all four exactly once"
+            )
+        cycle_one_scores = {record["cycle1_hob_score"] for record in block}
+        if len(cycle_one_scores) != 1:
+            raise ValueError(f"block {key!r} did not share one cycle-one HO-B candidate")
+    return dict(blocks)
+
+
+def block_difference(block: list[dict], field: str) -> float:
+    ungrounded = [record[field] for record in block if not record["grounded"]]
+    grounded = [record[field] for record in block if record["grounded"]]
+    if len(ungrounded) != 2 or len(grounded) != 2:
+        raise ValueError("each block must have two grounded and two ungrounded cells")
+    return st.mean(ungrounded) - st.mean(grounded)
+
+
+def bootstrap_mean_interval(
+    values: list[float],
+    draws: int = BOOTSTRAP_DRAWS,
+    seed: int = BOOTSTRAP_SEED,
+) -> tuple[float | None, float | None]:
+    """Percentile interval resampling complete randomized blocks."""
+    if len(values) < 2:
+        return None, None
+    rng = random.Random(seed)
+    n = len(values)
+    samples = sorted(st.mean(rng.choices(values, k=n)) for _ in range(draws))
+    return samples[int(0.025 * draws)], samples[min(draws - 1, int(0.975 * draws))]
+
+
+def exact_sign_flip_p(values: list[float], null: float = 0.0) -> float | None:
+    """Exact one-sided paired randomization p-value for mean(values) > null."""
+    centered = [value - null for value in values]
+    if not centered:
+        return None
+    observed = st.mean(centered)
+    extreme = 0
+    total = 0
+    for signs in itertools.product((-1.0, 1.0), repeat=len(centered)):
+        permuted = st.mean(sign * value for sign, value in zip(signs, centered))
+        extreme += permuted >= observed - 1e-15
+        total += 1
+    return extreme / total
+
+
+def contrast_report(values: list[float]) -> dict:
+    return {
+        "estimate": st.mean(values) if values else None,
+        "ci_95": bootstrap_mean_interval(values),
+        "p_one_sided_exact": exact_sign_flip_p(values),
+        "blocks": len(values),
+        "block_values": values,
+    }
+
+
+def holm(pvalues: dict[str, float], alpha: float = ALPHA) -> dict[str, dict]:
+    """Holm step-down over the two prespecified primary tests only."""
+    missing = set(PRIMARY_TESTS) - set(pvalues)
+    extra = set(pvalues) - set(PRIMARY_TESTS)
+    if missing or extra:
         raise ValueError(
-            f"{present} of {len(rows)} cycles carry delta_hob; a trajectory must "
-            "carry the outcome half on every cycle or on none")
-    return "delta_hob"
+            f"primary p-values must be exactly {PRIMARY_TESTS}; missing={sorted(missing)}, "
+            f"extra={sorted(extra)}"
+        )
+    ordered = sorted(pvalues.items(), key=lambda item: item[1])
+    verdicts: dict[str, dict] = {}
+    rejecting = True
+    for index, (name, pvalue) in enumerate(ordered):
+        threshold = alpha / (len(ordered) - index)
+        reject = rejecting and pvalue <= threshold
+        verdicts[name] = {
+            "p_value": pvalue,
+            "threshold": threshold,
+            "reject_null": reject,
+        }
+        if not reject:
+            rejecting = False
+    return {name: verdicts[name] for name in PRIMARY_TESTS}
 
 
-def regression_acceptance_rate(rows):
-    """Share of accepted cycles whose outcome-half delta is not positive.
+def analyze(log_path: Path) -> dict:
+    cycles, abandoned, unparsable = replay.load(log_path)
+    integrity = replay.integrity(cycles, abandoned, unparsable)
+    if not integrity["clean"]:
+        raise ValueError(f"replay integrity is not clean: {integrity}")
+    grouped = replay.group_trajectories(cycles, abandoned)
+    records = [trajectory_record(rows) for rows in grouped.values()]
+    blocks = make_blocks(records)
 
-    Reads `delta_hob` when the harness supplies the split of section 4.1, and
-    falls back to `delta` for the pilot logs, which predate it. Under the fallback
-    this quantity is zero by construction in a grounded arm, which is precisely
-    why the split was registered; the caller is told which field was used.
-    """
-    accepted = [r for r in rows if r.get("accept")]
-    if not accepted:
-        return None, "none-accepted"
-    field = outcome_field(rows)
-    bad = sum(1 for r in accepted if r[field] <= 0)
-    return bad / len(accepted), field
+    task_blocks: dict[str, list[list[dict]]] = defaultdict(list)
+    for (task, _agent, _seed), block in blocks.items():
+        task_blocks[task].append(block)
 
+    report = {
+        "schema_version": 1,
+        "source_log": str(log_path),
+        "analysis_unit": "task-agent-seed randomized block",
+        "trajectories": len(records),
+        "blocks": len(blocks),
+        "integrity": integrity,
+        "tasks": {},
+        "primary_tests": {},
+        "holm_family": None,
+    }
+    pvalues = {}
+    for task, task_group in sorted(task_blocks.items()):
+        harmful = [
+            block_difference(block, "harmful_acceptance_incidence")
+            for block in task_group
+        ]
+        false_rejection = [
+            block_difference(block, "false_rejection_incidence")
+            for block in task_group
+        ]
+        delivery = [
+            block_difference(block, "final_hob_score") for block in task_group
+        ]
+        gains = [
+            block_difference(block, "delivered_hob_gain") for block in task_group
+        ]
+        report["tasks"][task] = {
+            "harmful_acceptance": contrast_report(harmful),
+            "false_rejection": contrast_report(false_rejection),
+            "final_hob_score": contrast_report(delivery),
+            "delivered_hob_gain": contrast_report(gains),
+            "cycle1_adjustment": (
+                "the four cells share the same cycle-one candidate within each block; "
+                "the paired block contrast therefore conditions exactly on its HO-B score"
+            ),
+        }
+        test_name = TASK_TO_TEST.get(task)
+        if test_name:
+            primary = report["tasks"][task]["harmful_acceptance"]
+            report["primary_tests"][test_name] = primary
+            pvalues[test_name] = primary["p_one_sided_exact"]
 
-def false_rejection_rate(rows):
-    field = outcome_field(rows)
-    improved = [r for r in rows if r[field] > 0]
-    if not improved:
-        return None
-    return sum(1 for r in improved if not r.get("accept")) / len(improved)
-
-
-def erosion(rows):
-    """Best deployed state minus final deployed state, within one trajectory.
-
-    A within-trajectory comparison, so entry imbalance between cells cannot
-    produce it (section 4.2).
-    """
-    deployed = [r.get("deployed_conv") for r in rows if r.get("deployed_conv") is not None]
-    if not deployed:
-        return None
-    return max(deployed) - deployed[-1]
-
-
-def cluster_bootstrap(values, draws=BOOTSTRAP_DRAWS, seed=BOOTSTRAP_SEED):
-    """Percentile interval over trajectories. Cycles are never resampled."""
-    clean = [v for v in values if v is not None]
-    if len(clean) < 2:
-        return (None, None)
-    rng = random.Random(seed)
-    n = len(clean)
-    means = sorted(st.mean(rng.choices(clean, k=n)) for _ in range(draws))
-    lo = means[int(0.025 * draws)]
-    hi = means[min(draws - 1, int(0.975 * draws))]
-    return (lo, hi)
-
-
-def contrast(treated, control, draws=BOOTSTRAP_DRAWS, seed=BOOTSTRAP_SEED):
-    """Difference of trajectory means with a cluster-bootstrap interval and a
-    one-sided bootstrap p-value for treated minus control being at most zero."""
-    a = [v for v in treated if v is not None]
-    b = [v for v in control if v is not None]
-    if len(a) < 2 or len(b) < 2:
-        return None
-    point = st.mean(a) - st.mean(b)
-    rng = random.Random(seed)
-    diffs = sorted(st.mean(rng.choices(a, k=len(a))) - st.mean(rng.choices(b, k=len(b)))
-                   for _ in range(draws))
-    lo = diffs[int(0.025 * draws)]
-    hi = diffs[min(draws - 1, int(0.975 * draws))]
-    p_one_sided = sum(1 for d in diffs if d <= 0) / draws
-    return {"estimate": point, "ci": (lo, hi), "p": p_one_sided,
-            "n_treated": len(a), "n_control": len(b)}
+    if set(pvalues) == set(PRIMARY_TESTS) and all(value is not None for value in pvalues.values()):
+        report["holm_family"] = holm(pvalues)
+    else:
+        report["holm_family"] = {
+            "status": "not evaluated until both S1 and S3 primary contrasts are complete"
+        }
+    return report
 
 
-def holm(pvalues, alpha=ALPHA):
-    """Holm step-down over the primary family. Returns per-test reject flags."""
-    ordered = sorted(pvalues.items(), key=lambda kv: kv[1])
-    m = len(ordered)
-    verdicts, still_rejecting = {}, True
-    for index, (name, p) in enumerate(ordered):
-        threshold = alpha / (m - index)
-        if still_rejecting and p <= threshold:
-            verdicts[name] = {"reject": True, "threshold": threshold}
-        else:
-            still_rejecting = False
-            verdicts[name] = {"reject": False, "threshold": threshold}
-    return verdicts
-
-
-def fixed_sequence_gate(verdicts):
-    """A later test in the registered sequence is read only if the earlier ones
-    passed. Tests after the first failure are reported as not evaluated."""
-    out, open_gate = {}, True
-    for name in FIXED_SEQUENCE:
-        if name not in verdicts:
-            out[name] = "not-run"
-            continue
-        if not open_gate:
-            out[name] = "not-evaluated (earlier test in the sequence failed)"
-            continue
-        out[name] = "reject-null" if verdicts[name]["reject"] else "retain-null"
-        open_gate = verdicts[name]["reject"]
-    return out
-
-
-def main():
+def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("logdir", nargs="?", default=DEFAULT_LOGS)
+    parser.add_argument("--log", type=Path, required=True)
+    parser.add_argument("--output", type=Path)
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
-
-    trajectories = load_trajectories(args.logdir)
-    if not trajectories:
-        print(f"no trajectory logs under {args.logdir}", file=sys.stderr)
+    try:
+        report = analyze(args.log)
+    except (OSError, ValueError) as exc:
+        print(f"analysis refused: {exc}", file=sys.stderr)
         return 1
-
-    by_arm, delta_fields = {}, set()
-    for t in trajectories:
-        rate, field = regression_acceptance_rate(t["rows"])
-        delta_fields.add(field)
-        by_arm.setdefault(t["arm"], []).append({
-            "rep": t["rep"],
-            "regression_acceptance": rate,
-            "false_rejection": false_rejection_rate(t["rows"]),
-            "erosion": erosion(t["rows"]),
-            "final": t["rows"][-1].get("deployed_conv"),
-            "cycle1": t["rows"][0].get("conversions"),
-        })
-
-    split_present = delta_fields == {"delta_hob"}
-    report = {
-        "n_trajectories": len(trajectories),
-        "unit": "trajectory",
-        "outcome_half_present": split_present,
-        "arms": {},
-        "contrasts": {},
-    }
-    for arm, records in sorted(by_arm.items()):
-        col = lambda k: [r[k] for r in records]
-        report["arms"][arm] = {
-            "n": len(records),
-            "regression_acceptance_mean": _safe_mean(col("regression_acceptance")),
-            "regression_acceptance_ci": cluster_bootstrap(col("regression_acceptance")),
-            "false_rejection_mean": _safe_mean(col("false_rejection")),
-            "erosion_mean": _safe_mean(col("erosion")),
-            "final_mean": _safe_mean(col("final")),
-            "cycle1_mean": _safe_mean(col("cycle1")),
-        }
-
-    grounded = "out-of-band"
-    for ungrounded in [a for a in by_arm if a != grounded]:
-        c = contrast([r["regression_acceptance"] for r in by_arm[ungrounded]],
-                     [r["regression_acceptance"] for r in by_arm[grounded]])
-        if c:
-            report["contrasts"][f"{ungrounded} minus {grounded}"] = c
-
-    if not split_present:
-        report["warning"] = (
-            "These logs carry no outcome-half delta, so the grounded arm's "
-            "regression acceptance rate is zero by construction and no contrast "
-            "below is a test of anything. Section 4.1 of the preregistration "
-            "requires the HO-A/HO-B split before confirmatory execution.")
-
-    if args.json:
-        print(json.dumps(report, indent=2, default=list))
-        return 0
-
-    print(f"trajectories: {report['n_trajectories']}   unit of inference: trajectory")
-    print(f"outcome half (HO-B) present in logs: {split_present}")
-    print(f"\n{'arm':16} {'n':>3} {'regr.accept':>12} {'95% CI':>18} "
-          f"{'false-rej':>10} {'erosion':>8} {'cycle1':>7}")
-    for arm, a in report["arms"].items():
-        ci = a["regression_acceptance_ci"]
-        ci_text = f"[{ci[0]:.2f}, {ci[1]:.2f}]" if ci[0] is not None else "n/a"
-        print(f"{arm:16} {a['n']:3d} {_fmt(a['regression_acceptance_mean']):>12} "
-              f"{ci_text:>18} {_fmt(a['false_rejection_mean']):>10} "
-              f"{_fmt(a['erosion_mean']):>8} {_fmt(a['cycle1_mean']):>7}")
-
-    print("\ncontrasts (trajectory-level, cluster bootstrap over trajectories):")
-    for name, c in report["contrasts"].items():
-        print(f"  {name:38} {c['estimate']:+.3f}  "
-              f"95% CI [{c['ci'][0]:+.3f}, {c['ci'][1]:+.3f}]  one-sided p={c['p']:.4f}")
-
-    if report["contrasts"]:
-        pvals = {n: c["p"] for n, c in report["contrasts"].items()}
-        print("\nHolm over this run's contrasts at family-wise 0.05:")
-        for name, v in holm(pvals).items():
-            print(f"  {name:38} threshold {v['threshold']:.4f}  "
-                  f"{'reject null' if v['reject'] else 'retain null'}")
-
-    if "warning" in report:
-        print("\nWARNING: " + report["warning"])
+    rendered = json.dumps(report, indent=2, sort_keys=True)
+    if args.output:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(rendered + "\n", encoding="utf-8")
+    if args.json or not args.output:
+        print(rendered)
     return 0
-
-
-def _safe_mean(values):
-    clean = [v for v in values if v is not None]
-    return st.mean(clean) if clean else None
-
-
-def _fmt(value):
-    return "n/a" if value is None else f"{value:.3f}"
 
 
 if __name__ == "__main__":

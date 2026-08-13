@@ -39,9 +39,19 @@ class FactorizationTest(unittest.TestCase):
     def test_sign_feedback_reports_oracle_sign_not_gate_acceptance(self):
         ungrounded_sign = se_experiment.CELLS[3]
         self.assertEqual(
-            se_experiment.feedback_text(ungrounded_sign, accepted=True, delta=-0.1, metrics={}),
+            se_experiment.feedback_text(ungrounded_sign, accepted=True, delta=-0.1, score=0.4),
             "outcome did not improve",
         )
+
+    def test_numeric_feedback_exposes_only_prespecified_hoa_scalars(self):
+        text = se_experiment.feedback_text(
+            se_experiment.CELLS[0], accepted=True, delta=0.125, score=0.75
+        )
+        self.assertEqual(
+            json.loads(text),
+            {"oracle_delta": 0.125, "oracle_score": 0.75},
+        )
+        self.assertNotIn("metrics", text)
 
     def test_smoke_output_has_all_task_cell_combinations(self):
         output = se_experiment.smoke_matrix()

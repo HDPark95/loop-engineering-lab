@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Score two blinded annotation files against adjudicated claim labels."""
+"""Score the exploratory claim instrument against blinded reference labels.
+
+Amendment R16 removed this field instrument from every confirmatory claim and
+freeze gate.  This script therefore reports diagnostic thresholds but cannot
+authorize confirmatory execution, regardless of who or what supplied labels.
+"""
 
 from __future__ import annotations
 
@@ -61,8 +66,8 @@ def main() -> None:
         "--development-check",
         action="store_true",
         help="score against one annotator's labels only. Reports precision and "
-             "recall and no agreement statistic, and never passes the freeze "
-             "gate, which requires two annotators.",
+             "recall and no agreement statistic; the exploratory instrument "
+             "never passes a confirmatory freeze gate.",
     )
     args = parser.parse_args()
 
@@ -84,14 +89,12 @@ def main() -> None:
             "n": len(ordered),
             "classifier_claim_validation": validation,
             # A single annotator cannot be adjudicated against anyone, so there is
-            # no agreement statistic to report and reporting one would be a
-            # fabrication. The registered gate needs two annotators and they must
-            # be people, so this run cannot pass it however good the numbers are.
+            # no agreement statistic to report. R16 also makes every field-label
+            # run exploratory, however good its diagnostic numbers are.
             "freeze_gate_passed": False,
-            "status": "development check against one machine annotator; "
-                      "not the preregistered validation gate",
-            "thresholds_met": (validation["precision"] >= 0.8
-                               and validation["recall"] >= 0.8),
+            "status": "exploratory development check; outside the confirmatory core",
+            "instrument_thresholds_met": (validation["precision"] >= 0.8
+                                          and validation["recall"] >= 0.8),
             "privacy": "aggregate only; no annotation IDs or text",
         }
         args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -99,8 +102,8 @@ def main() -> None:
                                encoding="utf-8")
         print(f"development check over {len(ordered)} rows: "
               f"precision {validation['precision']:.4f} recall {validation['recall']:.4f} "
-              f"({'both thresholds met' if output['thresholds_met'] else 'below threshold'}); "
-              "the freeze gate is untouched and still needs two human annotators")
+              f"({'both thresholds met' if output['instrument_thresholds_met'] else 'below threshold'}); "
+              "the field instrument is exploratory and cannot pass a freeze gate")
         return
 
     if not args.annotator_b or not args.adjudicated:
@@ -120,12 +123,19 @@ def main() -> None:
         "n": len(ordered),
         "agreement": {"claim_cohen_kappa": cohen_kappa(a_claim, b_claim)},
         "classifier_claim_validation": validation,
-        "freeze_gate_passed": validation["precision"] >= 0.8 and validation["recall"] >= 0.8,
+        "freeze_gate_passed": False,
+        "instrument_thresholds_met": (
+            validation["precision"] >= 0.8 and validation["recall"] >= 0.8
+        ),
+        "status": "exploratory adjudicated diagnostic; outside the confirmatory core",
         "privacy": "aggregate only; no annotation IDs or text",
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(output, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    print(f"wrote aggregate validation for {len(ordered)} rows")
+    print(
+        f"wrote exploratory aggregate validation for {len(ordered)} rows; "
+        "no field-label result can pass a confirmatory freeze gate"
+    )
 
 
 if __name__ == "__main__":

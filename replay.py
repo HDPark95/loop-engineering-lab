@@ -77,6 +77,8 @@ def trajectory_metrics(rows: list[dict]) -> dict:
     rejected = [r for r in graded if not r.get("accepted")]
     baseline = rows[0].get("baseline_score")
     final = rows[-1].get("deployed_score")
+    planned = rows[0].get("cycles_planned")
+    denominator = planned if isinstance(planned, int) and planned > 0 else len(rows)
     first_positive = next((r["cycle"] for r in graded if r["oracle_delta"] > 0), None)
     return {
         # Primary: what the loop actually delivered.
@@ -96,9 +98,29 @@ def trajectory_metrics(rows: list[dict]) -> dict:
             if accepted
             else None
         ),
+        # Confirmatory fixed-denominator quantities. A cell with no accepted or
+        # no positive-delta cycles contributes zero instead of disappearing.
+        "harmful_acceptance_incidence": (
+            round(
+                sum(1 for r in graded if r.get("accepted") and r["oracle_delta"] <= 0)
+                / denominator,
+                6,
+            )
+            if denominator
+            else None
+        ),
         "false_rejection_rate": (
             round(sum(1 for r in rejected if r["oracle_delta"] > 0) / len(positive), 6)
             if positive
+            else None
+        ),
+        "false_rejection_incidence": (
+            round(
+                sum(1 for r in graded if not r.get("accepted") and r["oracle_delta"] > 0)
+                / denominator,
+                6,
+            )
+            if denominator
             else None
         ),
         "cycles_to_first_positive": first_positive,
@@ -228,6 +250,16 @@ def by_cell(grouped: dict[str, list[dict]]) -> dict:
             for m in metrics
             if m["false_rejection_rate"] is not None
         ]
+        harmful_incidences = [
+            m["harmful_acceptance_incidence"]
+            for m in metrics
+            if m["harmful_acceptance_incidence"] is not None
+        ]
+        false_rejection_incidences = [
+            m["false_rejection_incidence"]
+            for m in metrics
+            if m["false_rejection_incidence"] is not None
+        ]
         api_equivalent_usd = sum(m["api_equivalent_usd"] for m in metrics)
         incremental_billed_usd = sum(m["incremental_billed_usd"] for m in metrics)
         tokens = sum(m["input_tokens"] + m["output_tokens"] for m in metrics)
@@ -246,6 +278,14 @@ def by_cell(grouped: dict[str, list[dict]]) -> dict:
             ),
             "false_rejection_rate_median": (
                 round(median(false_rejections), 6) if false_rejections else None
+            ),
+            "harmful_acceptance_incidence_median": (
+                round(median(harmful_incidences), 6) if harmful_incidences else None
+            ),
+            "false_rejection_incidence_median": (
+                round(median(false_rejection_incidences), 6)
+                if false_rejection_incidences
+                else None
             ),
             "mirage_rate_is_structural": grounded and not outcome_is_hob,
             "outcome_is_hob": outcome_is_hob,

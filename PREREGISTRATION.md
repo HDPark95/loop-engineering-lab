@@ -1,9 +1,10 @@
 # Revised preregistration: evaluator grounding in agentic software engineering
 
 Status: **revised draft, not frozen**. No confirmatory measurement may start
-until every freeze gate in Section 12 is satisfied and the resulting commit hash
-is recorded. Earlier funnel and boundary measurements remain exploratory pilot
-evidence and are not promoted retrospectively.
+until every freeze gate in Section 12 is satisfied and the two-step freeze
+procedure there has produced a stable tagged commit. Earlier funnel and boundary
+measurements remain exploratory pilot evidence and are not promoted
+retrospectively.
 
 This revision was prepared for the Agentic Software Engineering special-issue
 study after the original manuscript received an out-of-scope decision because
@@ -33,10 +34,10 @@ exploratory instrument diagnostic and supplies no confirmatory claim.
 
 | Original item | Revised item | Disposition |
 | --- | --- | --- |
-| H1: in-band self-evaluation has higher mirage rate | B-H1: ungrounded gates have a higher regression acceptance rate on the outcome half HO-B, on S1 and S3 | Retained, moved to SE tasks, dependent variable replaced at R8 |
+| H1: in-band self-evaluation has higher mirage rate | B-H1: ungrounded gates have a higher harmful-acceptance incidence on the outcome half HO-B, on S1 and S3 | Retained, moved to SE tasks, dependent variable replaced at R8 and denominator fixed at R17 |
 | H2: gap disappears on bounded tasks | B-H2: the B1 gap is attenuated relative to S1 by at least 0.20 | Retained in direction; the equivalence form was infeasible at the planned size and is replaced at R10 |
-| H3: outcome reward shortens time to first outcome | B-H3: outcome reward remains a registered secondary axis after the primary 2x2 | Retained, not silently dropped |
-| HA1: strong in-band judge closes the gap | B-HA1: add a strong-judge ungrounded comparator to the primary matrix | Retained |
+| H3: outcome reward shortens time to first outcome | B-H3: deferred extension outside the 160-trajectory confirmatory core | Preserved in the amendment history, not claimed or tested in this revision |
+| HA1: strong in-band judge closes the gap | B-HA1: deferred extension outside the 160-trajectory confirmatory core | Preserved in the amendment history, not claimed or tested in this revision |
 | HA2: out-of-band cost offsets benefit | C-H1: compare outcome per 1,000 tokens, per dollar, and per wall-clock hour | Retained and mechanized |
 | T1 signup funnel | G1 generalization arm | Retained as non-SE generalization evidence, not the main task |
 | B1 structural specification | B1 boundary control | Retained |
@@ -102,7 +103,7 @@ Task families:
 - S1 defect repair: the agent edits a real program against public tests; the
   oracle runs held-out regression tests inaccessible to the agent.
 - S3 production operations: the agent hardens a service; the oracle runs a
-  hidden workload and measures error rate, p95 logical latency, and restarts.
+  hidden workload and measures error rate, kernel CPU ratio, and restart count.
 - G1 generalization: the original signup-funnel task, retained to test whether
   the mechanism extends outside SE.
 - B1 boundary control: a structural specification directly verifiable from the
@@ -141,8 +142,10 @@ negative answer: a gate can be grounded and still miss, if what it is grounded
 in is narrower than what we are measuring.
 
 The two halves are drawn once per seed, before any cycle runs, and the
-assignment is written into the run manifest. Neither the analyst nor any gate
-sees HO-B scores until the trajectory is complete.
+assignment is written into the run manifest. No gate or agent receives an HO-B
+score. The trusted runner records it append-only, but neither the analysis nor
+human inspection may adapt an in-progress trajectory or the frozen design in
+response to it.
 
 ### 4.2 Common first cycle (added R9)
 
@@ -150,8 +153,11 @@ Cycle 1 is executed **once per task-agent-seed**, and its resulting artifact is
 branched into all four factor cells, which then diverge from cycle 2 onward.
 
 The first candidate is produced with an empty feedback string, from the identical
-reset artifact and the identical seed, before any gate has made a decision. It is
-therefore a pre-treatment draw. Running it separately per cell lets the largest
+reset artifact and the identical seed, before any gate has made a decision. Its
+generation and HO-B score are therefore pre-treatment. The four cell-specific
+gates then make their own cycle-1 decisions on that shared candidate, so cycle 1
+is included in each cell's six logical outcome rows and can lead to different
+deployed states. Running the candidate separately per cell lets the largest
 single component of variance leak into the between-cell contrast. In the pilot it
 did: mean cycle-1 candidate scores were 44.3, 71.0 and 79.3 across the three arms,
 so 35.0 of the 36.3-point final gap between the self-claim arm and the grounded
@@ -165,38 +171,50 @@ The cycle-1 HO-B score is retained as a registered covariate regardless (§7),
 because branching removes the imbalance between cells but not the variance
 between seeds.
 
+The resulting accounting is 960 logical trajectory-cycle rows but 840 unique
+agent executions: for every task-agent-seed block, cycle 1 executes once and
+cycles 2 through 6 execute once in each of four cells, for `1 + 5 x 4 = 21`
+executions. Cycle-1 token, time, and API-equivalent shadow cost are allocated
+one quarter to each logical cell row; execution-level totals count the shared
+call once.
+
 ## 5. Primary 2x2 factorization
 
 The primary manipulation crosses:
 
-1. gate grounding: held-out oracle delta versus ungrounded claim/judge verdict;
-2. oracle feedback: numeric metrics versus sign only.
+1. gate grounding: held-out oracle delta versus ungrounded structured self-report;
+2. oracle feedback: numeric HO-A score and delta versus sign only.
 
 | Cell | Gate decision | Feedback to next cycle |
 | --- | --- | --- |
-| grounded-numeric | accept iff held-out delta is positive | delta and frozen metrics |
+| grounded-numeric | accept iff held-out delta is positive | HO-A delta and current HO-A score |
 | grounded-sign | accept iff held-out delta is positive | helped / did not help only |
-| ungrounded-numeric | accept from claim or strong judge | oracle delta and metrics |
-| ungrounded-sign | accept from claim or strong judge | helped / did not help only |
+| ungrounded-numeric | accept from the generator's structured self-report | HO-A delta and current HO-A score |
+| ungrounded-sign | accept from the generator's structured self-report | helped / did not help only |
 
 This separates the causal effect of the gate from the coaching value of oracle
 information. The independent monitor records the oracle trajectory in all cells
 but never changes an ungrounded decision.
 
-B-HA1 uses a strong in-band judge as an additional ungrounded comparator with
-the same artifact, diff, history, and critical default-reject prompt used in the
-pilot. B-H3 repeats the primary matrix under process reward only after the
-outcome-reward matrix is complete; it is a registered secondary analysis.
+The strong-judge and process-reward hypotheses from the original registration
+are not part of this 160-trajectory core. They would require additional adaptive
+trajectories because changing a gate changes the next deployed artifact; an
+offline label on a saved candidate cannot reconstruct that counterfactual
+history. This revision preserves them in §2 and R17 as deferred extensions and
+makes no claim from them.
 
 ### 5.1 The self-report is elicited, not inferred (added R11)
 
 In the ungrounded self-claim cell, the gate reads a structured self-assessment
 the agent is asked for explicitly. At the end of each cycle the agent returns
 
-    {"improved": true | false, "confidence": 0.0-1.0, "evidence": "..."}
+    {"improved": true, "confidence": 0.75, "evidence": "brief concrete evidence"}
 
-and the `improved` field, parsed from that object, is the exposure variable. An
-unparseable or absent verdict is a reject, consistent with §10.
+and the `improved` field, parsed from that object, is the exposure variable. The
+field must be a JSON boolean, confidence must be numeric from 0 through 1, and
+evidence must be a nonempty string of at most 20 whitespace-separated words.
+Only the final nonempty output line is parsed. An invalid or absent verdict is a
+reject, consistent with §10.
 
 This replaces the pilot's definition, which computed the self-report as
 `edited and ok`: the artifact hash changed and the agent process exited
@@ -221,14 +239,17 @@ Revised at R8 and R10; the superseded wording is in §13.
 **Confirmatory primary family (exactly two tests, Holm-corrected, §8):**
 
 - B-H1a: on S1, the ungrounded-minus-grounded difference in **regression
-  acceptance rate** on HO-B is at least 0.20, averaged over the feedback factor.
+  acceptance incidence** on HO-B is positive, averaged over the feedback factor.
 - B-H1b: the same on S3.
 
-Regression acceptance rate is the share of accepted cycles whose HO-B delta is
-at most zero. It replaces the mirage rate as the primary dependent variable
-because the mirage rate is zero by construction in the grounded arm when gate
-and outcome read the same oracle, and remains so under any oracle split that a
-gate is allowed to observe.
+Regression acceptance incidence is the number of cycles that the cell accepts
+despite a nonpositive HO-B delta, divided by all six planned cycles. It is also
+called harmful-acceptance incidence in the code and output. The null for each
+one-sided primary test is an ungrounded-minus-grounded difference at most zero.
+An observed difference of 0.20 is the prespecified practical-relevance value,
+not a second significance threshold; estimates and intervals are reported
+against both zero and 0.20. The fixed six-cycle denominator prevents a cell with
+no accepted cycles from disappearing from the analysis.
 
 **Registered secondary tests, reported with intervals, not used for
 confirmatory claims:**
@@ -241,12 +262,6 @@ confirmatory claims:**
   task closed the gap for the strong-judge gate (0.00) and did not close it for
   the self-claim gate (0.50); this hypothesis registers that asymmetry as a
   prediction rather than treating the second value as noise.
-- B-HA1: if the strong-judge regression acceptance rate on HO-B differs from the
-  corresponding grounded rate by at most 0.05 on both S1 and S3, the
-  judge-quality hypothesis is supported and this paper's mechanism must be
-  narrowed.
-- B-H3: outcome reward reduces median cycles to first positive HO-B delta
-  relative to process reward.
 - B-G1: the S1 and S3 effects reproduce on G1. G1 is generalization robustness
   and is explicitly excluded from the confirmatory family.
 
@@ -282,13 +297,14 @@ The unit column is binding: it fixes what a row of the analysis table is, and
 
 | Variable | Definition | Unit |
 | --- | --- | --- |
-| regression acceptance rate | accepted cycles with HO-B delta at most zero, divided by accepted cycles | cycle, clustered in trajectory |
-| final delivered HO-B score | deployed state's HO-B score at budget exhaustion, adjusted for the cycle-1 covariate | trajectory |
+| regression acceptance incidence | accepted cycles with HO-B delta at most zero, divided by all six planned cycles | trajectory proportion, paired in task-agent-seed block |
+| final delivered HO-B score | deployed state's HO-B score at budget exhaustion | trajectory, paired in task-agent-seed block |
 
 **Secondary.**
 
-- false-rejection rate: rejected cycles with positive HO-B delta divided by
-  positive-delta cycles (cycle, clustered in trajectory);
+- false-rejection incidence: rejected cycles with positive HO-B delta divided by
+  all six planned cycles (trajectory proportion). A trajectory with no positive
+  delta contributes zero rather than being dropped;
 - erosion: the drop from a trajectory's best deployed HO-B score to its final
   deployed HO-B score (trajectory). This one is a within-trajectory comparison
   and is therefore immune to entry imbalance between cells;
@@ -302,13 +318,17 @@ The unit column is binding: it fixes what a row of the analysis table is, and
 
 **Covariates, registered before execution.**
 
-- cycle-1 candidate HO-B score, the pre-treatment draw defined in §4.2. Final
-  delivered score is reported both unadjusted and adjusted for it by ANCOVA, and
-  the adjusted value is the one that carries the claim;
-- task, agent, and seed;
+- cycle-1 candidate HO-B score, the pre-treatment draw defined in §4.2. The
+  primary estimator is the within-task-agent-seed contrast, so all four cells
+  condition exactly on the same cycle-1 score. Unadjusted cell means are also
+  reported descriptively;
+- task is analysed separately for B-H1a and B-H1b, agent is a blocking factor,
+  and seed identifies the paired block rather than entering as a numeric fixed
+  effect;
 - edit success, that is, whether the artifact hash changed and the agent process
-  exited cleanly. This was previously used as the self-report variable; it is a
-  covariate, not an exposure (§3.2).
+  exited cleanly. This occurs after feedback and may mediate the treatment, so it
+  is reported descriptively and is **not** an adjustment covariate. This was
+  previously used as the self-report variable; it is not an exposure (§3.2).
 
 **Cost.**
 
@@ -334,46 +354,42 @@ mirage rate per trajectory, and cycles within a trajectory are not independent,
 because the candidate accepted at cycle t becomes the deployed baseline for
 cycle t+1, the agent carries its own history, and one seed governs the whole
 trajectory. Reporting a cycle-level interval over 960 dependent cycles is
-pseudo-replication. At six cycles and an intra-trajectory correlation of 0.3 the
-design effect is 2.5, so the effective sample would be overstated 2.5-fold and
-intervals narrowed by about a factor of 1.58.
+pseudo-replication. The analysis instead reduces each trajectory before
+comparing cells and then resamples the complete four-cell randomized block.
 
 ### 8.1 Unit and models
 
-**The unit of confirmatory inference is the trajectory.**
+**The unit of confirmatory inference is the task-agent-seed randomized block.**
 
-- Cycle-level binary outcomes (regression acceptance, false rejection) are
-  reduced to a per-trajectory proportion and analysed at the trajectory level.
-  Every interval comes from resampling trajectories with replacement, never
-  cycles. A generalized linear mixed model with a logit link and a random
-  intercept per trajectory nested in task-agent-seed targets the same estimand
-  and is reported as a sensitivity analysis; at 20 clusters per arm it is the
-  more fragile of the two, and it would add a scientific stack to a replication
-  package that is otherwise standard library. The estimator that carries the
-  claim is the cluster bootstrap, implemented in `analysis/fit_clustered.py`.
+- Cycle-level binary outcomes are reduced to fixed-denominator per-trajectory
+  incidences. Within every task-agent-seed block, the two ungrounded cells are
+  averaged and the two grounded cells are averaged; their difference is the row
+  of inference. Every interval resamples these complete blocks, never cycles or
+  individual cell rows. The exact one-sided p-value enumerates all sign flips of
+  the paired block differences. The estimator is implemented in
+  `analysis/fit_clustered.py` using the standard library only.
 - Trajectory-level outcomes (final delivered HO-B score, erosion, cycles to
-  first positive delta) are analysed with the trajectory as the row. Final
-  delivered score is an ANCOVA on the cycle-1 covariate of §4.2.
+  first positive delta) use the same paired block contrast. Because every cell
+  in a block shares the identical cycle-1 candidate, this conditions exactly on
+  the registered entry score; a post-treatment edit-success adjustment is
+  prohibited.
 - AIDev summaries are exploratory instrument diagnostics and are not included
   in confirmatory models or intervals.
 - **No interval anywhere in this study is computed treating cycles as
   independent.** The pooled conditional acceptance rates that `analyze.py`
   already emits are relabelled in the released output as descriptive only, not
   inferential quantities. `analysis/fit_clustered.py` refuses to present any
-  contrast as a test while the logs carry no outcome-half delta, because in that
-  state the grounded arm's rate is fixed at zero by construction.
+  contrast as a test unless every row carries `delta_hob`, is non-apparatus,
+  remains confirmatory-eligible, and belongs to a complete four-cell block.
 
 ### 8.2 Alpha, families, and multiplicity
 
 The confirmatory primary family contains exactly two tests, listed in §6:
 B-H1a (S1) and B-H1b (S3). Family-wise error is controlled at 0.05 by Holm.
-The registered decision sequence for the two primary claims is:
-
-    B-H1a  ->  B-H1b
-
-Everything else in §6 is secondary, reported with intervals, and never used to
+There is no additional fixed-sequence gate layered on top of Holm. Everything
+else in §6 is secondary, reported with intervals, and never used to
 support a confirmatory claim. This matters because the untrimmed test count is
-at least fifteen once B-H1 is evaluated per task, B-HA1 per task, C-H1 per cost
+at least ten once B-H1 is evaluated per task, C-H1 per cost
 denominator, and exploratory field summaries per outcome; at a nominal five percent each,
 the probability of at least one false positive under a global null would exceed
 one half. C-H1 is descriptive with no threshold and enters no family. G1 is
@@ -382,34 +398,24 @@ family of a software engineering submission would also be strategically poor.
 
 ### 8.3 Power
 
-Every figure below is produced by `analysis/power_sim.py` and nothing here is
-typed by hand. An arm pools the two feedback levels and holds 20 trajectories
-(two agents x two feedback levels x five seeds); a single cell holds 10. The
-between-trajectory standard deviations the pilot exhibits are 0.0962 for the
-self-claim arm and 0.1925 for the judge arm, and the table is computed at 0.15.
+Every figure below is produced by `analysis/power_sim.py`. Each task has ten
+paired blocks (two agents x five seeds). The planning SD of 0.15 is the
+between-block SD of the already-reduced grounding difference, not a cycle-level
+SD, so no ICC inflation is applied again. The conservative one-sided alpha is
+0.025, the first Holm threshold when both primary tests are present.
 
 | Contrast | n | SE | MDE at 80% power | Sided |
 | --- | --- | --- | --- | --- |
-| B-H1, grounded vs ungrounded | 20 per arm | 0.047 | 0.118 | one |
-| RQ-B2, grounded-sign vs ungrounded-numeric | 10 per cell | 0.067 | 0.167 | one |
-| RQ-B2, full 2x2 interaction | 10 per cell | 0.095 | 0.266 | two |
+| B-H1a, S1 ungrounded minus grounded | 10 blocks | 0.047 | 0.133 | one |
+| B-H1b, S3 ungrounded minus grounded | 10 blocks | 0.047 | 0.133 | one |
 
-Simulation at each minimum detectable effect returns 0.799 and 0.797, which is
-the 0.80 the closed form was solved for. B-H1 is amply powered: at a true effect
-of 0.20 its power is 0.995, and the pilot value was 0.56.
+At a true difference of 0.20 the normal approximation gives power 0.988 and the
+registered 20,000-trial simulation gives 0.982. The feedback interaction and
+the grounded-sign versus ungrounded-numeric contrast are secondary descriptive
+quantities; the design is not presented as powered for either.
 
-**The full 2x2 interaction is underpowered by design and is declared so here
-rather than discovered later.** The primary test of RQ-B2 is therefore a single
-two-cell contrast, grounded-sign versus ungrounded-numeric. That contrast
-answers the gate-versus-information question directly: if a grounded gate that
-returns only a sign beats an ungrounded gate that receives the full numeric
-signal, the cause is the gate. The full interaction is reported as a secondary,
-descriptive quantity.
-
-`analysis/power_sim.py` is a registered artifact. It takes the assumed
-intra-trajectory correlation, per-cell true values, and seed count, and returns
-power by simulation. It is committed at freeze, and every number in the table
-above is reproducible from it.
+`analysis/power_sim.py` is a registered artifact. It takes the paired-block SD,
+effect, seed count, and per-test alpha and returns the values above.
 
 ## 9. Planned size
 
@@ -421,7 +427,8 @@ The minimum confirmatory core is:
 - five seeds per task-agent-cell;
 - six cycles per trajectory.
 
-This is 160 trajectories and 960 cycles. Agent identities, immutable model
+This is 160 trajectories, 960 logical cell-cycle rows, and 840 unique agent
+executions under the shared-cycle-one rule in §4.2. Agent identities, immutable model
 versions, prompts, seeds, and API-equivalent shadow prices are written into this
 document immediately before freeze. The planned execution mode is authenticated
 subscription CLI prompting: incremental billed dollars are fixed at zero, while
@@ -438,39 +445,67 @@ agent is removed before freeze, never after its outcome is seen.
   silently replaced.
 - Oracle crash: no gate decision; repair before any affected cell resumes and
   record an amendment.
-- Unparseable ungrounded judge verdict: reject by default.
+- Invalid or absent ungrounded self-verdict: reject by default.
 - Open or missing-body field records are handled only in the exploratory AIDev
   summaries and cannot exclude or invalidate a controlled trajectory.
 
 ## 11. Mechanized outputs
 
 Every run writes append-only JSONL containing configuration, task, agent,
-model, seed, factor cell, candidate hash, claim/judge decision, oracle result,
+model, seed, factor cell, candidate hash, structured self-verdict, oracle result,
 deployed score, canary result, and cost fields. Confirmatory aggregate scripts
 consume only those controlled-run logs. Separate exploratory scripts consume
 the AIDev tables. Raw field text is not republished; only aggregate diagnostics
 and classifier validation counts enter this repository.
 
+The controlled core uses no separate judge. The structured self-verdict contract
+is explicit. `claim_parsed` is always a boolean and is false for an absent or
+invalid final line. `claim_improved` is a
+boolean only when `claim_parsed` is true and is otherwise false for the gate.
+`claim_confidence` is a number from 0 through 1 only when parsed and is otherwise
+null. `claim_evidence` is a nonempty string of at most 20 words only when parsed
+and is otherwise the empty string. Keeping `claim_parsed` separate is mandatory:
+it distinguishes an agent's valid false verdict from a missing verdict.
+
+Every confirmatory row also records `delta_hoa`, `delta_hob`, the corresponding
+candidate and deployed scores, `model_requested`, `model_served`, runtime model
+evidence and reroutes, requested and served reasoning effort, token counts,
+shared-execution identity and cost-allocation fraction, both cost definitions,
+the manifest digest, and the preregistration freeze commit. A missing HO-B value,
+model mismatch, effort mismatch, mixed manifest, or corrupt JSONL line makes the
+replay report unclean and blocks inference.
+
 ## 12. Freeze gates
 
-All boxes must be satisfied in one commit before confirmatory execution:
+All boxes must be satisfied before confirmatory execution. The freeze is
+non-self-referential and uses two steps:
+
+1. Commit the completed preregistration, code, tests, prompts, task manifests,
+   and analysis scripts as freeze commit F, then create annotated tag
+   `prereg-v1` pointing to F.
+2. In a later documentation commit, write F's object ID and tag name into the
+   manuscript and run manifest. The manifest field `preregistration_commit`
+   must equal F. Step 2 cannot change F or move the tag.
 
 - [x] S1 and S3 public tests, held-out oracles, and canaries are versioned;
 - [x] container mount and network proofs pass on the measurement host;
 - [x] two agent adapters pass the same protocol smoke test;
+- [ ] repository-scale S1 plus S3, G1, and B1 are all implemented in the same
+  runner and pass task-specific adversarial oracle tests;
 - [ ] model identifiers, prompts, seeds, API-equivalent shadow prices, and the
   960-cycle budget are filled in;
 - [ ] subscription billing mode, zero incremental billing, concurrency cap of
   three, and quota/rate-limit auto-wait are verified in the run manifest;
-- [ ] this commit hash is recorded in the manuscript and run manifest;
-- [ ] the HO-A/HO-B oracle split of §4.1 is implemented, versioned, and shown by
+- [ ] annotated tag `prereg-v1` points to freeze commit F, and a later manifest
+  and manuscript commit records F without moving the tag;
+- [x] the HO-A/HO-B oracle split of §4.1 is implemented, versioned, and shown by
   test to keep HO-B unreachable from every gate;
-- [ ] the common first cycle of §4.2 is implemented and a branching run is
+- [x] the common first cycle of §4.2 is implemented and a branching run is
   verified to produce identical cycle-1 artifacts across all four cells;
-- [ ] the self-report elicitation of §5.1 is implemented, and a pilot run shows
+- [x] the self-report elicitation of §5.1 is implemented, and a pilot run shows
   the elicited verdict taking both values;
-- [ ] `analysis/power_sim.py` and the mixed-model fitting script are committed
-  and reproduce §8.3;
+- [x] `analysis/power_sim.py` and `analysis/fit_clustered.py` are committed and
+  reproduce §8.3 while refusing apparatus, incomplete HO-B, or partial blocks;
 - [ ] every oracle grades on values it observes rather than values the candidate
   reports, and an adversarial baseline test asserts the ordering
   null < seed < reference on every change.
@@ -559,3 +594,16 @@ apparatus validation and not confirmatory evidence.
   and replacement classifiers did not clear the proposed validation threshold.
   A-H1 and the human-annotation/AIDev-ID freeze gates are removed. The
   confirmatory core remains 160 trajectories and 960 cycles.
+- R17 (2026-08-13): resolved the preregistration review before freeze. The
+  primary outcome is now harmful-acceptance incidence over all six planned
+  cycles, eliminating treatment-dependent zero denominators while preserving
+  the intended accepted-nonimprovement event. The four cells form one
+  task-agent-seed randomized block; inference uses paired block differences,
+  whole-block bootstrap intervals, exact sign-flip p-values, and Holm over only
+  B-H1a and B-H1b. Cycle 1 is one shared pre-treatment candidate followed by
+  four cell-specific gate decisions, yielding 960 logical rows but 840 unique
+  model executions. Post-feedback edit success is a descriptive mediator, not
+  an adjustment covariate. B-HA1 and B-H3 are explicitly deferred because they
+  require additional adaptive trajectories. The freeze hash is recorded through
+  an immutable annotated tag and a later manifest commit rather than requiring a
+  commit to contain its own hash.

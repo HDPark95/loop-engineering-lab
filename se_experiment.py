@@ -95,10 +95,16 @@ def run_oracle(
     return result, elapsed
 
 
-def feedback_text(cell: FactorCell, accepted: bool, delta: float, metrics: dict) -> str:
+def feedback_text(cell: FactorCell, accepted: bool, delta: float, score: float) -> str:
+    """Return only the feedback assigned by the frozen factor.
+
+    The oracle's component metrics can encode hidden case composition or workload
+    details.  They belong in the append-only monitor log, not in the agent prompt.
+    The numeric arm therefore receives only the two prespecified HO-A scalars.
+    """
     if cell.feedback == "numeric":
         return json.dumps(
-            {"oracle_delta": round(delta, 6), "metrics": metrics},
+            {"oracle_delta": round(delta, 6), "oracle_score": round(score, 6)},
             sort_keys=True,
         )
     return "outcome improved" if delta > 0 else "outcome did not improve"
@@ -160,7 +166,7 @@ def run_cell(task: str, cell: FactorCell, candidates: list[ScriptedCandidate]) -
                     "oracle_delta": round(delta, 6),
                     "accepted": accepted,
                     "deployed_score": deployed_score,
-                    "feedback": feedback_text(cell, accepted, delta, oracle_result["metrics"]),
+                    "feedback": feedback_text(cell, accepted, delta, oracle_result["score"]),
                     "metrics": oracle_result["metrics"],
                     "cost": asdict(cost),
                 }

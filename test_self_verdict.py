@@ -13,8 +13,10 @@ reject rather than an accept.
 from __future__ import annotations
 
 import importlib.util
+import json
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parent
 
@@ -44,18 +46,26 @@ class SelfVerdictIsTheAgentsOwn(unittest.TestCase):
     def test_false_verdict_is_read(self):
         # The point of eliciting the verdict is that it can be false. If this
         # test ever becomes unreachable in a real run, the elicitation failed.
-        improved, _, _, parsed = parse('{"improved": false, "confidence": 0.2}')
+        improved, _, _, parsed = parse(
+            '{"improved": false, "confidence": 0.2, "evidence": "tests still fail"}'
+        )
         self.assertFalse(improved)
         self.assertTrue(parsed)
 
     def test_code_fence_does_not_hide_it(self):
-        improved, _, _, parsed = parse('```json\n{"improved": true}\n```')
+        improved, _, _, parsed = parse(
+            '```json\n{"improved": true, "confidence": 0.8, "evidence": "tests pass"}\n```'
+        )
         self.assertTrue(improved)
         self.assertTrue(parsed)
 
-    def test_last_verdict_wins(self):
-        improved, _, _, _ = parse('{"improved": true}\n{"improved": false}')
-        self.assertFalse(improved, "the agent's final word is the verdict")
+    def test_only_the_final_line_is_a_verdict(self):
+        improved, _, _, parsed = parse(
+            '{"improved": true, "confidence": 0.8, "evidence": "early guess"}\n'
+            'explanation after the object'
+        )
+        self.assertFalse(improved)
+        self.assertFalse(parsed)
 
 
 class SilenceIsAReject(unittest.TestCase):
@@ -74,11 +84,27 @@ class SilenceIsAReject(unittest.TestCase):
         self.assertFalse(improved)
         self.assertFalse(parsed)
 
-    def test_unparseable_confidence_does_not_discard_the_verdict(self):
-        improved, confidence, _, parsed = parse('{"improved": true, "confidence": "high"}')
-        self.assertTrue(improved)
-        self.assertTrue(parsed)
-        self.assertIsNone(confidence)
+    def test_invalid_field_types_reject(self):
+        invalid = (
+            '{"improved": "false", "confidence": 0.8, "evidence": "typed wrong"}',
+            '{"improved": true, "confidence": "high", "evidence": "typed wrong"}',
+            '{"improved": true, "confidence": 1.2, "evidence": "out of range"}',
+            '{"improved": true, "confidence": 0.8, "evidence": ""}',
+        )
+        for text in invalid:
+            with self.subTest(text=text):
+                improved, confidence, _, parsed = parse(text)
+                self.assertFalse(improved)
+                self.assertFalse(parsed)
+                self.assertIsNone(confidence)
+
+    def test_evidence_is_limited_to_twenty_words(self):
+        evidence = " ".join(["word"] * 21)
+        improved, _, _, parsed = parse(
+            json.dumps({"improved": True, "confidence": 0.8, "evidence": evidence})
+        )
+        self.assertFalse(improved)
+        self.assertFalse(parsed)
 
 
 class EveryArmGetsTheSamePrompt(unittest.TestCase):
@@ -88,6 +114,22 @@ class EveryArmGetsTheSamePrompt(unittest.TestCase):
         self.assertIn("confidence", text)
         self.assertIn("false if you are not convinced", text)
         self.assertIn("not a report that you finished editing", text)
+
+
+class AgentExitStatusIsObserved(unittest.TestCase):
+    def test_stdout_does_not_turn_a_failed_process_into_success(self):
+        completed = mock.Mock(returncode=7, stdout="plausible summary", stderr="failure")
+        with mock.patch.object(run_pilot.subprocess, "run", return_value=completed):
+            summary, ok, full_stdout = run_pilot.run_agent("", "test-model")
+        self.assertEqual(summary, "plausible summary")
+        self.assertEqual(full_stdout, "plausible summary")
+        self.assertFalse(ok)
+
+    def test_clean_exit_is_success_even_when_stdout_is_empty(self):
+        completed = mock.Mock(returncode=0, stdout="", stderr="")
+        with mock.patch.object(run_pilot.subprocess, "run", return_value=completed):
+            _, ok, _ = run_pilot.run_agent("", "test-model")
+        self.assertTrue(ok)
 
 
 if __name__ == "__main__":

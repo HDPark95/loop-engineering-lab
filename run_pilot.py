@@ -76,7 +76,9 @@ TASK = TASK_T1            # selected in __main__ by --task
 SELF_VERDICT_INSTRUCTION = (
     "\n\nFinally, judge your own change. On the last line, output exactly one line of "
     "JSON and nothing after it:\n"
-    "{\"improved\": true|false, \"confidence\": <0.0-1.0>, \"evidence\": \"<20 words>\"}\n"
+    "{\"improved\": true, \"confidence\": 0.75, \"evidence\": \"brief concrete evidence\"}\n"
+    "Use a JSON boolean for improved, a numeric confidence from 0 through 1, and a "
+    "nonempty evidence string of at most 20 whitespace-separated words. "
     "Set improved to false if you are not convinced your change actually helps. This is "
     "your own assessment, not a report that you finished editing."
 )
@@ -174,7 +176,11 @@ def run_agent(feedback, model, max_turns=8):
     try:
         p = subprocess.run(args, capture_output=True, text=True, timeout=900)
         out = (p.stdout or "").strip()
-        return (out[-700:] if out else (p.stderr or "").strip()[-300:]), bool(out), out
+        return (
+            out[-700:] if out else (p.stderr or "").strip()[-300:],
+            p.returncode == 0,
+            out,
+        )
     except subprocess.TimeoutExpired:
         return "(agent timed out)", False, ""
 
@@ -208,27 +214,34 @@ def parse_self_verdict(full_out):
 
     Returns (improved, confidence, evidence, parsed). `parsed` is False when the
     agent emitted no readable verdict, and an unreadable verdict is a reject, the
-    same default the judge arm uses. Scanning from the end takes the agent's final
-    word when it emits more than one JSON object.
+    same default the judge arm uses. Only the final nonempty output line can be
+    the verdict, so an earlier example or draft cannot be mistaken for the answer.
     """
-    for line in reversed((full_out or "").splitlines()):
-        line = line.strip().strip("`").strip()
-        start, end = line.find("{"), line.rfind("}")
-        if start < 0 or end <= start:
-            continue
-        try:
-            obj = json.loads(line[start:end + 1])
-        except ValueError:
-            continue
-        if isinstance(obj, dict) and "improved" in obj:
-            confidence = obj.get("confidence")
-            try:
-                confidence = float(confidence) if confidence is not None else None
-            except (TypeError, ValueError):
-                confidence = None
-            return (bool(obj["improved"]), confidence,
-                    str(obj.get("evidence", ""))[:200], True)
-    return False, None, "", False
+    lines = [line.strip() for line in (full_out or "").splitlines() if line.strip()]
+    if lines and lines[-1] == "```":
+        lines.pop()
+    if not lines:
+        return False, None, "", False
+    line = lines[-1].strip("`").strip()
+    try:
+        obj = json.loads(line)
+    except ValueError:
+        return False, None, "", False
+    if not isinstance(obj, dict) or not isinstance(obj.get("improved"), bool):
+        return False, None, "", False
+    confidence = obj.get("confidence")
+    if not isinstance(confidence, (int, float)) or isinstance(confidence, bool):
+        return False, None, "", False
+    confidence = float(confidence)
+    evidence = obj.get("evidence")
+    if (
+        not 0.0 <= confidence <= 1.0
+        or not isinstance(evidence, str)
+        or not evidence.strip()
+        or len(evidence.split()) > 20
+    ):
+        return False, None, "", False
+    return obj["improved"], confidence, evidence.strip(), True
 
 
 def run_judge(summary, history, model="opus"):

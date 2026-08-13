@@ -72,14 +72,14 @@ COMPLETION_PATTERNS = tuple(
         rf"\b(?:I|we)\s+(?:have\s+)?{_ASSERTION_VERB}(?:ed|d)\b",
         # the change as subject: "this PR fixes X", "these changes implement Y"
         rf"\b(?:this\s+(?:pull\s+request|pr|change|commit)|these\s+changes)\s+"
-        rf"(?:has\s+|have\s+)?{_ASSERTION_VERB}(?:ed|d|s)\b",
+        rf"(?:has\s+|have\s+)?(?:(?:fix|address)es|{_ASSERTION_VERB}(?:ed|d|s)?)\b",
         # Sentence-initial past tense: "Added a hot reload feature".
         # The leading indent is spaces and tabs, never `\s`: under re.MULTILINE
         # `\s` also matches the newlines that `^` anchors to, so `^\s*` can start
         # at every line and consume the whole run of blank lines after it. On a
         # body of 20,000 blank lines that pattern took 73 seconds; the
         # confirmatory pass reads 23,596 bodies.
-        rf"^[ \t]*(?:[-*+][ \t]+|\d+\.[ \t]+)?{_ASSERTION_VERB}(?:ed|d)\b",
+        rf"^[ \t]*{_ASSERTION_VERB}(?:ed|d)\b",
         # passive perfect: "the endpoint has been exposed"
         rf"\b(?:has|have|had)\s+been\s+{_ASSERTION_VERB}(?:ed|d)\b",
         # explicit statement of a finished state
@@ -153,7 +153,9 @@ TESTING_HEADING = re.compile(
     r"(?:testing|tests?\s+run|test\s+plan|verification|"
     r"how\s+has\s+this\s+been\s+tested)\b",
     re.IGNORECASE | re.MULTILINE)
-NEXT_HEADING = re.compile(r"^\s{0,3}#{1,6}\s", re.MULTILINE)
+NEXT_HEADING = re.compile(
+    r"^\s{0,3}(?:#{1,6}\s+|\*\*[^*\n]+\*\*\s*$)", re.MULTILINE
+)
 FAILURE_MARKER = re.compile(
     r"\(\s*fail|\bfails?\b|\bfailed\b|\bfailing\b|\berror:|\btraceback\b|"
     r"\binterrupted\b|\bcould not\b|\bunable to\b|\bnot run\b|\bskipped\b",
@@ -182,6 +184,11 @@ def testing_section_asserts_success(text: str) -> bool:
         return False
     return bool(EVIDENCE_LINE.search(section)) and not FAILURE_MARKER.search(section)
 REVERT_PATTERN = re.compile(r"\brevert(?:ed|s|ing)?\b", re.IGNORECASE)
+DIFF_DESCRIPTION = re.compile(
+    r"^\s*the\s+\S+\s+(?:field|value|version|setting)\s+(?:was|is)\s+"
+    r"(?:updated|changed|bumped)\s+from\s+\S+\s+to\s+\S+\s*$",
+    re.IGNORECASE,
+)
 
 
 def sha256_file(path: Path) -> str:
@@ -207,7 +214,7 @@ def classify_claim(body: str | None) -> dict[str, bool | str]:
     # Template boilerplate lives in HTML comments and is instruction to the author,
     # not an assertion by the author, so it is removed before matching.
     text = HTML_COMMENT.sub(" ", body or "")
-    completion = matches_any(COMPLETION_PATTERNS, text)
+    completion = matches_any(COMPLETION_PATTERNS, text) and not DIFF_DESCRIPTION.match(text)
     verification = (matches_any(VERIFICATION_PATTERNS, text)
                     or testing_section_asserts_success(text))
     strong = matches_any(STRONG_PATTERNS, text)

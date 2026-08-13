@@ -81,6 +81,15 @@ class ClaimClassifierV2Test(unittest.TestCase):
     def test_sentence_initial_past_tense(self):
         self.assertClaim("Added a hot reload feature that watches the repository.")
 
+    def test_bare_change_list_bullets_are_not_assertions(self):
+        self.assertNotClaim("- Added a hot reload feature")
+        self.assertNotClaim("* Fixed a parser bug")
+        self.assertNotClaim("1. Updated the dependency")
+
+    def test_third_person_es_inflections(self):
+        self.assertClaim("This PR fixes the parser edge case.")
+        self.assertClaim("These changes address the retry failure.")
+
     def test_passive_perfect(self):
         self.assertClaim("The endpoint has been exposed to the OpenAPI specification.")
 
@@ -90,8 +99,11 @@ class ClaimClassifierV2Test(unittest.TestCase):
         self.assertNotClaim("Fixes # (issue)")
 
     def test_template_boilerplate_in_a_comment_is_not_an_assertion(self):
-        self.assertNotClaim(
-            "<!-- E.g. Remove pathHash attribute because it is confirmed unused. -->")
+        self.assertNotClaim("<!-- All tests passed locally. -->")
+
+    def test_bold_testing_section_stops_at_the_next_bold_heading(self):
+        body = "**Testing**\n\n- pytest\n\n**Known limitations**\n\nFailed on Windows"
+        self.assertClaim(body)
 
     def test_diff_description_is_not_a_completion_claim(self):
         self.assertNotClaim("The version field was updated from 2.1.1 to 2.1.2.")
