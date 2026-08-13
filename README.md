@@ -63,6 +63,11 @@ read와 요청별 long-context 구간을 직접 반영하며, 런타임이 cache
 주지 않으면 하한(쓰기 0개)과 보수적 상한(비캐시 입력 전부가 쓰기일 가능성)을
 함께 남긴다. `api_equivalent_usd`는 이 보수적 상한이고 실제 청구액이 아니다.
 
+셀 순서 seed는 Claude 결과를 보기 전에 PR #13 병합 해시와 성공한 격리 preflight
+파일 해시에서 결정적으로 파생해 R24에 공개했다. manifest에는
+`ad8b6e46c10c24d5ada9c6797ce15deec26632b26dac14c173ec84ea1c30d369`를 그대로
+넣으며 다른 seed를 만들지 않는다.
+
 본 측정 전에는 manifest에 다음을 모두 채워야 한다.
 
 - alias가 아닌 두 agent의 정확한 model ID, reasoning effort, 출처와 조회시점까지
@@ -110,6 +115,20 @@ reasoning effort를 기록한다. 본 측정에서는 둘 중 하나라도 manif
 관측되면 목적 모델을 보존하되 reroute 이력도 원시 로그에 함께 남긴다.
 App Server 호출은 기존 ChatGPT 구독 인증을 사용하므로 추가 API 청구액은 0이다.
 로그의 `api_equivalent_usd`는 동일 토큰을 API로 실행했을 때의 비교용 환산치다.
+
+동결 전 1개 6-cycle apparatus trajectory의 자원을 실측할 때는 runner를 background로
+시작하고 aggregate-only monitor를 그 PID에 결박한다. monitor는 모델 출력, container
+filesystem·환경·명령을 읽지 않고 Docker CPU/memory counter와 host `/proc` counter만
+기록한다. 결과에는 container 이름도 남기지 않는다. runner와 monitor 둘 중 하나라도
+실패하면 자원 기록을 수용하지 않는다.
+
+    python3 run_measurement.py --manifest logs/apparatus/claude-resource-20260815.manifest.json --log logs/apparatus/claude-resource-20260815.cycles.jsonl --run-id claude-resource-20260815 &
+    runner_pid=$!
+    python3 monitor_resources.py --pid "$runner_pid" --poll-seconds 1 --output logs/apparatus/claude-resource-20260815.resources.json
+    monitor_status=$?
+    wait "$runner_pid"
+    runner_status=$?
+    test "$monitor_status" -eq 0 && test "$runner_status" -eq 0
 
 먼저 호출 없이 계획을 확인한다.
 

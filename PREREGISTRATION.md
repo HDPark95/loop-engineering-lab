@@ -470,8 +470,12 @@ are `11`, `23`, `37`, `53`, and `71`. Agent identities, immutable model
 versions, the exact `agent_adapters.measurement_prompt`, API-equivalent shadow
 price source, retrieval time, cache/read/write rates, long-context threshold
 and multipliers, and container digests are written into the run manifest immediately
-before freeze. A manifest-frozen `cell_schedule_seed` deterministically hash-ranks
-the four cells within every task-agent-seed block. The runner submits one branch
+before freeze. The `cell_schedule_seed` is
+`ad8b6e46c10c24d5ada9c6797ce15deec26632b26dac14c173ec84ea1c30d369`,
+the SHA-256 of the colon-delimited public PR #13 merge commit, successful
+isolation-preflight file digest, and literal domain separator `cell-order-v1`. It was fixed
+before any Claude apparatus or confirmatory outcome. This manifest-frozen seed
+deterministically hash-ranks the four cells within every task-agent-seed block. The runner submits one branch
 per block before any second branch, preventing a fixed treatment cell from always
 owning the earliest wall-clock position. The planned execution mode is authenticated
 subscription CLI prompting: incremental billed dollars are fixed at zero, while
@@ -746,3 +750,13 @@ apparatus validation and not confirmatory evidence.
   secret; any match invalidates the attempt, and replay requires the successful
   scan flag. No confirmatory run had started. This changes execution continuity
   and secret hygiene, not treatment, task, outcome, or inference.
+- R24 (2026-08-13): fixed the previously unspecified `cell_schedule_seed`
+  before any Claude apparatus or confirmatory outcome. The seed is derived by
+  SHA-256 from the already-public PR #13 merge commit, the successful
+  isolation-preflight record digest, and a literal domain separator. This
+  removes discretion over branch ordering without changing the registered
+  hash-ranking algorithm, cells, blocks, outcomes, or inference. The same
+  amendment added an aggregate-only resource monitor for the planned
+  pre-freeze apparatus trajectory; it reads Docker and host counters but no
+  model output, container content, environment, or command. No confirmatory run
+  had started.
