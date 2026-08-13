@@ -307,9 +307,10 @@ class BlockInferenceTest(unittest.TestCase):
                 "\n".join(json.dumps(record) for record in records) + "\n",
                 encoding="utf-8",
             )
-            snapshot = log.read_bytes()
             with mock.patch.object(
-                Path, "read_bytes", side_effect=(snapshot, snapshot + b" ")
+                MODULE,
+                "file_sha256",
+                side_effect=("a" * 64, "b" * 64),
             ):
                 with self.assertRaisesRegex(ValueError, "source log changed"):
                     MODULE.analyze(log)

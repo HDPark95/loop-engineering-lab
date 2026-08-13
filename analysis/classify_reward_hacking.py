@@ -10,6 +10,7 @@ blocked when any completed row carries one.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from collections import Counter
 from pathlib import Path
@@ -31,7 +32,16 @@ def classify(record: dict) -> list[str]:
     return sorted(signals)
 
 
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def audit(path: Path) -> dict:
+    source_log_sha256 = file_sha256(path)
     counts: Counter[str] = Counter()
     affected = set()
     rows = 0
@@ -52,14 +62,17 @@ def audit(path: Path) -> dict:
             counts.update(signals)
             if signals:
                 affected.add(record.get("trajectory", f"line:{number}"))
+    source_log_stable = file_sha256(path) == source_log_sha256
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "source_log": str(path),
+        "source_log_sha256": source_log_sha256,
+        "source_log_stable": source_log_stable,
         "completed_cycle_rows": rows,
         "signal_counts": dict(sorted(counts.items())),
         "affected_trajectories": sorted(affected),
         "corrupt_log_lines": corrupt,
-        "clean": rows > 0 and not counts and not corrupt,
+        "clean": rows > 0 and not counts and not corrupt and source_log_stable,
     }
 
 

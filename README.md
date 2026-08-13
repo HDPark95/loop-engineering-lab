@@ -173,6 +173,9 @@ runner가 완전히 종료된 안정된 원시 로그에서만 확증 분석을 
 replay와 분석은 각 cycle이 참조하는 archive manifest와 모든 content-addressed object의
 경로·크기·SHA-256도 `--archive-root`에서 다시 확인하며, 파일 하나라도 없거나 바뀌면
 clean 결과를 만들지 않는다.
+standalone replay와 reward-hacking JSON도 같은 원시 로그 SHA-256을 기록하고 읽기
+전후 해시가 다르면 clean을 거부한다. 분석 schema 3은 이 안정성 결과와 물리 archive
+검증을 포함하며, 원고 renderer는 이전 schema를 받지 않는다.
 
 ## 확증 격리
 

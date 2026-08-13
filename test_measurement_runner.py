@@ -1022,6 +1022,11 @@ class ArtifactArchiveTest(unittest.TestCase):
 
 
 class ReplayTest(unittest.TestCase):
+    def test_empty_replay_fails_closed(self):
+        report = replay.integrity([], [], [])
+        self.assertTrue(report["no_completed_cycle_records"])
+        self.assertFalse(report["clean"])
+
     def test_every_reported_number_comes_from_the_log(self):
         with tempfile.TemporaryDirectory() as tmp:
             directory = Path(tmp)

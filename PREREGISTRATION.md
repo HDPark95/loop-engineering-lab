@@ -819,3 +819,9 @@ apparatus validation and not confirmatory evidence.
   content-addressed object's safe path, size, and SHA-256. This enforces the
   already registered retention rule without changing the design, outcome, or
   inference. No confirmatory run had started.
+- R32 (2026-08-13): made standalone replay and reward-hacking reports bind the
+  same stable raw-log snapshot as confirmatory inference. Each records the
+  source log SHA-256, rehashes after reading, and cannot report clean if the log
+  changed. Analysis schema 3 and the manuscript renderer require these newer
+  provenance fields. This changes report validation, not the design, outcome,
+  or inference. No confirmatory run had started.

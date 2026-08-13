@@ -5,12 +5,13 @@ The point is that a reviewer can check the arithmetic without rerunning a single
 agent, and that changing the analysis never costs another dollar of measurement.
 Nothing here calls a model, an oracle or a network.
 
-It also refuses to average over a defect. Three conditions void a run and the
+It also refuses to average over a defect. Integrity defects that void a run and the
 tool reports them instead of quietly folding them into a mean:
 
   canary leak            grading data reached the candidate
   model identity mismatch the runtime served something other than the manifest pin
   abandoned trajectory    a trajectory stopped partway and its records remain
+  missing candidate bytes a retained archive manifest or object is absent or altered
 
 The primary quantity is delivered outcome and regression acceptance on HO-B.
 Legacy pre-split logs label the grounded mirage rate structural. Confirmatory
@@ -615,6 +616,7 @@ def integrity(
     recovered_abandoned = abandoned_tokens & completed_tokens
     unrecovered_abandoned = abandoned_tokens - completed_tokens
     return {
+        "no_completed_cycle_records": not identified_cycles,
         "canary_leak_trajectories": sorted(set(leaks)),
         "model_identity_mismatch_trajectories": sorted(set(mismatches)),
         "abandoned_trajectories": sorted(abandoned_tokens),
@@ -664,6 +666,7 @@ def integrity(
                 preregistration_mixed,
                 unparsable,
                 missing_trajectory_records,
+                not identified_cycles,
             )
         ),
     }
@@ -760,11 +763,13 @@ def main() -> int:
     parser.add_argument("--archive-root", type=Path)
     args = parser.parse_args()
 
+    source_log_sha256 = file_sha256(args.log)
     cycles, abandoned, unparsable = load(args.log)
     grouped = group_trajectories(cycles, abandoned)
     report = {
-        "schema_version": 2,
+        "schema_version": 3,
         "source_log": str(args.log),
+        "source_log_sha256": source_log_sha256,
         "cycle_records": len(cycles),
         "trajectories": len(grouped),
         "integrity": integrity(
@@ -781,6 +786,11 @@ def main() -> int:
             "acceptance uses the outcome half HO-B."
         ),
     }
+    source_log_stable = file_sha256(args.log) == source_log_sha256
+    report["integrity"]["source_log_stable"] = source_log_stable
+    report["integrity"]["clean"] = bool(
+        report["integrity"]["clean"] and source_log_stable
+    )
     text = json.dumps(report, indent=2, sort_keys=True)
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
