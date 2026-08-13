@@ -58,7 +58,6 @@ def build_cache() -> None:
     with tempfile.TemporaryDirectory(prefix="loop-s1-seed-") as temp:
         output = Path(temp) / "seed"
         output.mkdir()
-        output.chmod(0o777)
         command = (
             "set -eu; cd /testbed; "
             f"git reset --hard {CONFIG['base_commit']}; git clean -fdx; "
@@ -70,7 +69,7 @@ def build_cache() -> None:
         run(
             [
                 "docker", "run", "--rm", "--network", "none", "--cap-drop", "ALL",
-                "--cap-add", "CHOWN",
+                "--cap-add", "CHOWN", "--cap-add", "DAC_OVERRIDE",
                 "--security-opt", "no-new-privileges", "--mount",
                 f"type=bind,src={output},dst=/seed-out", CONFIG["evaluation_image"],
                 "bash", "-lc", command,

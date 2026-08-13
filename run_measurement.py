@@ -353,6 +353,11 @@ def load_manifest(path: Path) -> dict:
             raise SystemExit("confirmatory grid requires exactly one Codex and one Claude agent")
         if manifest["billing_mode"] != "subscription":
             raise SystemExit("confirmatory billing_mode is frozen to subscription")
+        if (
+            not isinstance(manifest.get("cell_schedule_seed"), str)
+            or not manifest["cell_schedule_seed"].strip()
+        ):
+            raise SystemExit("confirmatory grid requires a frozen cell_schedule_seed")
     return manifest
 
 
@@ -366,6 +371,161 @@ def trajectories(manifest: dict) -> list[TrajectoryKey]:
                         TrajectoryKey(task, agent["name"], agent["model"], cell, int(seed))
                     )
     return keys
+
+
+def common_group(key: TrajectoryKey) -> tuple[str, str, str, int]:
+    """Identity of the four branches that share one cycle-one execution."""
+    return key.task, key.agent, key.model, key.seed
+
+
+def cell_order(manifest: dict, key: TrajectoryKey) -> list[str]:
+    """Return the frozen pseudorandom treatment order within one block."""
+    schedule_seed = manifest.get("cell_schedule_seed", "apparatus-cell-order-v1")
+    prefix = f"{schedule_seed}|{key.task}|{key.agent}|{key.model}|{key.seed}|"
+    return sorted(
+        manifest["cells"],
+        key=lambda cell: hashlib.sha256(f"{prefix}{cell}".encode()).digest(),
+    )
+
+
+def scheduled_trajectories(keys: list[TrajectoryKey], manifest: dict) -> list[TrajectoryKey]:
+    """Submit one randomized branch per block before any second branch.
+
+    The first round owns and completes each common cycle-one future. Later
+    rounds therefore reuse it without occupying worker slots while waiting.
+    Hash-ranked cell order prevents a fixed treatment arm from always running
+    first within every task-agent-seed block.
+    """
+    members: dict[tuple[str, str, str, int], list[TrajectoryKey]] = {}
+    for key in keys:
+        members.setdefault(common_group(key), []).append(key)
+    ordered_members = {
+        group: sorted(
+            group_keys,
+            key=lambda key: cell_order(manifest, key).index(key.cell),
+        )
+        for group, group_keys in members.items()
+    }
+    schedule = []
+    for position in range(max((len(group) for group in ordered_members.values()), default=0)):
+        for group in sorted(ordered_members):
+            if position < len(ordered_members[group]):
+                schedule.append(ordered_members[group][position])
+    return schedule
+
+
+def common_attempt_states(
+    log_path: Path, expected_manifest_digest: str
+) -> dict[tuple[tuple[str, str, str, int], str], dict]:
+    """Read per-attempt block state for group-safe resume decisions."""
+    states: dict[tuple[tuple[str, str, str, int], str], dict] = {}
+    if not log_path.exists():
+        return states
+    with log_path.open(encoding="utf-8") as handle:
+        for line in handle:
+            try:
+                record = json.loads(line)
+            except ValueError:
+                continue
+            if record.get("manifest_digest") != expected_manifest_digest:
+                continue
+            required = ("task", "agent", "model", "seed", "trajectory")
+            if any(record.get(field) is None for field in required):
+                continue
+            group = (
+                record["task"],
+                record["agent"],
+                record["model"],
+                int(record["seed"]),
+            )
+            attempt = record.get("attempt_id") or record.get("run_id") or "legacy"
+            state = states.setdefault(
+                (group, attempt),
+                {"cycles": {}, "abandoned": set(), "heads": {}},
+            )
+            token = record["trajectory"]
+            state["heads"].setdefault(token, record)
+            if record.get("abandoned"):
+                state["abandoned"].add(token)
+            elif isinstance(record.get("cycle"), int):
+                state["cycles"].setdefault(token, set()).add(record["cycle"])
+    return states
+
+
+def expected_common_groups(manifest: dict) -> dict[tuple[str, str, str, int], set[str]]:
+    expected: dict[tuple[str, str, str, int], set[str]] = {}
+    for key in trajectories(manifest):
+        expected.setdefault(common_group(key), set()).add(key.token())
+    return expected
+
+
+def completed_common_group_trajectories(
+    log_path: Path,
+    manifest: dict,
+    cycles: int,
+    expected_manifest_digest: str,
+) -> set[str]:
+    """Count a block complete only when one attempt completed every branch."""
+    expected = expected_common_groups(manifest)
+    expected_cycles = set(range(1, cycles + 1))
+    complete = set()
+    for (group, _attempt), state in common_attempt_states(
+        log_path, expected_manifest_digest
+    ).items():
+        tokens = expected.get(group, set())
+        if tokens and not state["abandoned"] and all(
+            state["cycles"].get(token) == expected_cycles for token in tokens
+        ):
+            complete.update(tokens)
+    return complete
+
+
+def incomplete_common_attempt_markers(
+    log_path: Path,
+    manifest: dict,
+    cycles: int,
+    expected_manifest_digest: str,
+) -> list[dict]:
+    """Create append-only tombstones for partial common-cycle block attempts."""
+    expected = expected_common_groups(manifest)
+    expected_cycles = set(range(1, cycles + 1))
+    markers = []
+    for (group, attempt), state in common_attempt_states(
+        log_path, expected_manifest_digest
+    ).items():
+        tokens = expected.get(group, set())
+        is_complete = bool(tokens) and not state["abandoned"] and all(
+            state["cycles"].get(token) == expected_cycles for token in tokens
+        )
+        if is_complete:
+            continue
+        for token in sorted(state["cycles"]):
+            if token in state["abandoned"]:
+                continue
+            head = state["heads"][token]
+            markers.append(
+                {
+                    "schema_version": SCHEMA_VERSION,
+                    "run_id": head.get("run_id"),
+                    "attempt_id": attempt,
+                    "manifest_digest": expected_manifest_digest,
+                    "preregistration_commit": manifest["preregistration_commit"],
+                    "trajectory": token,
+                    "task": head["task"],
+                    "agent": head["agent"],
+                    "model": head["model"],
+                    "cell": head.get("cell"),
+                    "seed": head["seed"],
+                    "abandoned": True,
+                    "bundle_abandoned": True,
+                    "reconciled_incomplete_common_group": True,
+                    "error": "incomplete common-cycle block attempt",
+                    "wall_clock_utc": time.strftime(
+                        "%Y-%m-%dT%H:%M:%SZ", time.gmtime()
+                    ),
+                }
+            )
+    return markers
 
 
 def completed_trajectories(
@@ -1104,6 +1264,10 @@ def run_trajectory(
                 "preregistration_commit": manifest["preregistration_commit"],
                 "trajectory": key.token(),
                 **key.as_dict(),
+                "cell_schedule_seed": manifest.get(
+                    "cell_schedule_seed", "apparatus-cell-order-v1"
+                ),
+                "cell_schedule_position": cell_order(manifest, key).index(key.cell) + 1,
                 "cell_gate_grounded": cell.gate_grounded,
                 "cell_feedback": cell.feedback,
                 "cycle": cycle,
@@ -1393,8 +1557,11 @@ def main() -> int:
     logical_cycle_rows = len(everything) * cycles
     unique_agent_executions = len(common_groups_total) + len(everything) * max(0, cycles - 1)
     digest = manifest_digest(manifest)
-    done = completed_trajectories(args.log, cycles, digest)
+    done = completed_common_group_trajectories(args.log, manifest, cycles, digest)
     todo = [key for key in everything if key.token() not in done]
+    incomplete_markers = incomplete_common_attempt_markers(
+        args.log, manifest, cycles, digest
+    )
 
     estimate_per_trajectory = float(manifest["estimated_api_equivalent_usd_per_trajectory"])
     total_shadow_estimate = estimate_per_trajectory * len(todo)
@@ -1421,6 +1588,9 @@ def main() -> int:
                 "trajectories_total": len(everything),
                 "trajectories_complete": len(done),
                 "trajectories_remaining": len(todo),
+                "incomplete_common_group_rows_pending_abandonment": len(
+                    incomplete_markers
+                ),
                 "cycles_per_trajectory": cycles,
                 "logical_cycle_rows": logical_cycle_rows,
                 "unique_agent_executions": unique_agent_executions,
@@ -1453,6 +1623,8 @@ def main() -> int:
         return 2
 
     log = CycleLog(args.log)
+    for marker in incomplete_markers:
+        log.write(marker)
     budget = Budget(billing_mode, ceiling, prior_shadow, prior_billed)
     agents_by_name = {entry["name"]: entry for entry in manifest["agents"]}
     stopped_for_budget = []
@@ -1460,14 +1632,14 @@ def main() -> int:
     common_consumer_counts: dict[tuple[str, str, str, int], int] = {}
     common_members: dict[tuple[str, str, str, int], list[TrajectoryKey]] = {}
     for key in todo:
-        group = (key.task, key.agent, key.model, key.seed)
+        group = common_group(key)
         common_consumer_counts[group] = common_consumer_counts.get(group, 0) + 1
         common_members.setdefault(group, []).append(key)
     attempt_ids = {
         group: f"{args.run_id}:{uuid.uuid4().hex}" for group in common_members
     }
     common_first_cycle = CommonFirstCycleCache()
-    failed_shared_cycle_one_groups: set[tuple[str, str, str, int]] = set()
+    failed_groups: set[tuple[str, str, str, int]] = set()
     individually_abandoned: set[str] = set()
 
     try:
@@ -1475,8 +1647,8 @@ def main() -> int:
             futures = {}
             if not budget.reserve(total_shadow_estimate):
                 stopped_for_budget.extend(key.token() for key in todo)
-            for key in ([] if stopped_for_budget else todo):
-                group = (key.task, key.agent, key.model, key.seed)
+            for key in ([] if stopped_for_budget else scheduled_trajectories(todo, manifest)):
+                group = common_group(key)
                 attempt_id = attempt_ids[group]
                 futures[
                     pool.submit(
@@ -1500,8 +1672,7 @@ def main() -> int:
                     result = future.result()
                 except TrajectoryRunError as exc:
                     abandoned_attempts += 1
-                    if exc.failure_record.get("shared_cycle_one_failure"):
-                        failed_shared_cycle_one_groups.add(group)
+                    failed_groups.add(group)
                     individually_abandoned.add(key.token())
                     log.write(
                         {
@@ -1514,8 +1685,7 @@ def main() -> int:
                     continue
                 except Exception as exc:  # noqa: BLE001 - one trajectory must not end the run
                     abandoned_attempts += 1
-                    if isinstance(exc, SharedCycleOneError):
-                        failed_shared_cycle_one_groups.add(group)
+                    failed_groups.add(group)
                     individually_abandoned.add(key.token())
                     log.write(
                         {
@@ -1536,7 +1706,7 @@ def main() -> int:
                 finally:
                     budget.release(reservation)
                 print(json.dumps(result, sort_keys=True))
-            for group in failed_shared_cycle_one_groups:
+            for group in failed_groups:
                 for key in common_members[group]:
                     if key.token() in individually_abandoned:
                         continue
@@ -1552,7 +1722,7 @@ def main() -> int:
                             **key.as_dict(),
                             "abandoned": True,
                             "bundle_abandoned": True,
-                            "error": "common cycle-1 bundle peer failed",
+                            "error": "common-cycle block peer failed; all branches must rerun",
                             "wall_clock_utc": time.strftime(
                                 "%Y-%m-%dT%H:%M:%SZ", time.gmtime()
                             ),

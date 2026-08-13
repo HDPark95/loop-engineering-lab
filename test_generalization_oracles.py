@@ -75,7 +75,7 @@ class G1OracleTest(OracleFixture):
         (reference / "copy.txt").write_text(
             " ".join(["clear"] * 65) + "\n", encoding="utf-8"
         )
-        for seed in range(5):
+        for seed in (11, 23, 37, 53, 71):
             for half in ("a", "b"):
                 with self.subTest(seed=seed, half=half):
                     null_score = G1.score(null, half, seed)["score"]
@@ -137,7 +137,7 @@ class B1OracleTest(OracleFixture):
         )
         (reference / "copy.txt").write_text(reference_copy + "\n", encoding="utf-8")
         self.assertTrue(50 <= len(reference_copy.split()) <= 90)
-        for seed in range(5):
+        for seed in (11, 23, 37, 53, 71):
             for half in ("a", "b"):
                 with self.subTest(seed=seed, half=half):
                     null_score = B1.score(null, half, seed)["score"]

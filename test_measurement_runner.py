@@ -66,6 +66,7 @@ def manifest(**overrides) -> dict:
         "max_concurrent_agents": 3,
         "quota_wait_seconds": 60,
         "quota_max_retries": 4,
+        "cell_schedule_seed": "test-cell-order-v1",
         "estimated_api_equivalent_usd_per_trajectory": 0.01,
         "preregistration_commit": "0" * 40,
     }
@@ -701,7 +702,31 @@ class RunnerTest(unittest.TestCase):
                 all(record["execution_oracle_seconds"] == 0.02 for record in first)
             )
 
-    def test_cycle_two_failure_does_not_abandon_peer_trajectories(self):
+    def test_frozen_schedule_runs_one_hash_ordered_cell_per_block_per_round(self):
+        data = manifest(
+            cells=[cell.name for cell in run_measurement.se_experiment.CELLS],
+            seeds=[1, 2],
+        )
+        keys = run_measurement.trajectories(data)
+        scheduled = run_measurement.scheduled_trajectories(keys, data)
+        self.assertEqual(scheduled, run_measurement.scheduled_trajectories(keys, data))
+        groups = {run_measurement.common_group(key) for key in keys}
+        for round_index in range(4):
+            round_keys = scheduled[
+                round_index * len(groups):(round_index + 1) * len(groups)
+            ]
+            self.assertEqual(
+                {run_measurement.common_group(key) for key in round_keys}, groups
+            )
+            self.assertTrue(
+                all(
+                    run_measurement.cell_order(data, key).index(key.cell)
+                    == round_index
+                    for key in round_keys
+                )
+            )
+
+    def test_cycle_two_failure_abandons_the_whole_common_block(self):
         calls = []
 
         def driver(model, task, workspace, cycle, seed, manifest, feedback=""):
@@ -770,14 +795,64 @@ class RunnerTest(unittest.TestCase):
 
             records = [json.loads(line) for line in log.read_text().splitlines()]
             abandoned = [record for record in records if record.get("abandoned")]
-            self.assertEqual(len(abandoned), 1)
+            self.assertEqual(len(abandoned), len(cells))
             self.assertNotIn("bundle_abandoned", abandoned[0])
+            self.assertEqual(
+                sum(bool(record.get("bundle_abandoned")) for record in abandoned),
+                len(cells) - 1,
+            )
             completed = {
                 record["trajectory"]
                 for record in records
                 if record.get("cycle") == 2 and not record.get("abandoned")
             }
             self.assertEqual(len(completed), len(cells) - 1)
+            self.assertEqual(
+                run_measurement.completed_common_group_trajectories(
+                    log,
+                    data,
+                    2,
+                    run_measurement.manifest_digest(data),
+                ),
+                set(),
+            )
+
+    def test_hard_kill_partial_block_is_tombstoned_and_rerun_from_cycle_one(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            data = manifest(
+                cells=[cell.name for cell in run_measurement.se_experiment.CELLS],
+                seeds=[1],
+                cycles=2,
+            )
+            path = write_manifest(directory, data)
+            log = directory / "cycles.jsonl"
+            key = run_measurement.trajectories(data)[0]
+            digest = run_measurement.manifest_digest(data)
+            partial = {
+                "schema_version": run_measurement.SCHEMA_VERSION,
+                "run_id": "killed-run",
+                "attempt_id": "killed-run:attempt",
+                "manifest_digest": digest,
+                "preregistration_commit": data["preregistration_commit"],
+                "trajectory": key.token(),
+                **key.as_dict(),
+                "cycle": 1,
+            }
+            log.write_text(json.dumps(partial) + "\n", encoding="utf-8")
+
+            result = run_cli(path, log, "recovery-run")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            records = [json.loads(line) for line in log.read_text().splitlines()]
+            killed = [
+                row for row in records
+                if row.get("attempt_id") == "killed-run:attempt"
+            ]
+            self.assertTrue(any(row.get("reconciled_incomplete_common_group") for row in killed))
+            complete = run_measurement.completed_common_group_trajectories(
+                log, data, 2, digest
+            )
+            self.assertEqual(len(complete), 4)
 
 
 class ArtifactArchiveTest(unittest.TestCase):
@@ -1024,6 +1099,8 @@ class ReplayTest(unittest.TestCase):
             "cycles_planned": 1,
             "oracle_delta": 0.0,
             "apparatus_test": False,
+            "cell_schedule_seed": "replay-test-order-v1",
+            "cell_schedule_position": 1,
             "model_served": "model-v1",
             "model_identity_matches": True,
             "manifest_digest": "m",

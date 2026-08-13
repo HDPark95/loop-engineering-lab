@@ -12,7 +12,11 @@ from __future__ import annotations
 import argparse
 import math
 import random
-import statistics as st
+
+if __package__:
+    from .fit_clustered import exact_sign_flip_p
+else:
+    from fit_clustered import exact_sign_flip_p
 
 
 PLANNED_SEEDS = 5
@@ -40,10 +44,16 @@ def _z_for_one_sided_alpha(alpha: float) -> float:
 
 
 def standard_error(block_sd: float, blocks: int) -> float:
+    if blocks <= 0:
+        raise ValueError("blocks must be positive")
+    if block_sd < 0:
+        raise ValueError("block_sd must be non-negative")
     return block_sd / math.sqrt(blocks)
 
 
 def mde(block_sd: float, blocks: int, alpha: float, power: float = 0.80) -> float:
+    if power not in Z:
+        raise ValueError(f"supported power values are {sorted(Z)}")
     return (_z_for_one_sided_alpha(alpha) + Z[power]) * standard_error(block_sd, blocks)
 
 
@@ -60,15 +70,16 @@ def simulate(
     trials: int,
     seed: int,
 ) -> float:
+    if trials <= 0:
+        raise ValueError("trials must be positive")
+    standard_error(block_sd, blocks)
     rng = random.Random(seed)
-    threshold = _z_for_one_sided_alpha(alpha)
+    _z_for_one_sided_alpha(alpha)
     hits = 0
     for _ in range(trials):
         values = [rng.gauss(effect, block_sd) for _ in range(blocks)]
-        if len(values) < 2:
-            continue
-        sample_se = st.stdev(values) / math.sqrt(blocks)
-        if sample_se > 0 and st.mean(values) / sample_se >= threshold:
+        pvalue = exact_sign_flip_p(values)
+        if pvalue is not None and pvalue <= alpha:
             hits += 1
     return hits / trials
 
@@ -89,6 +100,10 @@ def main() -> int:
     parser.add_argument("--rng-seed", type=int, default=20260813)
     args = parser.parse_args()
     blocks = args.seeds * PLANNED_AGENTS
+    if args.seeds < 1:
+        parser.error("--seeds must be at least 1 so the design has two or more blocks")
+    if args.trials < 1:
+        parser.error("--trials must be positive")
     se = standard_error(args.sd, blocks)
     detectable = mde(args.sd, blocks, args.alpha)
     power = power_at(args.effect, args.sd, blocks, args.alpha)
@@ -107,7 +122,7 @@ def main() -> int:
             args.trials,
             args.rng_seed,
         )
-        print(f"normal-approximation simulation power={value:.3f} trials={args.trials}")
+        print(f"exact-sign-flip simulation power={value:.3f} trials={args.trials}")
     return 0
 
 

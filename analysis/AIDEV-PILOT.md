@@ -47,9 +47,28 @@ scorer output may be committed.
 .venv/bin/python analysis/llm_annotate_claims.py \
   --packet data/claim_annotation/claim_annotation_packet.csv \
   --output data/claim_annotation/annotator_b.csv --annotator b --engine codex
+.venv/bin/python analysis/adjudicate_claims.py \
+  --packet data/claim_annotation/claim_annotation_packet.csv \
+  --annotator-a data/claim_annotation/annotator_a.csv \
+  --annotator-b data/claim_annotation/annotator_b.csv \
+  --disputes-output data/claim_annotation/disputes.csv
+.venv/bin/python analysis/llm_annotate_claims.py \
+  --packet data/claim_annotation/disputes.csv \
+  --output data/claim_annotation/third_claude.csv --annotator c --engine claude
+.venv/bin/python analysis/llm_annotate_claims.py \
+  --packet data/claim_annotation/disputes.csv \
+  --output data/claim_annotation/third_codex.csv --annotator c --engine codex
+.venv/bin/python analysis/adjudicate_claims.py \
+  --packet data/claim_annotation/claim_annotation_packet.csv \
+  --annotator-a data/claim_annotation/annotator_a.csv \
+  --annotator-b data/claim_annotation/annotator_b.csv \
+  --disputes-output data/claim_annotation/disputes.csv \
+  --third-claude data/claim_annotation/third_claude.csv \
+  --third-codex data/claim_annotation/third_codex.csv \
+  --adjudicated-output data/claim_annotation/adjudicated.csv
 .venv/bin/python analysis/score_claim_annotation.py \
-  --annotator-a data/claim_annotation/a.csv \
-  --annotator-b data/claim_annotation/b.csv \
+  --annotator-a data/claim_annotation/annotator_a.csv \
+  --annotator-b data/claim_annotation/annotator_b.csv \
   --adjudicated data/claim_annotation/adjudicated.csv \
   --classifier data/claim_annotation/claim_annotation_classifier.csv \
   --output results/claim_validation.json

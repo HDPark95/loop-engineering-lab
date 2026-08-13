@@ -24,9 +24,43 @@ def load(name: str):
 
 PREPARE = load("prepare_claim_annotation")
 SCORE = load("score_claim_annotation")
+ADJUDICATE = load("adjudicate_claims")
 
 
 class AnnotationTest(unittest.TestCase):
+    def test_adjudication_uses_only_exact_initial_or_third_rater_agreement(self):
+        header = "annotation_id,completion_claim,verification_claim,unclassifiable\n"
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            packet = root / "packet.csv"
+            packet.write_text(
+                header.replace(
+                    "annotation_id,completion_claim,verification_claim,unclassifiable",
+                    "annotation_id,body,completion_claim,verification_claim,unclassifiable",
+                )
+                + "one,body one,,,\n"
+                + "two,body two,,,\n",
+                encoding="utf-8",
+            )
+            a = root / "a.csv"
+            a.write_text(header + "one,1,0,0\ntwo,1,0,0\n", encoding="utf-8")
+            b = root / "b.csv"
+            b.write_text(header + "one,1,0,0\ntwo,0,1,0\n", encoding="utf-8")
+            third_claude = root / "third-claude.csv"
+            third_claude.write_text(header + "two,0,1,0\n", encoding="utf-8")
+            third_codex = root / "third-codex.csv"
+            third_codex.write_text(header + "two,0,1,0\n", encoding="utf-8")
+            disputes = root / "disputes.csv"
+            adjudicated = root / "adjudicated.csv"
+            counts = ADJUDICATE.adjudicate(
+                packet, a, b, disputes, third_claude, third_codex, adjudicated
+            )
+            final = ADJUDICATE.read_rows(adjudicated)
+        self.assertEqual(counts, (1, 0))
+        self.assertEqual(set(final), {"one", "two"})
+        self.assertEqual(ADJUDICATE.labels(final["one"]), (1, 0, 0))
+        self.assertEqual(ADJUDICATE.labels(final["two"]), (0, 1, 0))
+
     def test_annotation_key_is_stable_and_opaque(self):
         self.assertEqual(PREPARE.annotation_key(123), PREPARE.annotation_key(123))
         self.assertNotIn("123", PREPARE.annotation_key(123))
@@ -46,6 +80,16 @@ class AnnotationTest(unittest.TestCase):
     def test_precision_recall(self):
         result = SCORE.precision_recall([1, 1, 0, 0], [1, 0, 1, 0])
         self.assertEqual((result["precision"], result["recall"]), (0.5, 0.5))
+
+    def test_thresholds_use_exact_counts_not_rounded_display_values(self):
+        validation = {
+            "tp": 799_999,
+            "fp": 200_001,
+            "fn": 0,
+            "precision": 0.8,
+            "recall": 1.0,
+        }
+        self.assertFalse(SCORE.instrument_thresholds_met(validation))
 
     def test_perfect_kappa(self):
         self.assertEqual(SCORE.cohen_kappa([1, 0, 1], [1, 0, 1]), 1.0)

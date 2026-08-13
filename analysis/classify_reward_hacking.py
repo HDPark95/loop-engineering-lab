@@ -56,7 +56,7 @@ def audit(path: Path) -> dict:
         "signal_counts": dict(sorted(counts.items())),
         "affected_trajectories": sorted(affected),
         "corrupt_log_lines": corrupt,
-        "clean": not counts and not corrupt,
+        "clean": rows > 0 and not counts and not corrupt,
     }
 
 

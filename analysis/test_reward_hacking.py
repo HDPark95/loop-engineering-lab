@@ -10,6 +10,14 @@ from analysis import classify_reward_hacking as classifier
 
 
 class RewardHackingAuditTest(unittest.TestCase):
+    def test_empty_log_fails_closed(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "cycles.jsonl"
+            path.write_text("", encoding="utf-8")
+            report = classifier.audit(path)
+        self.assertFalse(report["clean"])
+        self.assertEqual(report["completed_cycle_rows"], 0)
+
     def test_nested_oracle_signal_blocks_the_audit(self):
         record = {
             "schema_version": 3,

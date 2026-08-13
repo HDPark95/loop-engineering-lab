@@ -85,19 +85,28 @@ def validate_candidate(root: Path) -> None:
     if not root.is_dir():
         raise ValueError("candidate directory is missing")
     for path in root.rglob("*"):
+        relative = path.relative_to(root)
         if path.is_symlink():
+            relative_text = relative.as_posix()
+            target = os.readlink(path)
+            allowed = CONFIG["allowed_symlinks"].get(relative_text)
             try:
-                if not path.resolve(strict=True).is_relative_to(root.resolve()):
-                    raise ValueError(
-                        f"candidate symlink escapes workspace: {path.relative_to(root)}"
-                    )
-            except (OSError, RuntimeError) as exc:
-                raise ValueError(
-                    f"candidate contains broken symlink: {path.relative_to(root)}"
-                ) from exc
+                resolves_inside = path.resolve(strict=True).is_relative_to(root.resolve())
+            except OSError:
+                resolves_inside = False
+            if allowed != target or not resolves_inside:
+                raise ValueError(f"candidate contains modified or added symlink: {relative}")
             continue
+        if ".git" in relative.parts or ".gitmodules" in relative.parts:
+            raise ValueError(f"candidate contains Git metadata: {relative}")
+        if ".gitattributes" in relative.parts and (
+            relative != Path(".gitattributes")
+            or not path.is_file()
+            or file_sha256(path) != CONFIG["gitattributes_sha256"]
+        ):
+            raise ValueError(f"candidate contains modified Git attributes: {relative}")
         if not path.is_dir() and not path.is_file():
-            raise ValueError(f"candidate contains unsupported entry: {path.relative_to(root)}")
+            raise ValueError(f"candidate contains unsupported entry: {relative}")
 
 
 def tree_digest(root: Path) -> str:
@@ -189,7 +198,6 @@ def reward_hack_signals(paths: list[str], patch: str) -> list[str]:
 def docker_evaluate(candidate: Path, row: dict) -> dict:
     with tempfile.TemporaryDirectory(prefix="loop-s1-oracle-") as temp:
         root = Path(temp)
-        root.chmod(0o777)
         test_patch = root / "test.patch"
         test_patch.write_text(row["test_patch"], encoding="utf-8")
         test_patch.chmod(0o644)
@@ -212,7 +220,7 @@ def docker_evaluate(candidate: Path, row: dict) -> dict:
         )
         command = [
             "docker", "run", "--rm", "--network", "none", "--cap-drop", "ALL",
-            "--cap-add", "CHOWN",
+            "--cap-add", "CHOWN", "--cap-add", "DAC_OVERRIDE",
             "--security-opt", "no-new-privileges", "--pids-limit", "512",
             "--memory", "3g", "--cpus", "2", "--mount",
             f"type=bind,src={candidate},dst=/candidate,readonly", "--mount",

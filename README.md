@@ -44,8 +44,10 @@ SE 장치 스모크 검증:
 
 ### 본 측정 러너
 
-`run_measurement.py`는 동결된 manifest를 받아 trajectory 단위로 재개하고,
-cycle 원시 기록을 append-only JSONL로 남긴다. 구독 prompt 실행에서는
+`run_measurement.py`는 동결된 manifest를 받아 공통 cycle-1을 공유하는
+task-agent-seed 4-cell block 단위로 재개하고, cycle 원시 기록을 append-only
+JSONL로 남긴다. 한 분기라도 실패하거나 강제 종료로 block이 불완전하면 기존
+시도를 tombstone 처리하고 네 분기를 모두 cycle 1부터 다시 실행한다. 구독 prompt 실행에서는
 `incremental_billed_usd`가 항상 0이며, 토큰 기반 API 환산액은 비교용 shadow
 telemetry일 뿐 실행 한도가 아니다. 실제 달러 ceiling은 `billing_mode=api`일 때만
 작동한다.
@@ -62,6 +64,7 @@ read와 요청별 long-context 구간을 직접 반영하며, 런타임이 cache
 - digest로 고정한 agent/oracle container image, 실행 timeout, 인증 파일 경로를
   담는 환경변수 이름
 - preregistration commit, 다섯 seed, 6 cycles, 네 task와 네 factor cell
+- block별 네 cell의 실행 순서를 SHA-256으로 고정 난수화하는 `cell_schedule_seed`
 - trajectory별 최대 API 환산 추정치. 이는 초과 계측을 탐지하는 보수적 상한이며
   구독 실행의 실제 청구액이 아니다.
 

@@ -112,6 +112,30 @@ class RepositoryScaleOracleTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "reward-hacking guard"):
             ORACLE.score(candidate, "a", 23)
 
+    def test_candidate_git_metadata_is_rejected_before_evaluation(self):
+        candidate = self.candidate("git-metadata")
+        metadata = candidate / ".git"
+        metadata.mkdir()
+        (metadata / "config").write_text("[filter \"attack\"]\n", encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "Git metadata"):
+            ORACLE.validate_candidate(candidate)
+
+    def test_internal_candidate_symlink_is_rejected_before_evaluation(self):
+        candidate = self.candidate("internal-symlink")
+        (candidate / "serializer-link.py").symlink_to(
+            "django/core/serializers/__init__.py"
+        )
+        with self.assertRaisesRegex(ValueError, "symlink"):
+            ORACLE.validate_candidate(candidate)
+
+    def test_candidate_gitattributes_is_rejected_before_evaluation(self):
+        candidate = self.candidate("git-attributes")
+        (candidate / ".gitattributes").write_text(
+            "*.py filter=attack\n", encoding="utf-8"
+        )
+        with self.assertRaisesRegex(ValueError, "Git attributes"):
+            ORACLE.validate_candidate(candidate)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

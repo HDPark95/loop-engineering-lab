@@ -36,12 +36,25 @@ def claim(row: dict[str, int]) -> int:
 
 
 def precision_recall(predicted: list[int], actual: list[int]) -> dict[str, float | int]:
-    tp = sum(p == 1 and a == 1 for p, a in zip(predicted, actual))
-    fp = sum(p == 1 and a == 0 for p, a in zip(predicted, actual))
-    fn = sum(p == 0 and a == 1 for p, a in zip(predicted, actual))
+    tp = sum(p == 1 and a == 1 for p, a in zip(predicted, actual, strict=True))
+    fp = sum(p == 1 and a == 0 for p, a in zip(predicted, actual, strict=True))
+    fn = sum(p == 0 and a == 1 for p, a in zip(predicted, actual, strict=True))
     precision = tp / (tp + fp) if tp + fp else 0.0
     recall = tp / (tp + fn) if tp + fn else 0.0
     return {"tp": tp, "fp": fp, "fn": fn, "precision": round(precision, 6), "recall": round(recall, 6)}
+
+
+def instrument_thresholds_met(validation: dict[str, float | int]) -> bool:
+    """Compare exact count ratios, not their rounded display values."""
+    tp = int(validation["tp"])
+    fp = int(validation["fp"])
+    fn = int(validation["fn"])
+    return bool(
+        tp + fp > 0
+        and tp + fn > 0
+        and 5 * tp >= 4 * (tp + fp)
+        and 5 * tp >= 4 * (tp + fn)
+    )
 
 
 def cohen_kappa(left: list[int], right: list[int]) -> float:
@@ -93,8 +106,7 @@ def main() -> None:
             # run exploratory, however good its diagnostic numbers are.
             "freeze_gate_passed": False,
             "status": "exploratory development check; outside the confirmatory core",
-            "instrument_thresholds_met": (validation["precision"] >= 0.8
-                                          and validation["recall"] >= 0.8),
+            "instrument_thresholds_met": instrument_thresholds_met(validation),
             "privacy": "aggregate only; no annotation IDs or text",
         }
         args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -107,7 +119,9 @@ def main() -> None:
         return
 
     if not args.annotator_b or not args.adjudicated:
-        raise SystemExit("the gate run needs --annotator-b and --adjudicated")
+        raise SystemExit(
+            "the adjudicated diagnostic needs --annotator-b and --adjudicated"
+        )
     b = read_labels(args.annotator_b)
     adjudicated = read_labels(args.adjudicated)
     if not ids or any(set(rows) != ids for rows in (b, adjudicated, classifier)):
@@ -124,9 +138,7 @@ def main() -> None:
         "agreement": {"claim_cohen_kappa": cohen_kappa(a_claim, b_claim)},
         "classifier_claim_validation": validation,
         "freeze_gate_passed": False,
-        "instrument_thresholds_met": (
-            validation["precision"] >= 0.8 and validation["recall"] >= 0.8
-        ),
+        "instrument_thresholds_met": instrument_thresholds_met(validation),
         "status": "exploratory adjudicated diagnostic; outside the confirmatory core",
         "privacy": "aggregate only; no annotation IDs or text",
     }

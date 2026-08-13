@@ -116,8 +116,13 @@ def group_trajectories(
 def trajectory_metrics(rows: list[dict]) -> dict:
     graded = [r for r in rows if r.get("oracle_delta") is not None]
     accepted = [r for r in graded if r.get("accepted")]
-    gate_delta = lambda row: row.get("delta_hoa", row["oracle_delta"])
-    outcome_delta = lambda row: row.get("delta_hob", row["oracle_delta"])
+    def gate_delta(row: dict) -> float:
+        """Use HO-A when present and retain the legacy pre-split fallback."""
+        return row.get("delta_hoa", row["oracle_delta"])
+
+    def outcome_delta(row: dict) -> float:
+        """Use HO-B when present and retain the legacy pre-split fallback."""
+        return row.get("delta_hob", row["oracle_delta"])
     positive = [r for r in graded if outcome_delta(r) > 0]
     rejected = [r for r in graded if not r.get("accepted")]
     baseline = rows[0].get("baseline_score")
@@ -344,6 +349,16 @@ def integrity(cycles: list[dict], abandoned: list[dict], unparsable: list[int]) 
                 and all(
                     isinstance(schedule.get(field), str) and schedule[field]
                     for field in schedule_text
+                )
+                and (
+                    row.get("apparatus_test")
+                    or (
+                        isinstance(row.get("cell_schedule_seed"), str)
+                        and bool(row["cell_schedule_seed"].strip())
+                        and isinstance(row.get("cell_schedule_position"), int)
+                        and not isinstance(row.get("cell_schedule_position"), bool)
+                        and 1 <= row["cell_schedule_position"] <= 4
+                    )
                 )
             )
             if valid:

@@ -15,7 +15,6 @@ whole blocks, and computes exact one-sided sign-flip p-values.
 from __future__ import annotations
 
 import argparse
-import itertools
 import json
 import random
 import statistics as st
@@ -82,6 +81,18 @@ def require_confirmatory_rows(rows: list[dict]) -> None:
         raise ValueError("apparatus rows cannot enter confirmatory analysis")
     if any(row.get("confirmatory_eligible") is not True for row in rows):
         raise ValueError("every cycle must be confirmatory_eligible")
+    schedule_seeds = {row.get("cell_schedule_seed") for row in rows}
+    schedule_positions = {row.get("cell_schedule_position") for row in rows}
+    if (
+        len(schedule_seeds) != 1
+        or not isinstance(next(iter(schedule_seeds)), str)
+        or not next(iter(schedule_seeds)).strip()
+        or len(schedule_positions) != 1
+        or not isinstance(next(iter(schedule_positions)), int)
+        or isinstance(next(iter(schedule_positions)), bool)
+        or not 1 <= next(iter(schedule_positions)) <= 4
+    ):
+        raise ValueError("trajectory lacks one valid frozen cell-schedule assignment")
     if any(
         not isinstance(row.get("candidate_changed"), bool)
         or not isinstance(row.get("agent_completed"), bool)
@@ -154,6 +165,8 @@ def trajectory_record(rows: list[dict]) -> dict:
         "agent": head["agent"],
         "seed": head["seed"],
         "cell": head["cell"],
+        "cell_schedule_seed": head["cell_schedule_seed"],
+        "cell_schedule_position": head["cell_schedule_position"],
         "grounded": bool(head.get("cell_gate_grounded")),
         "feedback": head.get("cell_feedback"),
         "harmful_acceptance_incidence": harmful / n,
@@ -201,6 +214,9 @@ def trajectory_record(rows: list[dict]) -> dict:
 
 def make_blocks(records: list[dict]) -> dict[tuple, list[dict]]:
     """Validate the four-cell randomized block for every task-agent-seed."""
+    schedule_seeds = {record.get("cell_schedule_seed") for record in records}
+    if len(schedule_seeds) != 1 or not isinstance(next(iter(schedule_seeds), None), str):
+        raise ValueError("confirmatory records do not share one frozen cell-schedule seed")
     blocks: dict[tuple, list[dict]] = defaultdict(list)
     for record in records:
         blocks[(record["task"], record["agent"], record["seed"])].append(record)
@@ -209,6 +225,11 @@ def make_blocks(records: list[dict]) -> dict[tuple, list[dict]]:
         if cells != EXPECTED_CELLS or len(block) != len(EXPECTED_CELLS):
             raise ValueError(
                 f"block {key!r} has cells {sorted(cells)!r}; expected all four exactly once"
+            )
+        positions = {record.get("cell_schedule_position") for record in block}
+        if positions != {1, 2, 3, 4}:
+            raise ValueError(
+                f"block {key!r} has invalid cell-schedule positions {sorted(positions)!r}"
             )
         cycle_one_scores = {record["cycle1_hob_score"] for record in block}
         if len(cycle_one_scores) != 1:
@@ -269,14 +290,22 @@ def exact_sign_flip_p(values: list[float], null: float = 0.0) -> float | None:
     centered = [value - null for value in values]
     if not centered:
         return None
-    observed = st.mean(centered)
-    extreme = 0
-    total = 0
-    for signs in itertools.product((-1.0, 1.0), repeat=len(centered)):
-        permuted = st.mean(sign * value for sign, value in zip(signs, centered))
-        extreme += permuted >= observed - 1e-15
-        total += 1
-    return extreme / total
+    if len(centered) > 20:
+        raise ValueError(
+            f"exact sign-flip enumeration is limited to 20 blocks; got {len(centered)}"
+        )
+    observed_sum = sum(centered)
+    permuted_sums = [0.0]
+    for value in centered:
+        permuted_sums = (
+            [partial - value for partial in permuted_sums]
+            + [partial + value for partial in permuted_sums]
+        )
+    extreme = sum(
+        permuted >= observed_sum - 1e-15 * len(centered)
+        for permuted in permuted_sums
+    )
+    return extreme / len(permuted_sums)
 
 
 def contrast_report(values: list[float]) -> dict:

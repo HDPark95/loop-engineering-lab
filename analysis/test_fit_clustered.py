@@ -20,6 +20,7 @@ SPEC.loader.exec_module(MODULE)
 
 def rows(cell: str = "grounded-numeric", accepted=(False, False)) -> list[dict]:
     grounded = cell.startswith("grounded")
+    position = sorted(MODULE.EXPECTED_CELLS).index(cell) + 1
     return [
         {
             "trajectory": f"s1|codex|model|{cell}|1",
@@ -27,6 +28,8 @@ def rows(cell: str = "grounded-numeric", accepted=(False, False)) -> list[dict]:
             "agent": "codex",
             "seed": 1,
             "cell": cell,
+            "cell_schedule_seed": "analysis-test-order-v1",
+            "cell_schedule_position": position,
             "cell_gate_grounded": grounded,
             "cell_feedback": "numeric" if cell.endswith("numeric") else "sign",
             "cycle": cycle,
@@ -51,7 +54,9 @@ def rows(cell: str = "grounded-numeric", accepted=(False, False)) -> list[dict]:
             "api_equivalent_usd": 0.01,
             "incremental_billed_usd": 0.0,
         }
-        for cycle, (delta, decision) in enumerate(zip((-0.1, 0.1), accepted), start=1)
+        for cycle, (delta, decision) in enumerate(
+            zip((-0.1, 0.1), accepted, strict=True), start=1
+        )
     ]
 
 
@@ -91,6 +96,21 @@ class TrajectoryReductionTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "edit-success"):
             MODULE.trajectory_record(data)
 
+    def test_ineligible_and_incomplete_trajectories_are_refused(self):
+        ineligible = rows()
+        ineligible[1]["confirmatory_eligible"] = False
+        with self.assertRaisesRegex(ValueError, "confirmatory_eligible"):
+            MODULE.trajectory_record(ineligible)
+
+        with self.assertRaisesRegex(ValueError, "incomplete"):
+            MODULE.trajectory_record(rows()[:1])
+
+    def test_cell_schedule_assignment_is_required_and_constant(self):
+        data = rows()
+        data[1]["cell_schedule_position"] = 2
+        with self.assertRaisesRegex(ValueError, "cell-schedule"):
+            MODULE.trajectory_record(data)
+
 
 class BlockInferenceTest(unittest.TestCase):
     def test_all_four_cells_are_required(self):
@@ -102,6 +122,27 @@ class BlockInferenceTest(unittest.TestCase):
     def test_exact_sign_flip_is_one_sided(self):
         self.assertEqual(MODULE.exact_sign_flip_p([1.0, 1.0, 1.0]), 0.125)
         self.assertEqual(MODULE.exact_sign_flip_p([-1.0, -1.0, -1.0]), 1.0)
+        with self.assertRaisesRegex(ValueError, "limited to 20"):
+            MODULE.exact_sign_flip_p([1.0] * 21)
+
+    def test_block_structure_and_shared_cycle_one_are_fail_closed(self):
+        records = [
+            MODULE.trajectory_record(rows(cell))
+            for cell in sorted(MODULE.EXPECTED_CELLS)
+        ]
+        records[0]["cycle1_hob_score"] = 0.9
+        with self.assertRaisesRegex(ValueError, "share one cycle-one"):
+            MODULE.make_blocks(records)
+
+        records[0]["cycle1_hob_score"] = 0.2
+        records[0]["grounded"] = False
+        with self.assertRaisesRegex(ValueError, "two grounded"):
+            MODULE.block_difference(records, "delivered_hob_gain")
+
+        records[0]["grounded"] = records[0]["cell"].startswith("grounded")
+        records[0]["cell_schedule_position"] = 2
+        with self.assertRaisesRegex(ValueError, "cell-schedule positions"):
+            MODULE.make_blocks(records)
 
     def test_holm_accepts_only_the_registered_family(self):
         verdicts = MODULE.holm({"B-H1a": 0.01, "B-H1b": 0.04})
@@ -138,6 +179,10 @@ class BlockInferenceTest(unittest.TestCase):
                                     "agent": agent,
                                     "seed": seed,
                                     "cell": cell,
+                                    "cell_schedule_seed": "full-grid-test-order-v1",
+                                    "cell_schedule_position": (
+                                        sorted(MODULE.EXPECTED_CELLS).index(cell) + 1
+                                    ),
                                     "cell_gate_grounded": grounded,
                                     "cell_feedback": (
                                         "numeric" if cell.endswith("numeric") else "sign"

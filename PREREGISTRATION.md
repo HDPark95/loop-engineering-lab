@@ -430,7 +430,8 @@ SD, so no ICC inflation is applied again. The conservative one-sided alpha is
 | B-H1b, S3 ungrounded minus grounded | 10 blocks | 0.047 | 0.133 | one |
 
 At a true difference of 0.20 the normal approximation gives power 0.988 and the
-registered 20,000-trial simulation gives 0.982. The feedback interaction and
+registered 20,000-trial simulation using the same exact one-sided sign-flip
+decision rule as the final analysis gives 0.960. The feedback interaction and
 the grounded-sign versus ungrounded-numeric contrast are secondary descriptive
 quantities; the design is not presented as powered for either.
 
@@ -453,7 +454,10 @@ are `11`, `23`, `37`, `53`, and `71`. Agent identities, immutable model
 versions, the exact `agent_adapters.measurement_prompt`, API-equivalent shadow
 price source, retrieval time, cache/read/write rates, long-context threshold
 and multipliers, and container digests are written into the run manifest immediately
-before freeze. The planned execution mode is authenticated
+before freeze. A manifest-frozen `cell_schedule_seed` deterministically hash-ranks
+the four cells within every task-agent-seed block. The runner submits one branch
+per block before any second branch, preventing a fixed treatment cell from always
+owning the earliest wall-clock position. The planned execution mode is authenticated
 subscription CLI prompting: incremental billed dollars are fixed at zero, while
 tokens, wall clock, plan-quota events, and API-price-equivalent shadow cost are
 recorded. Concurrency is capped at three and quota/rate-limit responses trigger
@@ -463,11 +467,12 @@ agent is removed before freeze, never after its outcome is seen.
 ## 10. Exclusions and failure handling
 
 - Boundary or canary failure: invalidate the trajectory and stop the cell.
-- Agent/tool crash before a candidate exists: operational failure; retain the
-  cost and rerun once with the same seed. A second failure is reported and not
-  silently replaced.
-- Oracle crash: no gate decision; repair before any affected cell resumes and
-  record an amendment.
+- Agent/tool crash: operational failure; retain the cost and append-only rows,
+  abandon the whole four-cell task-agent-seed attempt, and rerun all four
+  branches from the shared cycle 1 with the same seed. A second failure is
+  reported and not silently replaced.
+- Oracle crash: no gate decision; apply the same whole-block abandonment rule,
+  repair before the affected block reruns, and record an amendment.
 - S1 test/test-infrastructure modification, test skipping, caller inspection,
   or equivalent registered reward-hacking signal: invalidate the trajectory;
   do not reinterpret it as a low score.
@@ -553,6 +558,8 @@ non-self-referential and uses two steps:
   test to keep HO-B unreachable from every gate;
 - [x] the common first cycle of §4.2 is implemented and a branching run is
   verified to produce identical cycle-1 artifacts across all four cells;
+- [x] cell order is frozen by a manifest seed, and hard-kill or branch-failure
+  recovery tombstones and reruns the complete common-cycle block;
 - [x] the self-report elicitation of §5.1 is implemented, and a pilot run shows
   the elicited verdict taking both values;
 - [x] `analysis/power_sim.py` and `analysis/fit_clustered.py` are committed and
@@ -676,3 +683,11 @@ apparatus validation and not confirmatory evidence.
   uses a conservative upper endpoint and reports the lower endpoint alongside
   it. Schema-five replay recomputes the price interval and rejects an
   unclassifiable long-context aggregate rather than silently applying one rate.
+- R20 (2026-08-13): closed the final pre-freeze review defects. Cell execution
+  order is now manifest-seeded and hash-randomized within each block. Resume is
+  atomic at the shared-cycle block: a branch failure or hard kill retains all
+  append-only rows, tombstones the incomplete attempt, and reruns all four cells
+  from cycle 1. The exact sign-flip power simulator now uses the final test rule
+  (20,000-trial power 0.960), empty reward-hacking logs fail closed, S1 rejects
+  modified Git attributes plus added or changed symlinks, and the exploratory annotation workflow has
+  deterministic disagreement packets and independent third ratings.
