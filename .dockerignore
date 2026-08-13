@@ -1,0 +1,11 @@
+.git
+.venv
+**/__pycache__
+**/*.pyc
+artifacts
+data
+logs
+results
+se_tasks/**/.cache
+.work_*
+oracle/*.db

@@ -1,0 +1,30 @@
+{
+  "tasks": ["s1_swebench"],
+  "agents": [
+    {
+      "name": "codex",
+      "adapter": "codex",
+      "model": "gpt-5.6-terra",
+      "reasoning_effort": "medium",
+      "usd_per_1k_input": 0.0025,
+      "usd_per_1k_output": 0.015,
+      "container_image": "sha256:022a96b2659b1455a8d0f28d4bc1c893aef3f8a4cf6b2ded7fd795269c031e60",
+      "timeout_seconds": 1200,
+      "auth_file_env": "LOOP_CODEX_AUTH_FILE"
+    }
+  ],
+  "cells": ["grounded-numeric"],
+  "seeds": [11],
+  "cycles": 6,
+  "billing_mode": "subscription",
+  "execution_mode": "prompt",
+  "incremental_billed_usd": 0.0,
+  "apparatus_test": true,
+  "max_concurrent_agents": 1,
+  "quota_wait_seconds": 300,
+  "quota_max_retries": 2,
+  "estimated_api_equivalent_usd_per_trajectory": 8.0,
+  "preregistration_commit": "137ed48d944c7dad8123c68f0b3407ae20580d03",
+  "oracle_container_image": "sha256:82386fb686d8ee5f56219ed6e8b8b222837803dbe8236510cca48cf2443ef4da",
+  "artifact_archive_dir": "../../artifacts/apparatus/codex-s1repo-20260813"
+}
