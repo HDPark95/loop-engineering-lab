@@ -168,6 +168,8 @@ untracked isolation preflight, 기존 manifest 덮어쓰기를 모두 거부하�
 실행하며, 둘 중 하나라도 clean하지 않으면 분석을 거부한다. 수용된 분석 JSON에는
 원시 로그의 SHA-256과 전체 audit 결과가 포함되므로, 이후 원고 renderer와 제출
 manifest가 원시 측정 로그까지 digest chain으로 결박할 수 있다.
+분석 시작 전후의 로그 SHA-256이 달라지면 동시 append로 간주해 출력을 거부하므로,
+runner가 완전히 종료된 안정된 원시 로그에서만 확증 분석을 실행한다.
 
 ## 확증 격리
 

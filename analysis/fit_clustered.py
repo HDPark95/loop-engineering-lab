@@ -515,6 +515,7 @@ def holm(pvalues: dict[str, float], alpha: float = ALPHA) -> dict[str, dict]:
 
 
 def analyze(log_path: Path) -> dict:
+    source_log_sha256 = hashlib.sha256(log_path.read_bytes()).hexdigest()
     cycles, abandoned, unparsable = replay.load(log_path)
     integrity = replay.integrity(cycles, abandoned, unparsable)
     if not integrity["clean"]:
@@ -524,6 +525,8 @@ def analyze(log_path: Path) -> dict:
         raise ValueError(
             f"reward-hacking audit is not clean: {reward_hacking_audit}"
         )
+    if hashlib.sha256(log_path.read_bytes()).hexdigest() != source_log_sha256:
+        raise ValueError("source log changed while confirmatory analysis was running")
     grouped = replay.group_trajectories(cycles, abandoned)
     records = [trajectory_record(rows) for rows in grouped.values()]
     blocks = make_blocks(records)
@@ -535,7 +538,7 @@ def analyze(log_path: Path) -> dict:
     report = {
         "schema_version": 2,
         "source_log": str(log_path),
-        "source_log_sha256": hashlib.sha256(log_path.read_bytes()).hexdigest(),
+        "source_log_sha256": source_log_sha256,
         "analysis_unit": "task-agent-seed randomized block",
         "trajectories": len(records),
         "blocks": len(blocks),

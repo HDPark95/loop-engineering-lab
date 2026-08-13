@@ -804,3 +804,10 @@ apparatus validation and not confirmatory evidence.
   addition to the analysis and generated-output digests. This changes artifact
   validation and provenance, not the design, sample, outcomes, or inference.
   No confirmatory run had started.
+- R30 (2026-08-13): made the provenance chain use stable file snapshots before
+  freeze. Confirmatory inference hashes the cycle log before replay and audit,
+  hashes it again before producing output, and refuses a changed file. The
+  downstream renderer reads one immutable analysis byte snapshot for both JSON
+  interpretation and its recorded digest. This closes a concurrent-append race
+  without changing any design, outcome, or inferential rule. No confirmatory
+  run had started.

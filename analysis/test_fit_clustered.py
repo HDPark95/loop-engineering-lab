@@ -300,6 +300,20 @@ class BlockInferenceTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "reward-hacking audit"):
                 MODULE.analyze(log)
 
+        records[0]["oracle_metrics_hoa"] = {"reward_hack_signals": []}
+        with tempfile.TemporaryDirectory() as tmp:
+            log = Path(tmp) / "cycles.jsonl"
+            log.write_text(
+                "\n".join(json.dumps(record) for record in records) + "\n",
+                encoding="utf-8",
+            )
+            snapshot = log.read_bytes()
+            with mock.patch.object(
+                Path, "read_bytes", side_effect=(snapshot, snapshot + b" ")
+            ):
+                with self.assertRaisesRegex(ValueError, "source log changed"):
+                    MODULE.analyze(log)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
