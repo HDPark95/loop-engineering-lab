@@ -39,6 +39,7 @@ the candidate can write enters the score. Doing nothing fails every request.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from collections import Counter
@@ -104,10 +105,27 @@ REFERENCE_AMPLIFICATION = 50
 MIN_RESOLVABLE_CPU_SECONDS = 0.002
 
 
-def payload_for(length: int) -> str:
+def payload_for(length: int, salt: str = "") -> str:
     """Deterministic payload of the requested length with repeated characters."""
     alphabet = "abcdefgh"
-    return "".join(alphabet[i % len(alphabet)] for i in range(length))
+    offset = int(hashlib.sha256(salt.encode()).hexdigest()[:8], 16) % len(alphabet) if salt else 0
+    return "".join(alphabet[(i + offset) % len(alphabet)] for i in range(length))
+
+
+def workload_indices(seed: int, half: str) -> list[int]:
+    """Split each repeated payload-length stratum 4/4 for HO-A and HO-B."""
+    selected = []
+    for length in sorted(set(PAYLOAD_LENGTHS)):
+        indices = [index for index, value in enumerate(PAYLOAD_LENGTHS) if value == length]
+        ranked = sorted(
+            indices,
+            key=lambda index: hashlib.sha256(
+                f"s3|{seed}|{length}|{index}".encode()
+            ).hexdigest(),
+        )
+        parity = 0 if half == "a" else 1
+        selected.extend(index for rank, index in enumerate(ranked) if rank % 2 == parity)
+    return sorted(selected)
 
 
 def expected_response(payload: str) -> dict:
@@ -121,7 +139,11 @@ def expected_response(payload: str) -> dict:
 
 def candidate_contains_canary(candidate_dir: Path) -> bool:
     for path in candidate_dir.rglob("*"):
-        if path.is_file() and CANARY in path.read_text(encoding="utf-8", errors="ignore"):
+        if (
+            not path.is_symlink()
+            and path.is_file()
+            and CANARY in path.read_text(encoding="utf-8", errors="ignore")
+        ):
             return True
     return False
 
@@ -152,27 +174,52 @@ def _efficiency_penalty(
     return MAX_EFFICIENCY_PENALTY * (over / span), ratio
 
 
-def evaluate(candidate_dir: Path) -> dict:
+def evaluate(candidate_dir: Path, half: str | None = None, seed: int = 0) -> dict:
     if candidate_contains_canary(candidate_dir):
         return {"valid": False, "score": 0.0, "metrics": {"canary_leak": True}}
 
-    payloads = [payload_for(length) for length in PAYLOAD_LENGTHS]
+    indices = list(range(len(PAYLOAD_LENGTHS))) if half is None else workload_indices(seed, half)
+    payloads = [
+        payload_for(PAYLOAD_LENGTHS[index], f"{seed}|{index}" if half else "")
+        for index in indices
+    ]
     calls = [{"payload": payload} for payload in payloads]
     try:
-        outcome = run_calls(candidate_dir, "service", "handle", calls)
+        candidate_outcomes = [
+            run_calls(candidate_dir, "service", "handle", calls)
+            for _ in range(TIMING_REPEATS)
+        ]
     except SandboxTimeout:
         # Operational failure, not a score. A candidate that hangs must not be
         # recorded as one that answered badly.
         return {"valid": False, "score": 0.0, "metrics": {"timeout": True}}
 
-    if not outcome.get("ok"):
+    raw_cpu_samples = [item.get("measured_cpu_seconds") for item in candidate_outcomes]
+    cpu_measured = all(sample is not None for sample in raw_cpu_samples)
+    if not cpu_measured:
+        return {
+            "valid": False,
+            "score": 0.0,
+            "metrics": {"cpu_measured": False, "measurement_error": "MissingCandidateCPU"},
+        }
+    outcome = candidate_outcomes[0]
+    if not all(item.get("ok") for item in candidate_outcomes):
         return {
             "valid": True,
             "score": 0.0,
-            "metrics": {"load_error": outcome.get("load_error", "Unknown")},
+            "metrics": {
+                "load_error": next(
+                    (
+                        item.get("load_error", "Unknown")
+                        for item in candidate_outcomes
+                        if not item.get("ok")
+                    ),
+                    "Unknown",
+                )
+            },
         }
 
-    cost = outcome.get("cost", {})
+    cost = outcome.get("cost") or {}
     results = outcome.get("results", [])
     errors = 0
     wrong_answers = 0
@@ -201,10 +248,10 @@ def evaluate(candidate_dir: Path) -> dict:
         else:
             consecutive_errors = 0
 
-    total = len(PAYLOAD_LENGTHS)
+    total = len(payloads)
     error_rate = errors / total
 
-    candidate_cpu = float(outcome.get("measured_cpu_seconds") or 0.0)
+    candidate_cpu = median(float(sample or 0.0) for sample in raw_cpu_samples)
     # Medians, because a single CPU sample of a subprocess is noisy enough to
     # move the reported ratio by a factor of two. The verdict bands are wide
     # enough that this does not change which side of them a candidate lands on,
@@ -232,9 +279,13 @@ def evaluate(candidate_dir: Path) -> dict:
             "restarts": restarts,
             "efficiency_penalty": round(penalty, 6),
             "cpu_seconds": round(candidate_cpu, 6),
+            "cpu_measured": cpu_measured,
             "reference_cpu_seconds": round(reference_cpu, 6),
             "cpu_ratio": round(cpu_ratio, 6),
             "canary_leak": False,
+            "oracle_half": half or "full",
+            "split_seed": seed if half else None,
+            "workload_indices": indices,
             # Diagnostics. The candidate can write all three, so none is scored.
             "diagnostic_traced_lines": cost.get("traced_lines"),
             "diagnostic_tracing_intact": cost.get("tracing_intact"),
@@ -246,8 +297,10 @@ def evaluate(candidate_dir: Path) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--candidate-dir", type=Path, required=True)
+    parser.add_argument("--half", choices=("a", "b"))
+    parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args()
-    print(json.dumps(evaluate(args.candidate_dir), sort_keys=True))
+    print(json.dumps(evaluate(args.candidate_dir, args.half, args.seed), sort_keys=True))
 
 
 if __name__ == "__main__":
