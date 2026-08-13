@@ -911,3 +911,13 @@ apparatus validation and not confirmatory evidence.
   construction with the registered zero-incremental-billing prompt mode and
   changes neither the shadow-cost telemetry nor tasks, treatments, sample,
   outcomes, or inference. No confirmatory run had started.
+- R41 (2026-08-14): automated the repeated public-history safety audit before
+  freeze. A clean-clone command now scans the current tree, commit metadata,
+  and every unique blob-path pair reachable from HEAD for the documented
+  organization/product names, local user paths, and credential formats. It
+  allows only the two previously reviewed provenance blobs, bound by exact Git
+  object ID, path, pattern, and occurrence count; reintroducing either blob in
+  the current tree still fails. A missing exception also fails so history
+  rewriting cannot silently invalidate the audit contract. This changes release
+  validation, not design, sample, outcomes, or inference. No confirmatory run
+  had started.

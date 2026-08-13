@@ -84,6 +84,12 @@ read와 요청별 long-context 구간을 직접 반영하며, 런타임이 cache
 - trajectory별 최대 API 환산 추정치. 이는 초과 계측을 탐지하는 보수적 상한이며
   구독 실행의 실제 청구액이 아니다.
 
+동결 태그 직전 공개 이력 감사는 clean clone에서 실행한다. 현재 tree·커밋 metadata·
+모든 HEAD reachable blob의 금지 조직명, 로컬 경로, credential 형식을 검사하며,
+문서화된 과거 provenance 문자열 두 blob만 정확한 object ID·경로·개수로 허용한다.
+
+    python3 audit_public_history.py
+
 두 측정 Dockerfile은 base image를 OCI digest로, Codex와 Claude Code를 정확한
 패키지 버전으로 고정한다. candidate sandbox image에는 held-out oracle, task seed,
 정답 또는 점수 함수가 들어가지 않는다. 동결 직전에 이 소스에서 이미지를 다시
