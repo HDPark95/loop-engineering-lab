@@ -25,7 +25,7 @@
   "execution_mode": "prompt",
   "incremental_billed_usd": 0.0,
   "max_concurrent_agents": 1,
-  "preregistration_commit": "c15805a34861975056db77611501703705c999c5",
+  "preregistration_commit": "879f3a5f4d50b29e4fb32d844f5c53f9f9778c96",
   "quota_max_retries": 168,
   "quota_wait_seconds": 3600,
   "seeds": [
