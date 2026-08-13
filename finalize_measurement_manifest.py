@@ -92,6 +92,17 @@ def main() -> int:
     git(repo, "ls-files", "--error-unmatch", str(relative_template))
 
     template = json.loads(template_path.read_text(encoding="utf-8"))
+    preflight_record = template.get("isolation_preflight_record")
+    if not isinstance(preflight_record, str) or not preflight_record.strip():
+        raise RuntimeError("manifest template requires isolation_preflight_record")
+    preflight_path = (
+        template_path.parent / preflight_record
+    ).resolve()
+    try:
+        relative_preflight = preflight_path.relative_to(repo)
+    except ValueError as exc:
+        raise RuntimeError("isolation preflight must be inside the frozen repository") from exc
+    git(repo, "ls-files", "--error-unmatch", str(relative_preflight))
     manifest = bind_freeze_commit(template, target)
     output_path = args.output.resolve()
     try:

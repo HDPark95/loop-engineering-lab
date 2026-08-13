@@ -156,7 +156,8 @@ def _survey():
             found[attr] = hits
 
     readable = []
-    roots = [os.getcwd(), os.path.dirname(os.path.abspath(sys.argv[0]))]
+    roots = [os.getcwd(), os.path.dirname(os.path.abspath(sys.argv[0])),
+             "/oracle", "/workspace", "/app", "/repo"]
     main = sys.modules.get("__main__")
     if getattr(main, "__file__", None):
         roots.append(os.path.dirname(os.path.abspath(main.__file__)))
@@ -249,6 +250,15 @@ class S3OracleTest(unittest.TestCase):
         findings = survey_from_inside("service.py", "handle")
         self.assertEqual(findings["reachable"], {})
         self.assertEqual(findings["readable"], [])
+
+    def test_manifest_sandbox_image_is_resolved_at_invocation_time(self):
+        with mock.patch.dict(
+            os.environ,
+            {"LOOP_SANDBOX_IMAGE": "sandbox@sha256:" + "a" * 64},
+        ):
+            self.assertEqual(
+                harness.sandbox_image(), "sandbox@sha256:" + "a" * 64
+            )
 
     def test_fifo_candidate_is_rejected_before_copying(self):
         with tempfile.TemporaryDirectory() as tmp:

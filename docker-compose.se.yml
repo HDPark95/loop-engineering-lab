@@ -2,8 +2,6 @@ name: loop-eng-se-lab
 
 networks:
   agentnet:
-  oraclenet:
-    internal: true
 
 volumes:
   se_artifact:
@@ -21,11 +19,9 @@ services:
       - se_artifact:/workspace
     command: sleep infinity
 
-  oracle:
+  sandbox:
     build:
       context: .
-      dockerfile: docker/se-oracle.Dockerfile
-    networks: [oraclenet]
-    volumes:
-      - se_artifact:/candidate:ro
+      dockerfile: docker/se-sandbox.Dockerfile
+    network_mode: none
     command: sleep infinity

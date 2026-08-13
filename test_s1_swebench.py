@@ -27,6 +27,7 @@ def load(name: str, path: Path):
 
 MATERIALIZE = load("s1_materialize", TASK / "materialize.py")
 ORACLE = load("s1_oracle", TASK / "oracle.py")
+SELECTION = load("s1_selection", TASK / "verify_selection.py")
 
 
 class RepositoryScaleOracleTest(unittest.TestCase):
@@ -59,6 +60,12 @@ class RepositoryScaleOracleTest(unittest.TestCase):
                 self.seed / "ISSUE.md", self.seed / "PUBLIC_TESTS.md"
             )),
         )
+
+    def test_registered_instance_is_selected_from_the_public_frame(self):
+        result = SELECTION.select()
+        self.assertEqual(result["screening_frame_count"], 261)
+        self.assertEqual(result["eligible_count"], 2)
+        self.assertEqual(result["selected"]["instance_id"], ORACLE.CONFIG["instance_id"])
 
     def test_task_uses_the_shared_runner_contract(self):
         result_a, _ = se_experiment.run_oracle("s1_swebench", self.seed, "a", 11)

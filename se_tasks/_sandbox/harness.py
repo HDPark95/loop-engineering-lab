@@ -35,7 +35,12 @@ from pathlib import Path
 
 RUNNER_SOURCE = Path(__file__).resolve().parent / "run_candidate.py"
 WRAPPER_SOURCE = Path(__file__).resolve().parent / "sandbox_wrapper.py"
-SANDBOX_IMAGE = os.environ.get("LOOP_ORACLE_IMAGE", "loop-eng-se-lab-oracle:latest")
+DEFAULT_SANDBOX_IMAGE = "loop-eng-se-lab-sandbox:latest"
+
+
+def sandbox_image() -> str:
+    """Resolve the frozen image at invocation time, after manifest loading."""
+    return os.environ.get("LOOP_SANDBOX_IMAGE", DEFAULT_SANDBOX_IMAGE)
 
 # The candidate must not be able to walk from its own location to the grading
 # code. `cwd` alone does not achieve that: the child can read `sys.argv[0]`,
@@ -163,7 +168,7 @@ def run_calls(
             "--mount", f"type=bind,src={root},dst=/sandbox,readonly",
             "--workdir", "/sandbox/candidate",
             "--entrypoint", "python3",
-            SANDBOX_IMAGE, "-I", "/sandbox/wrapper.py",
+            sandbox_image(), "-I", "/sandbox/wrapper.py",
         ]
         process = subprocess.Popen(
             command,
