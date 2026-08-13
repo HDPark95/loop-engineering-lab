@@ -231,6 +231,11 @@ def build_apparatus_manifest(
     exact_smoke_path: Path,
     pricing_path: Path,
 ) -> dict:
+    if template_path.resolve().parent != output_path.resolve().parent:
+        fail(
+            "apparatus manifest output must share the template directory so "
+            "relative archive paths retain their frozen meaning"
+        )
     exact_model, pricing, _evidence = validate_runtime_evidence(
         alias_smoke_path, exact_smoke_path, pricing_path
     )
@@ -537,6 +542,11 @@ def validate_confirmatory_pricing_binding(
 def build_confirmatory_template(args: argparse.Namespace) -> dict:
     if args.output.resolve() == args.evidence_output.resolve():
         fail("confirmatory template and evidence outputs must be distinct")
+    if args.template.resolve().parent != args.output.resolve().parent:
+        fail(
+            "confirmatory template output must share the source template directory "
+            "so relative preflight and archive paths retain their frozen meaning"
+        )
     exact_model, pricing, evidence_hashes = validate_runtime_evidence(
         args.alias_smoke, args.exact_smoke, args.pricing
     )

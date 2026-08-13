@@ -13,7 +13,7 @@
     }
   ],
   "apparatus_test": true,
-  "artifact_archive_dir": "../../../artifacts/apparatus/claude-resource-20260815",
+  "artifact_archive_dir": "../../artifacts/apparatus/claude-resource-20260815",
   "billing_mode": "subscription",
   "candidate_sandbox_image": "sha256:c9358340c5e8feb75f59d0f744abfde745a393a56ed8de73fb6142856c3c5180",
   "cell_schedule_seed": "apparatus-claude-resource-20260815",

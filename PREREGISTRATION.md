@@ -930,3 +930,13 @@ apparatus validation and not confirmatory evidence.
   SHA-256, tagged commit, status, and zero-finding claim before allowing the
   first confirmatory cycle. This changes provenance validation, not design,
   sample, outcomes, or inference. No confirmatory run had started.
+- R43 (2026-08-14): corrected the pre-freeze Claude resource-apparatus archive
+  path before that apparatus or any confirmatory outcome. Its template had one
+  excess parent traversal, unlike the existing apparatus manifests, and would
+  have placed candidate snapshots outside the public repository. The path now
+  resolves to `artifacts/apparatus/claude-resource-20260815` inside the
+  repository. Runtime preparation also refuses to emit either apparatus or
+  confirmatory templates into a different directory from its source template,
+  preserving the frozen meaning of every relative archive and preflight path.
+  This changes storage safety, not design, sample, outcomes, or inference. No
+  Claude resource apparatus or confirmatory run had started.

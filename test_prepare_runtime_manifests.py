@@ -27,14 +27,19 @@ class PrepareRuntimeManifestsTest(unittest.TestCase):
         self.alias_smoke = self.root / "alias.json"
         self.exact_smoke = self.root / "exact.json"
         self.pricing = self.root / "pricing.json"
+        self.apparatus_template = self.root / "claude-resource.manifest.template.json"
         self.apparatus_manifest = self.root / "apparatus.manifest.json"
         self.claude_log = self.root / "claude.cycles.jsonl"
         self.claude_resources = self.root / "claude.resources.json"
         self.write_json(self.alias_smoke, self.smoke("sonnet", self.model))
         self.write_json(self.exact_smoke, self.smoke(self.model, self.model))
         self.write_json(self.pricing, self.pricing_record())
-        manifest = prepare.build_apparatus_manifest(
+        shutil.copy2(
             ROOT / "logs/apparatus/claude-resource-20260815.manifest.template.json",
+            self.apparatus_template,
+        )
+        manifest = prepare.build_apparatus_manifest(
+            self.apparatus_template,
             self.apparatus_manifest,
             self.alias_smoke,
             self.exact_smoke,
@@ -220,7 +225,7 @@ class PrepareRuntimeManifestsTest(unittest.TestCase):
     def test_apparatus_manifest_is_valid_and_exclusive(self):
         output = self.root / "apparatus.json"
         filled = prepare.build_apparatus_manifest(
-            ROOT / "logs/apparatus/claude-resource-20260815.manifest.template.json",
+            self.apparatus_template,
             output,
             self.alias_smoke,
             self.exact_smoke,
@@ -231,12 +236,42 @@ class PrepareRuntimeManifestsTest(unittest.TestCase):
         self.assertEqual(stat.S_IMODE(output.stat().st_mode), 0o444)
         with self.assertRaisesRegex(RuntimeError, "refusing to overwrite"):
             prepare.build_apparatus_manifest(
-                ROOT / "logs/apparatus/claude-resource-20260815.manifest.template.json",
+                self.apparatus_template,
                 output,
                 self.alias_smoke,
                 self.exact_smoke,
                 self.pricing,
             )
+
+    def test_apparatus_output_location_and_archive_stay_inside_the_repository(self):
+        template = json.loads(self.apparatus_template.read_text(encoding="utf-8"))
+        production_template = (
+            ROOT / "logs/apparatus/claude-resource-20260815.manifest.template.json"
+        )
+        resolved_archive = (
+            production_template.parent / template["artifact_archive_dir"]
+        ).resolve()
+        self.assertEqual(
+            ROOT / "artifacts/apparatus/claude-resource-20260815",
+            resolved_archive,
+        )
+        with self.assertRaisesRegex(RuntimeError, "share the template directory"):
+            prepare.build_apparatus_manifest(
+                self.apparatus_template,
+                self.root / "nested/apparatus.json",
+                self.alias_smoke,
+                self.exact_smoke,
+                self.pricing,
+            )
+
+    def test_confirmatory_output_must_preserve_relative_path_semantics(self):
+        args = argparse.Namespace(
+            output=self.root / "nested/runtime-template.json",
+            evidence_output=self.root / "evidence.json",
+            template=ROOT / "measurement-manifest.template.json",
+        )
+        with self.assertRaisesRegex(RuntimeError, "share the source template directory"):
+            prepare.build_confirmatory_template(args)
 
     def test_confirmatory_template_and_formula_evidence_are_valid(self):
         template = self.root / "measurement-manifest.template.json"
