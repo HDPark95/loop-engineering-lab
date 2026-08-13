@@ -3,7 +3,11 @@
 S1 uses the pinned SWE-bench Verified instance `django__django-16938` at
 `1136aa5005f0ae70fea12796b7e37d6f027b9263`. The selection rule, dataset
 digest, official evaluation-image digest, test counts, and harness revision are
-frozen in `instance.json`.
+frozen in `instance.json`. The complete 261-instance screening frame is included
+as `screening_261.json`; `verify_selection.py` checks its digest against the
+pinned dataset and recomputes the case-count filter and SHA-256 ranking.
+
+    python3 se_tasks/s1_swebench/verify_selection.py
 
 The agent receives the complete base repository and issue but not the issue's
 test patch, gold patch, oracle cache, or evaluation image. The oracle mounts the

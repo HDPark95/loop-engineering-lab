@@ -132,6 +132,42 @@ def image_is_digest_pinned(image: object) -> bool:
     )
 
 
+def verify_isolation_preflight(manifest_path: Path, manifest: dict) -> None:
+    """Bind a confirmatory manifest to a successful sandbox isolation record."""
+    relative = manifest.get("isolation_preflight_record")
+    expected_digest = manifest.get("isolation_preflight_sha256")
+    if not isinstance(relative, str) or not relative.strip():
+        raise SystemExit("confirmatory manifest requires isolation_preflight_record")
+    if (
+        not isinstance(expected_digest, str)
+        or len(expected_digest) != 64
+        or any(character not in "0123456789abcdef" for character in expected_digest.lower())
+    ):
+        raise SystemExit("confirmatory manifest requires isolation_preflight_sha256")
+    root = manifest_path.resolve().parent
+    record_path = (root / relative).resolve()
+    try:
+        record_path.relative_to(root)
+    except ValueError as exc:
+        raise SystemExit("isolation preflight record must stay inside the frozen repository") from exc
+    if not record_path.is_file():
+        raise SystemExit("isolation preflight record is missing")
+    payload = record_path.read_bytes()
+    if hashlib.sha256(payload).hexdigest() != expected_digest.lower():
+        raise SystemExit("isolation preflight record digest does not match the manifest")
+    try:
+        record = json.loads(payload)
+    except json.JSONDecodeError as exc:
+        raise SystemExit("isolation preflight record is not valid JSON") from exc
+    if not record.get("passed", False):
+        raise SystemExit("isolation preflight did not pass")
+    image = manifest["candidate_sandbox_image"]
+    if record.get("sandbox_image_requested") != image:
+        raise SystemExit("isolation preflight was run against a different sandbox image")
+    if record.get("sandbox_image_resolved") != image:
+        raise SystemExit("isolation preflight did not resolve to the frozen sandbox image")
+
+
 def load_manifest(path: Path) -> dict:
     manifest = json.loads(path.read_text(encoding="utf-8"))
     missing = [
@@ -174,9 +210,9 @@ def load_manifest(path: Path) -> dict:
     if any(not name for name in names) or len(set(names)) != len(names):
         raise SystemExit("agent names must be present and unique")
     if not manifest.get("apparatus_test", False) and not image_is_digest_pinned(
-        manifest.get("oracle_container_image")
+        manifest.get("candidate_sandbox_image")
     ):
-        raise SystemExit("oracle_container_image must be pinned by sha256 digest")
+        raise SystemExit("candidate_sandbox_image must be pinned by sha256 digest")
     if not manifest.get("apparatus_test", False):
         archive_dir = manifest.get("artifact_archive_dir")
         if not isinstance(archive_dir, str) or not archive_dir.strip():
@@ -358,6 +394,7 @@ def load_manifest(path: Path) -> dict:
             or not manifest["cell_schedule_seed"].strip()
         ):
             raise SystemExit("confirmatory grid requires a frozen cell_schedule_seed")
+        verify_isolation_preflight(path, manifest)
     return manifest
 
 
@@ -1547,8 +1584,8 @@ def main() -> int:
     args = parser.parse_args()
 
     manifest = load_manifest(args.manifest)
-    if manifest.get("oracle_container_image"):
-        os.environ["LOOP_ORACLE_IMAGE"] = manifest["oracle_container_image"]
+    if manifest.get("candidate_sandbox_image"):
+        os.environ["LOOP_SANDBOX_IMAGE"] = manifest["candidate_sandbox_image"]
     cycles = int(manifest["cycles"])
     everything = trajectories(manifest)
     common_groups_total = {

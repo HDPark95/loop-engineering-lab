@@ -66,12 +66,24 @@ read와 요청별 long-context 구간을 직접 반영하며, 런타임이 cache
 
 - alias가 아닌 두 agent의 정확한 model ID, reasoning effort, 출처와 조회시점까지
   고정한 일반·캐시·cache-write·long-context API 환산 단가
-- digest로 고정한 agent/oracle container image, 실행 timeout, 인증 파일 경로를
+- digest로 고정한 agent/candidate-sandbox image, 실행 timeout, 인증 파일 경로를
   담는 환경변수 이름
 - preregistration commit, 다섯 seed, 6 cycles, 네 task와 네 factor cell
 - block별 네 cell의 실행 순서를 SHA-256으로 고정 난수화하는 `cell_schedule_seed`
+- frozen candidate sandbox image로 실행한 isolation preflight JSON의 경로와 SHA-256
 - trajectory별 최대 API 환산 추정치. 이는 초과 계측을 탐지하는 보수적 상한이며
   구독 실행의 실제 청구액이 아니다.
+
+두 측정 Dockerfile은 base image를 OCI digest로, Codex와 Claude Code를 정확한
+패키지 버전으로 고정한다. candidate sandbox image에는 held-out oracle, task seed,
+정답 또는 점수 함수가 들어가지 않는다. 동결 직전에 이 소스에서 이미지를 다시
+빌드하고 최종 로컬 image ID를 manifest에 기록한다.
+
+동결 직전 sandbox image ID로 적대적 preflight를 실행한다. 이 기록은 held-out
+소스 부재, network none, read-only root, uid 65534, Linux capability 0을 검사하며
+manifest가 파일 SHA-256와 image ID를 다시 대조한다.
+
+    python3 preflight_isolation.py --sandbox-image sha256:<image-id> --output preflight/sandbox-isolation.json
 
 Codex adapter는 CLI 최종 텍스트의 자기보고를 모델 식별 근거로 쓰지 않는다.
 컨테이너 안에서 Codex App Server를 시작하고 `thread/start`,
@@ -91,8 +103,8 @@ App Server 호출은 기존 ChatGPT 구독 인증을 사용하므로 추가 API 
 `__PREREGISTRATION_FREEZE_COMMIT__`만 둔다. 그 template과 코드 전체를 커밋 F로
 만들고 annotated tag `prereg-v1`을 F에 붙인 뒤, 깨끗한 F worktree에서 아래 명령이
 실제 manifest를 생성한다. 도구는 lightweight tag, 이동한 HEAD, untracked template,
-기존 manifest 덮어쓰기를 모두 거부하고 생성 전에 `run_measurement.load_manifest`로
-전체 확증 grid를 검증한다.
+untracked isolation preflight, 기존 manifest 덮어쓰기를 모두 거부하고 생성 전에
+`run_measurement.load_manifest`로 전체 확증 grid를 검증한다.
 
     python3 finalize_measurement_manifest.py --template measurement-manifest.template.json --output measurement-manifest.json --tag prereg-v1
 

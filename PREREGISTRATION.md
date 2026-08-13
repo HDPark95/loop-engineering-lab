@@ -116,13 +116,16 @@ Task families:
   artifact and fully disclosed in the issue.
 
 The agent container mounts only the issue, public repository tests, and candidate
-artifact plus disposable authentication. The oracle contains held-out evaluation
-code, mounts the artifact read-only, and has no network. The frozen manifest
-records the preflight mount/network proof. S1 additionally refuses changes to
-tests or test infrastructure and runs the candidate only in the official
-network-disabled evaluation image. S3 retains an artifact canary. A boundary,
-canary, or reward-hacking guard failure invalidates the trajectory before
-outcome inspection.
+artifact plus disposable authentication. Held-out evaluation code stays in the
+trusted host process. Candidate functions are invoked in a separate read-only,
+network-disabled sandbox image that contains no oracle, task seed, answer key,
+or score function and mounts only a disposable candidate-and-runner directory.
+The frozen manifest pins that sandbox image and records the preflight
+mount/network proof. S1 additionally refuses changes to tests or test
+infrastructure and runs the candidate only in the official network-disabled
+evaluation image. S3 retains an artifact canary. A boundary, canary, or
+reward-hacking guard failure invalidates the trajectory before outcome
+inspection.
 
 S1 was selected before confirmatory execution from the fixed 261-instance
 screening frame. Eligibility required medium human difficulty, 8 through 100
@@ -709,3 +712,16 @@ apparatus validation and not confirmatory evidence.
   and exact descriptive break-even totals and additional allowances for tokens,
   API-equivalent dollars, and wall-clock hours. All use complete randomized
   blocks and intervals only; none adds a hypothesis or p-value family.
+- R22 (2026-08-13): removed the last floating executable dependency and closed
+  a pre-freeze isolation defect. The agent and candidate-sandbox Docker base
+  images are pinned by OCI digest and the two agent CLI package versions remain
+  exact. The former sandbox image copied `se_tasks`, which let an adversarial
+  candidate read held-out oracle source at an absolute `/oracle` path; the
+  relative-path probe did not test that route. The sandbox now contains no study
+  files, the probe covers absolute source paths, and the manifest-selected image
+  is resolved at invocation time rather than module import. No confirmatory run
+  had started. These changes affect apparatus validity, not the design or
+  outcome contract. The same audit found that S1 named its 261-instance
+  screening frame only by a private management-repository path. The complete
+  nonsensitive frame and an executable selection verifier are now public; they
+  reproduce the two eligible instances and the registered SHA-256 winner.

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import io
+import hashlib
 import subprocess
 import sys
 import tempfile
@@ -80,6 +81,23 @@ def write_manifest(directory: Path, data: dict) -> Path:
     return path
 
 
+def add_isolation_preflight(directory: Path, data: dict) -> dict:
+    image = data["candidate_sandbox_image"]
+    record = directory / "isolation-preflight.json"
+    payload = json.dumps(
+        {
+            "passed": True,
+            "sandbox_image_requested": image,
+            "sandbox_image_resolved": image,
+        },
+        sort_keys=True,
+    ).encode()
+    record.write_bytes(payload)
+    data["isolation_preflight_record"] = record.name
+    data["isolation_preflight_sha256"] = hashlib.sha256(payload).hexdigest()
+    return data
+
+
 def run_cli(manifest_path: Path, log_path: Path, run_id: str, *extra) -> subprocess.CompletedProcess:
     return subprocess.run(
         [
@@ -102,7 +120,7 @@ class ManifestGateTest(unittest.TestCase):
                 Path(tmp),
                 manifest(
                     apparatus_test=False,
-                    oracle_container_image="oracle@sha256:" + "b" * 64,
+                    candidate_sandbox_image="sandbox@sha256:" + "b" * 64,
                 ),
             )
             with self.assertRaises(SystemExit) as caught:
@@ -212,7 +230,7 @@ class ManifestGateTest(unittest.TestCase):
             data = manifest(
                 apparatus_test=False,
                 agents=[entry],
-                oracle_container_image="sha256:" + "b" * 64,
+                candidate_sandbox_image="sha256:" + "b" * 64,
                 artifact_archive_dir="artifacts",
             )
             path = write_manifest(Path(tmp), data)
@@ -238,6 +256,7 @@ class ManifestGateTest(unittest.TestCase):
                     },
                 ],
             )
+            add_isolation_preflight(Path(tmp), data)
             path = write_manifest(Path(tmp), data)
             loaded = run_measurement.load_manifest(path)
             self.assertEqual(loaded["agents"][0]["reasoning_effort"], "medium")
@@ -272,9 +291,10 @@ class ManifestGateTest(unittest.TestCase):
                 cells=[cell.name for cell in run_measurement.se_experiment.CELLS],
                 seeds=[11, 23, 37, 53, 71],
                 cycles=6,
-                oracle_container_image="sha256:" + "b" * 64,
+                candidate_sandbox_image="sha256:" + "b" * 64,
                 artifact_archive_dir="artifacts",
             )
+            add_isolation_preflight(Path(tmp), frozen)
             self.assertEqual(run_measurement.load_manifest(write_manifest(Path(tmp), frozen)), frozen)
 
             mutations = (
@@ -288,6 +308,12 @@ class ManifestGateTest(unittest.TestCase):
                 path = write_manifest(Path(tmp), frozen | override)
                 with self.assertRaises(SystemExit):
                     run_measurement.load_manifest(path)
+
+            (Path(tmp) / frozen["isolation_preflight_record"]).write_text(
+                "{}", encoding="utf-8"
+            )
+            with self.assertRaisesRegex(SystemExit, "digest"):
+                run_measurement.load_manifest(write_manifest(Path(tmp), frozen))
 
 
 class RunnerTest(unittest.TestCase):
