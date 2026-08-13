@@ -295,6 +295,17 @@ class AdapterTest(unittest.TestCase):
         self.assertIn("0.2", command)
         self.assertIn("--no-session-persistence", command)
 
+    def test_local_subscription_command_has_no_api_budget_flag(self):
+        command = agent_adapters.command_for(
+            "claude",
+            Path("/tmp/work"),
+            "sonnet",
+            0.2,
+            billing_mode="subscription",
+        )
+        self.assertNotIn("--max-budget-usd", command)
+        self.assertIn("--no-session-persistence", command)
+
     def test_container_command_exposes_only_workspace_and_auth(self):
         command = agent_adapters.container_command_for(
             "codex", Path("/tmp/work"), None, 0.2, "agent-image", Path("/tmp/auth.json")

@@ -527,7 +527,14 @@ def parse_claude_usage(stdout: str) -> Usage:
     )
 
 
-def command_for(agent: str, workspace: Path, model: str | None, max_budget_usd: float) -> list[str]:
+def command_for(
+    agent: str,
+    workspace: Path,
+    model: str | None,
+    max_budget_usd: float,
+    billing_mode: str = "unknown",
+) -> list[str]:
+    validate_billing_mode(billing_mode)
     if agent == "codex":
         command = [
             "codex",
@@ -554,11 +561,11 @@ def command_for(agent: str, workspace: Path, model: str | None, max_budget_usd: 
             "acceptEdits",
             "--allowedTools",
             "Read,Edit,Write,Bash(python3 -m unittest*)",
-            "--max-budget-usd",
-            str(max_budget_usd),
             "--output-format",
             "json",
         ]
+        if billing_mode != "subscription":
+            command.extend(["--max-budget-usd", str(max_budget_usd)])
         if model:
             command.extend(["--model", model])
         return [*command, PROMPT]
@@ -1150,7 +1157,13 @@ def _run_smoke_unlocked(
                 container_name=container_name,
             )
             if container_image
-            else command_for(agent, workspace, model, max_budget_usd)
+            else command_for(
+                agent,
+                workspace,
+                model,
+                max_budget_usd,
+                billing_mode=billing_mode,
+            )
         )
         credential_refresh_persisted = False
         timeout_error = None

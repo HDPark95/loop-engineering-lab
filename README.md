@@ -40,7 +40,7 @@ SE 장치 스모크 검증:
     python3 -m unittest -v test_agent_adapters.py
     python3 se_experiment.py --smoke-output results/se_smoke_matrix.json
     python3 agent_adapters.py --agent codex --task s1 --billing-mode subscription --container-image loop-eng-se-lab-agent:latest --auth-file "$CODEX_AUTH_FILE" --output results/codex_adapter_smoke.json
-    python3 agent_adapters.py --agent claude --task s1 --model sonnet --billing-mode subscription --container-image loop-eng-se-lab-agent:latest --auth-file "$CLAUDE_AUTH_FILE" --persist-refreshed-credentials --max-budget-usd 0.25 --output results/claude_adapter_smoke.json
+    python3 agent_adapters.py --agent claude --task s1 --model sonnet --billing-mode subscription --container-image loop-eng-se-lab-agent:latest --auth-file "$CLAUDE_AUTH_FILE" --persist-refreshed-credentials --output results/claude_adapter_smoke.json
 
 Claude 쿼터 리셋 뒤 두 번째 명령을 alias로 한 번 실행해 `model_served`에 기록된
 런타임 모델 ID를 찾고, 그 exact ID를 `--model`에 넣어 한 번 더 실행한다. 두 번째
@@ -56,7 +56,8 @@ JSONL로 남긴다. 한 분기라도 실패하거나 강제 종료로 block이 �
 시도를 tombstone 처리하고 네 분기를 모두 cycle 1부터 다시 실행한다. 구독 prompt 실행에서는
 `incremental_billed_usd`가 항상 0이며, 토큰 기반 API 환산액은 비교용 shadow
 telemetry다. 실제 달러 ceiling과 Claude CLI의 `--max-budget-usd`는
-`billing_mode=api`일 때만 작동한다. 다만 manifest의 trajectory별 shadow 추정치는
+`billing_mode=api`일 때만 작동하며 구독 명령에는 그 플래그를 전달하지 않는다.
+다만 manifest의 trajectory별 shadow 추정치는
 계측 이상을 조기에 탐지하는 보수적 무결성 guard로 사용되며 실제 결제나 API 전환을
 뜻하지 않는다.
 

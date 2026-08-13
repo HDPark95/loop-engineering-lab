@@ -902,3 +902,12 @@ apparatus validation and not confirmatory evidence.
   and verified. This removes a manual upload gap while keeping preregistration,
   preprint, and post-outcome records distinct. It changes release mechanics,
   not design, sample, outcomes, or inference. No confirmatory run had started.
+- R40 (2026-08-14): removed a dormant API-budget option from every subscription
+  smoke path before any Claude resource apparatus or confirmatory outcome. The
+  containerized measurement path already omitted Claude CLI's API-only
+  `--max-budget-usd`; the local adapter path and README example now do the same
+  whenever `billing_mode=subscription`. Tests require both local and
+  containerized subscription commands to omit the option. This aligns command
+  construction with the registered zero-incremental-billing prompt mode and
+  changes neither the shadow-cost telemetry nor tasks, treatments, sample,
+  outcomes, or inference. No confirmatory run had started.
