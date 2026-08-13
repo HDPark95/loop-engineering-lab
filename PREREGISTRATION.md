@@ -772,3 +772,12 @@ apparatus validation and not confirmatory evidence.
   each; the registered cap of three is an upper bound, not a promised occupancy.
   This changes execution continuity and throughput, not tasks, treatments,
   outcomes, or inference. No confirmatory run had started.
+- R26 (2026-08-13): added the complete confirmatory manifest template before
+  the Claude quota reset. Every design value already knowable is fixed in the
+  repository. Ten explicit runtime placeholders remain only for the exact
+  Claude model and its official price schedule, plus the conservative shadow
+  estimate from the registered pre-freeze apparatus trajectory. The finalizer
+  now refuses any unresolved runtime placeholder and tests the filled template
+  against the registered 160-trajectory, 960-row, 840-execution, two-writer-lane
+  contract. This changes freeze mechanics, not tasks, treatments, outcomes, or
+  inference. No confirmatory run had started.

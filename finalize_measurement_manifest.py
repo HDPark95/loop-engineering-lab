@@ -14,6 +14,31 @@ import run_measurement
 
 
 FREEZE_SENTINEL = "__PREREGISTRATION_FREEZE_COMMIT__"
+VALUE_SENTINEL_PREFIX = "__"
+
+
+def unresolved_value_sentinels(value: object, path: str = "$") -> list[str]:
+    """Return non-freeze template placeholders with stable JSON paths."""
+    if isinstance(value, dict):
+        return [
+            item
+            for key in sorted(value)
+            for item in unresolved_value_sentinels(value[key], f"{path}.{key}")
+        ]
+    if isinstance(value, list):
+        return [
+            item
+            for index, child in enumerate(value)
+            for item in unresolved_value_sentinels(child, f"{path}[{index}]")
+        ]
+    if (
+        isinstance(value, str)
+        and value != FREEZE_SENTINEL
+        and value.startswith(VALUE_SENTINEL_PREFIX)
+        and value.endswith(VALUE_SENTINEL_PREFIX)
+    ):
+        return [path]
+    return []
 
 
 def git(repo: Path, *arguments: str) -> str:
@@ -92,6 +117,11 @@ def main() -> int:
     git(repo, "ls-files", "--error-unmatch", str(relative_template))
 
     template = json.loads(template_path.read_text(encoding="utf-8"))
+    unresolved = unresolved_value_sentinels(template)
+    if unresolved:
+        raise RuntimeError(
+            "manifest template has unresolved runtime values: " + ", ".join(unresolved)
+        )
     preflight_record = template.get("isolation_preflight_record")
     if not isinstance(preflight_record, str) or not preflight_record.strip():
         raise RuntimeError("manifest template requires isolation_preflight_record")

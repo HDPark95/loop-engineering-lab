@@ -90,6 +90,11 @@ read와 요청별 long-context 구간을 직접 반영하며, 런타임이 cache
 소스 부재, network none, read-only root, uid 65534, Linux capability 0을 검사하며
 manifest가 파일 SHA-256와 image ID를 다시 대조한다.
 
+`measurement-manifest.template.json`에는 현재 고정할 수 있는 전체 확증 계약이 들어
+있다. `__...__` 값은 Claude exact model·공식 가격과 6-cycle apparatus 상한을 확인한
+뒤에만 채운다. finalizer는 이런 runtime placeholder가 하나라도 남으면 tag 결박 전에
+거부하고, `__PREREGISTRATION_FREEZE_COMMIT__`만 annotated tag의 commit으로 교체한다.
+
     python3 preflight_isolation.py --sandbox-image sha256:<image-id> --output preflight/sandbox-isolation.json
 
 Claude와 Codex의 구독 OAuth access token은 장시간 실행 중 갱신될 수 있다. 사용자
