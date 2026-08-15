@@ -551,6 +551,9 @@ class AdapterTest(unittest.TestCase):
                 )
             self.assertEqual(result["self_report"], report)
             self.assertEqual(result["model_served"], "claude-test-20260801")
+            self.assertEqual(
+                result["model_usage_breakdown"], {"claude-test-20260801": {}}
+            )
             self.assertEqual((result["input_tokens"], result["output_tokens"]), (30, 8))
             self.assertFalse((workspace / ".loop-verdict-schema.json").exists())
 

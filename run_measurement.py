@@ -1410,6 +1410,11 @@ def run_trajectory(
                     or ("runtime_cli_output" if outcome.get("model_served") else "unreported")
                 ),
                 "model_reroutes": outcome.get("model_reroutes", []),
+                # The agent CLI may bill its own scaffolding to a helper model.
+                # That overhead is constant across cells and does not confound
+                # the manipulation, but the confirmatory log must still say
+                # which models ran rather than name only the task model.
+                "model_usage_breakdown": outcome.get("model_usage_breakdown", {}),
                 "reasoning_effort_requested": agent_entry.get("reasoning_effort"),
                 "reasoning_effort_served": outcome.get("reasoning_effort_served"),
                 "reasoning_effort_matches": bool(
