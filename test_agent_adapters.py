@@ -476,6 +476,45 @@ class AdapterTest(unittest.TestCase):
             )
         )
 
+    def test_claude_auxiliary_model_does_not_erase_the_served_identity(self):
+        # The CLI bills its own scaffolding calls to a helper model, so a
+        # Claude run reports two models even when one model did the task.
+        with_helper = json.dumps({
+            "modelUsage": {
+                "claude-haiku-4-5-20251001": {"inputTokens": 519, "outputTokens": 11},
+                "claude-sonnet-5": {"inputTokens": 2, "outputTokens": 4448},
+            },
+        })
+        self.assertEqual(
+            agent_adapters.reported_model("claude", with_helper),
+            "claude-sonnet-5",
+        )
+        self.assertEqual(
+            sorted(agent_adapters.claude_model_usage(with_helper)),
+            ["claude-haiku-4-5-20251001", "claude-sonnet-5"],
+        )
+
+        # An ambiguous attribution must fail closed rather than guess.
+        tied = json.dumps({
+            "modelUsage": {
+                "claude-sonnet-5": {"outputTokens": 100},
+                "claude-opus-5": {"outputTokens": 100},
+            },
+        })
+        self.assertIsNone(agent_adapters.reported_model("claude", tied))
+
+        # An alias key never becomes the served identity.
+        aliased = json.dumps({
+            "modelUsage": {
+                "sonnet": {"outputTokens": 900},
+                "claude-sonnet-5": {"outputTokens": 10},
+            },
+        })
+        self.assertEqual(
+            agent_adapters.reported_model("claude", aliased),
+            "claude-sonnet-5",
+        )
+
     def test_measurement_cycle_retains_only_structured_output_and_usage(self):
         report = {"improved": False, "confidence": 0.7, "evidence": "tests still fail"}
         stdout = json.dumps({

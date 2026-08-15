@@ -705,6 +705,30 @@ def parse_claude_final_report(stdout: str) -> dict | None:
     return report if isinstance(report, dict) else None
 
 
+MODEL_ALIASES = {"sonnet", "opus", "haiku", "session-default", "default"}
+
+
+def claude_model_usage(stdout: str) -> dict[str, dict]:
+    """Return the full per-model usage map the Claude CLI reported.
+
+    The CLI bills auxiliary scaffolding calls to a second model, so this map
+    is the disclosure record: every model that ran, not only the one that did
+    the task. Callers must record it rather than collapse it.
+    """
+    try:
+        event = json.loads(stdout)
+    except json.JSONDecodeError:
+        return {}
+    model_usage = event.get("modelUsage")
+    if not isinstance(model_usage, dict):
+        return {}
+    return {
+        model: usage if isinstance(usage, dict) else {}
+        for model, usage in model_usage.items()
+        if isinstance(model, str)
+    }
+
+
 def reported_model(agent: str, stdout: str) -> str | None:
     """Return only a model identity explicitly reported by the CLI output."""
     if agent == "claude":
@@ -712,17 +736,30 @@ def reported_model(agent: str, stdout: str) -> str | None:
             event = json.loads(stdout)
         except json.JSONDecodeError:
             return None
-        model_usage = event.get("modelUsage") or {}
-        if isinstance(model_usage, dict) and len(model_usage) == 1:
-            model = next(iter(model_usage))
-            if isinstance(model, str) and model not in {
-                "sonnet", "opus", "haiku", "session-default", "default"
-            }:
-                return model
+        candidates = {
+            model: usage
+            for model, usage in claude_model_usage(stdout).items()
+            if model not in MODEL_ALIASES
+        }
+        if len(candidates) == 1:
+            return next(iter(candidates))
+        if candidates:
+            # The Claude CLI attributes auxiliary scaffolding calls to a
+            # helper model alongside the model that performed the task. The
+            # task model is the one that generated the completion, so attribute
+            # by generated output and refuse a tie.
+            ranked = sorted(
+                candidates.items(),
+                key=lambda item: int(item[1].get("outputTokens") or 0),
+                reverse=True,
+            )
+            top_tokens = int(ranked[0][1].get("outputTokens") or 0)
+            runner_up_tokens = int(ranked[1][1].get("outputTokens") or 0)
+            if top_tokens > runner_up_tokens:
+                return ranked[0][0]
+            return None
         direct = event.get("model")
-        if isinstance(direct, str) and direct not in {
-            "sonnet", "opus", "haiku", "session-default", "default"
-        }:
+        if isinstance(direct, str) and direct not in MODEL_ALIASES:
             return direct
         return None
 
@@ -940,6 +977,9 @@ def _run_measurement_cycle_unlocked(
         "self_report": report,
         "judge_verdict": None,
         "model_served": reported_model(agent, process.stdout),
+        "model_usage_breakdown": (
+            claude_model_usage(process.stdout) if agent == "claude" else {}
+        ),
         "model_identity_evidence": (
             protocol_event.get("model_identity_evidence")
             if protocol_event
@@ -1231,6 +1271,9 @@ def _run_smoke_unlocked(
             "agent": agent,
             "model_requested": model or "session-default",
             "model_served": model_served,
+            "model_usage_breakdown": (
+                claude_model_usage(process.stdout) if agent == "claude" else {}
+            ),
             "model_identity_evidence": (
                 "runtime_cli_output" if model_served else "unreported"
             ),
