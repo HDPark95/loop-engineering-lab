@@ -1,0 +1,64 @@
+{
+  "agent": "claude",
+  "baseline_score": 0.111111,
+  "candidate_changed": true,
+  "changed_files": [
+    "versioning.py"
+  ],
+  "cost": {
+    "agent_seconds": 14.050802,
+    "billing_mode": "subscription",
+    "cache_creation_1h_tokens": 1892,
+    "cache_creation_5m_tokens": 0,
+    "cache_creation_tokens": 1892,
+    "cache_tokens": 142368,
+    "cli_reported_usd": 0.06804439999999999,
+    "incremental_billed_usd": 0.0,
+    "input_tokens": 9,
+    "oracle_seconds": 1.65886,
+    "output_tokens": 887
+  },
+  "credential_leak_scan_passed": true,
+  "credential_refresh_persisted": false,
+  "execution": {
+    "api_error_status": null,
+    "error_kind": null,
+    "model_completed": true
+  },
+  "final_score": 1.0,
+  "isolation": "external Docker task-only mount",
+  "model_identity_evidence": "runtime_cli_output",
+  "model_requested": "claude-sonnet-5",
+  "model_served": "claude-sonnet-5",
+  "model_usage_breakdown": {
+    "claude-haiku-4-5-20251001": {
+      "cacheCreationInputTokens": 0,
+      "cacheReadInputTokens": 0,
+      "contextWindow": 200000,
+      "costUSD": 0.00065,
+      "inputTokens": 580,
+      "maxOutputTokens": 32000,
+      "outputTokens": 14,
+      "webSearchRequests": 0
+    },
+    "claude-sonnet-5": {
+      "cacheCreationInputTokens": 1892,
+      "cacheReadInputTokens": 142368,
+      "contextWindow": 1000000,
+      "costUSD": 0.0673944,
+      "inputTokens": 9,
+      "maxOutputTokens": 64000,
+      "outputTokens": 887,
+      "webSearchRequests": 0
+    }
+  },
+  "process_returncode": 0,
+  "public_tests": {
+    "passed": true,
+    "returncode": 0
+  },
+  "real_gain": 0.888889,
+  "schema_version": 2,
+  "status": "adapter smoke test; not a research result",
+  "task": "s1"
+}

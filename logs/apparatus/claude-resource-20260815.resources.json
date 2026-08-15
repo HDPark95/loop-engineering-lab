@@ -1,0 +1,22 @@
+{
+  "architecture": "x86_64",
+  "container_observations": 64,
+  "cpu_count": 8,
+  "docker_stats_failures": 0,
+  "elapsed_seconds": 409.353,
+  "finished_utc": "2026-08-15T10:30:33Z",
+  "host_memory_total_bytes": 33563029504,
+  "host_swap_total_bytes": 34359730176,
+  "minimum_host_memory_available_bytes": 22082400256,
+  "passed": true,
+  "peak_concurrent_containers": 1,
+  "peak_container_cpu_percent": 184.39,
+  "peak_host_load_1m": 9.682,
+  "peak_host_swap_used_bytes": 5984657408,
+  "peak_single_container_memory_bytes": 401604608,
+  "peak_total_container_memory_bytes": 401604608,
+  "samples": 122,
+  "schema_version": 1,
+  "started_utc": "2026-08-15T10:23:43Z",
+  "status": "apparatus resource observation; not a research result"
+}

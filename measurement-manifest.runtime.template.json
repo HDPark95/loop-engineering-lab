@@ -1,0 +1,79 @@
+{
+  "agents": [
+    {
+      "adapter": "codex",
+      "auth_file_env": "LOOP_CODEX_AUTH_FILE",
+      "cache_write_1h_input_multiplier": 1.25,
+      "cache_write_input_multiplier": 1.25,
+      "container_image": "sha256:f0c45bd79e2d84cad75ed512d95541d3b4ca2d88bbfe4d8e24aa4c09df8f175c",
+      "long_context_input_multiplier": 2.0,
+      "long_context_output_multiplier": 1.5,
+      "long_context_threshold_input_tokens": 272000,
+      "model": "gpt-5.6-terra",
+      "name": "codex",
+      "persist_refreshed_credentials": true,
+      "pricing_retrieved_utc": "2026-08-13T14:04:52Z",
+      "pricing_schedule_id": "openai-gpt-5.6-terra-standard-20260813",
+      "pricing_source_url": "https://developers.openai.com/api/docs/models/gpt-5.6-terra",
+      "reasoning_effort": "medium",
+      "timeout_seconds": 1200,
+      "usd_per_1k_cached_input": 0.00025,
+      "usd_per_1k_input": 0.0025,
+      "usd_per_1k_output": 0.015
+    },
+    {
+      "adapter": "claude",
+      "auth_file_env": "LOOP_CLAUDE_AUTH_FILE",
+      "cache_write_1h_input_multiplier": 2.0,
+      "cache_write_input_multiplier": 1.25,
+      "container_image": "sha256:f0c45bd79e2d84cad75ed512d95541d3b4ca2d88bbfe4d8e24aa4c09df8f175c",
+      "long_context_input_multiplier": 1.0,
+      "long_context_output_multiplier": 1.0,
+      "long_context_threshold_input_tokens": 1000000,
+      "model": "claude-sonnet-5",
+      "name": "claude",
+      "persist_refreshed_credentials": true,
+      "pricing_retrieved_utc": "2026-08-15T10:20:57Z",
+      "pricing_schedule_id": "anthropic-claude-sonnet-5-standard-20260815",
+      "pricing_source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "timeout_seconds": 1200,
+      "usd_per_1k_cached_input": 0.0002,
+      "usd_per_1k_input": 0.002,
+      "usd_per_1k_output": 0.01
+    }
+  ],
+  "apparatus_test": false,
+  "artifact_archive_dir": "artifacts/confirmatory",
+  "billing_mode": "subscription",
+  "candidate_sandbox_image": "sha256:c9358340c5e8feb75f59d0f744abfde745a393a56ed8de73fb6142856c3c5180",
+  "cell_schedule_seed": "ad8b6e46c10c24d5ada9c6797ce15deec26632b26dac14c173ec84ea1c30d369",
+  "cells": [
+    "grounded-numeric",
+    "grounded-sign",
+    "ungrounded-numeric",
+    "ungrounded-sign"
+  ],
+  "cycles": 6,
+  "estimated_api_equivalent_usd_per_trajectory": 57.0,
+  "execution_mode": "prompt",
+  "incremental_billed_usd": 0.0,
+  "isolation_preflight_record": "preflight/prereg-v1-candidate-sandbox.json",
+  "isolation_preflight_sha256": "ba5c80faec958f306c4e6b54b84bb318284c73a59dd39e4ba58f7434c4bcfa4c",
+  "max_concurrent_agents": 3,
+  "preregistration_commit": "__PREREGISTRATION_FREEZE_COMMIT__",
+  "quota_max_retries": 168,
+  "quota_wait_seconds": 3600,
+  "seeds": [
+    11,
+    23,
+    37,
+    53,
+    71
+  ],
+  "tasks": [
+    "s1_swebench",
+    "s3",
+    "g1",
+    "b1"
+  ]
+}

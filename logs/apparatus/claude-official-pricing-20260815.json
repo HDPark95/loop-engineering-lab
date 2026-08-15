@@ -1,0 +1,15 @@
+{
+  "cache_write_1h_input_multiplier": 2.0,
+  "cache_write_input_multiplier": 1.25,
+  "long_context_input_multiplier": 1.0,
+  "long_context_output_multiplier": 1.0,
+  "long_context_threshold_input_tokens": 1000000,
+  "model": "claude-sonnet-5",
+  "pricing_retrieved_utc": "2026-08-15T10:20:57Z",
+  "pricing_schedule_id": "anthropic-claude-sonnet-5-standard-20260815",
+  "pricing_source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
+  "schema_version": 1,
+  "usd_per_1k_cached_input": 0.0002,
+  "usd_per_1k_input": 0.002,
+  "usd_per_1k_output": 0.01
+}
