@@ -1422,3 +1422,28 @@ class ReplayTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class HostPathRedactionTest(unittest.TestCase):
+    def test_abandoned_error_text_carries_no_operator_path(self):
+        message = (
+            "CalledProcessError: Command '['/usr/bin/python3', "
+            f"'{run_measurement.ROOT}/se_tasks/s1_swebench/oracle.py', "
+            "'--candidate-dir', '/tmp/loop-eng-common-cycle-abc/baseline-def', "
+            "'--half', 'a']' returned non-zero exit status 1."
+        )
+        redacted = run_measurement.redact_host_paths(message)
+        self.assertNotIn(str(run_measurement.ROOT), redacted)
+        self.assertIn("<repo>/se_tasks/s1_swebench/oracle.py", redacted)
+        # The exception class and the failing arguments still identify the fault.
+        self.assertIn("CalledProcessError", redacted)
+        self.assertIn("non-zero exit status 1", redacted)
+        # A temp path is not operator-identifying and survives.
+        self.assertIn("/tmp/loop-eng-common-cycle-abc", redacted)
+
+    def test_home_paths_outside_the_repository_are_redacted(self):
+        for raw in ("/home/someone/checkout/file.py", "/Users/someone/checkout/file.py"):
+            self.assertEqual(
+                run_measurement.redact_host_paths(f"open {raw} failed"),
+                "open <redacted-path> failed",
+            )

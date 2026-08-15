@@ -41,6 +41,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import shutil
 import stat
 import sys
@@ -59,6 +60,18 @@ import zenodo_preregistration
 
 ROOT = Path(__file__).resolve().parent
 SCHEMA_VERSION = 6
+
+# Abandoning a trajectory is a normal, registered event, so its record is
+# published with the rest of the log. A raw exception carries the operator's
+# absolute paths, which name the checkout directory and the home account. Those
+# are host layout, not measurement, and they must not enter a public artifact.
+_HOME_PATH = re.compile(r"(?:/home|/Users)/[^/\s'\"]+(?:/[^\s'\"]*)?")
+
+
+def redact_host_paths(text: str) -> str:
+    """Replace operator-specific absolute paths in a message bound for the log."""
+    redacted = text.replace(str(ROOT), "<repo>")
+    return _HOME_PATH.sub("<redacted-path>", redacted)
 
 # Founder-approved lane rule: at most three agent processes at once. Quota or
 # rate-limit responses wait and retry; they never trigger a switch to API billing.
@@ -1888,7 +1901,9 @@ def main() -> int:
                         {
                             **exc.failure_record,
                             "abandoned": True,
-                            "error": f"{type(exc.cause).__name__}: {exc.cause}",
+                            "error": redact_host_paths(
+                                f"{type(exc.cause).__name__}: {exc.cause}"
+                            ),
                         }
                     )
                     print(f"abandoned {key.token()}: {type(exc.cause).__name__}", file=sys.stderr)
@@ -1907,7 +1922,7 @@ def main() -> int:
                             "trajectory": key.token(),
                             **key.as_dict(),
                             "abandoned": True,
-                            "error": f"{type(exc).__name__}: {exc}",
+                            "error": redact_host_paths(f"{type(exc).__name__}: {exc}"),
                             "wall_clock_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                             **(preregistration_publication or {}),
                         }
