@@ -940,3 +940,32 @@ apparatus validation and not confirmatory evidence.
   preserving the frozen meaning of every relative archive and preflight path.
   This changes storage safety, not design, sample, outcomes, or inference. No
   Claude resource apparatus or confirmatory run had started.
+- R44 (2026-08-15): corrected model attribution before any confirmatory outcome.
+  The adapter recognized a served model only when the run reported exactly one
+  model-usage entry, but Claude Code always invokes an auxiliary model beside
+  the primary one, so `model_served` was permanently null and the exact-model
+  freeze gate could never pass. Attribution now selects the entry with the most
+  output tokens, refuses a tie, and records every model that ran in the cycle
+  log rather than discarding the auxiliary one. This changes runtime
+  identification and disclosure, not design, sample, outcomes, or inference.
+  No confirmatory run had started.
+- R45 (2026-08-15): masked operator host paths in abandonment records before
+  any confirmatory outcome. Abandonment is a registered, expected event, and
+  its records embedded absolute host paths containing the organization name,
+  which the public-history audit forbids. Emitting them would have made the
+  replication package unpublishable after a single interrupted trajectory. This
+  changes log redaction, not design, sample, outcomes, or inference. No
+  confirmatory run had started.
+- R46 (2026-08-15): registered the post-outcome title rule before the freeze tag
+  and before any confirmatory outcome. The registered title is "The Progress
+  Mirage in Agentic Software Engineering: Does Evaluator Grounding Change What a
+  Coding Agent's Completion Gate Accepts on Repository Tasks?". If and only if
+  both primary tests B-H1a and B-H1b reject under Holm correction, the
+  interrogative subtitle may be restated in declarative form, with every other
+  word and the scope qualifier "on Repository Tasks" unchanged. Under every
+  other outcome pattern the interrogative title stands as registered. No other
+  title change is permitted once the first confirmatory cycle has started. A
+  paper about self-scoring illusion cannot select its own title after seeing
+  which framing sells best, so the rule is fixed here rather than justified
+  afterwards. This changes reporting discipline, not design, sample, outcomes,
+  or inference. No confirmatory run had started.
