@@ -8,13 +8,14 @@ It verifies the replay integrity contract, reduces each trajectory to registered
 outcomes, forms within-block grounded-versus-ungrounded contrasts, bootstraps
 whole blocks, and computes exact one-sided sign-flip p-values.
 
-    python3 analysis/fit_clustered.py --log results/confirmatory-cycles.jsonl
-    python3 analysis/fit_clustered.py --log results/confirmatory-cycles.jsonl --json
+    python3 analysis/fit_clustered.py --log results/confirmatory-cycles.jsonl \
+      --archive-root artifacts/confirmatory
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import random
 import statistics as st
@@ -23,9 +24,13 @@ from collections import defaultdict
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+ANALYSIS_ROOT = Path(__file__).resolve().parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+if str(ANALYSIS_ROOT) not in sys.path:
+    sys.path.insert(0, str(ANALYSIS_ROOT))
 
+import classify_reward_hacking  # noqa: E402
 import replay  # noqa: E402
 
 
@@ -67,6 +72,14 @@ DESCRIPTIVE_FIELDS = (
     "gain_per_incremental_billed_usd",
     "gain_per_wall_clock_hour",
 )
+
+
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def require_confirmatory_rows(rows: list[dict]) -> None:
@@ -509,11 +522,26 @@ def holm(pvalues: dict[str, float], alpha: float = ALPHA) -> dict[str, dict]:
     return {name: verdicts[name] for name in PRIMARY_TESTS}
 
 
-def analyze(log_path: Path) -> dict:
+def analyze(log_path: Path, archive_root: Path | None = None) -> dict:
+    source_log_sha256 = file_sha256(log_path)
     cycles, abandoned, unparsable = replay.load(log_path)
-    integrity = replay.integrity(cycles, abandoned, unparsable)
+    integrity = replay.integrity(
+        cycles,
+        abandoned,
+        unparsable,
+        archive_root=archive_root,
+        require_archive_files=True,
+    )
     if not integrity["clean"]:
         raise ValueError(f"replay integrity is not clean: {integrity}")
+    reward_hacking_audit = classify_reward_hacking.audit(log_path)
+    if not reward_hacking_audit["clean"]:
+        raise ValueError(
+            f"reward-hacking audit is not clean: {reward_hacking_audit}"
+        )
+    if file_sha256(log_path) != source_log_sha256:
+        raise ValueError("source log changed while confirmatory analysis was running")
+    integrity["source_log_stable"] = True
     grouped = replay.group_trajectories(cycles, abandoned)
     records = [trajectory_record(rows) for rows in grouped.values()]
     blocks = make_blocks(records)
@@ -523,12 +551,14 @@ def analyze(log_path: Path) -> dict:
         task_blocks[task].append(block)
 
     report = {
-        "schema_version": 2,
+        "schema_version": 3,
         "source_log": str(log_path),
+        "source_log_sha256": source_log_sha256,
         "analysis_unit": "task-agent-seed randomized block",
         "trajectories": len(records),
         "blocks": len(blocks),
         "integrity": integrity,
+        "reward_hacking_audit": reward_hacking_audit,
         "tasks": {},
         "primary_tests": {},
         "secondary_tests": {},
@@ -653,10 +683,11 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--log", type=Path, required=True)
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--archive-root", type=Path)
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
     try:
-        report = analyze(args.log)
+        report = analyze(args.log, archive_root=args.archive_root)
     except (OSError, ValueError) as exc:
         print(f"analysis refused: {exc}", file=sys.stderr)
         return 1

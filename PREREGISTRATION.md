@@ -470,14 +470,20 @@ are `11`, `23`, `37`, `53`, and `71`. Agent identities, immutable model
 versions, the exact `agent_adapters.measurement_prompt`, API-equivalent shadow
 price source, retrieval time, cache/read/write rates, long-context threshold
 and multipliers, and container digests are written into the run manifest immediately
-before freeze. A manifest-frozen `cell_schedule_seed` deterministically hash-ranks
-the four cells within every task-agent-seed block. The runner submits one branch
+before freeze. The `cell_schedule_seed` is
+`ad8b6e46c10c24d5ada9c6797ce15deec26632b26dac14c173ec84ea1c30d369`,
+the SHA-256 of the colon-delimited public PR #13 merge commit, successful
+isolation-preflight file digest, and literal domain separator `cell-order-v1`. It was fixed
+before any Claude apparatus or confirmatory outcome. This manifest-frozen seed
+deterministically hash-ranks the four cells within every task-agent-seed block. The runner submits one branch
 per block before any second branch, preventing a fixed treatment cell from always
 owning the earliest wall-clock position. The planned execution mode is authenticated
 subscription CLI prompting: incremental billed dollars are fixed at zero, while
 tokens, wall clock, plan-quota events, and API-price-equivalent shadow cost are
-recorded. Concurrency is capped at three and quota/rate-limit responses trigger
-automatic waiting rather than a billing-mode switch. A failed or unavailable
+recorded. Concurrency is capped at three; each subscription credential has one
+serialized writer lane, so Claude and Codex can run concurrently with one call
+each. Quota/rate-limit responses trigger automatic waiting rather than a
+billing-mode switch. A failed or unavailable
 agent is removed before freeze, never after its outcome is seen.
 
 ## 10. Exclusions and failure handling
@@ -746,3 +752,220 @@ apparatus validation and not confirmatory evidence.
   secret; any match invalidates the attempt, and replay requires the successful
   scan flag. No confirmatory run had started. This changes execution continuity
   and secret hygiene, not treatment, task, outcome, or inference.
+- R24 (2026-08-13): fixed the previously unspecified `cell_schedule_seed`
+  before any Claude apparatus or confirmatory outcome. The seed is derived by
+  SHA-256 from the already-public PR #13 merge commit, the successful
+  isolation-preflight record digest, and a literal domain separator. This
+  removes discretion over branch ordering without changing the registered
+  hash-ranking algorithm, cells, blocks, outcomes, or inference. The same
+  amendment added an aggregate-only resource monitor for the planned
+  pre-freeze apparatus trajectory; it reads Docker and host counters but no
+  model output, container content, environment, or command. No confirmatory run
+  had started.
+- R25 (2026-08-13): extended serialized subscription-credential continuity to
+  Codex before freeze. The inspected ChatGPT access token expires during the
+  possible measurement window; discarding every disposable refresh could
+  strand a resumed run on expired state. Codex now has one writer lane, and
+  only a rotation that preserves the account ID and schema while advancing the
+  access-token expiry and refresh timestamp is written atomically to its
+  runner-owned mode-0600 file. Both agents still run concurrently with one lane
+  each; the registered cap of three is an upper bound, not a promised occupancy.
+  This changes execution continuity and throughput, not tasks, treatments,
+  outcomes, or inference. No confirmatory run had started.
+- R26 (2026-08-13): added the complete confirmatory manifest template before
+  the Claude quota reset. Every design value already knowable is fixed in the
+  repository. Ten explicit runtime placeholders remain only for the exact
+  Claude model and its official price schedule, plus the conservative shadow
+  estimate from the registered pre-freeze apparatus trajectory. The finalizer
+  now refuses any unresolved runtime placeholder and tests the filled template
+  against the registered 160-trajectory, 960-row, 840-execution, two-writer-lane
+  contract. This changes freeze mechanics, not tasks, treatments, outcomes, or
+  inference. No confirmatory run had started.
+- R27 (2026-08-13): extended the frozen subscription-quota wait horizon from
+  two five-minute retries to 168 hourly retries. With one writer lane per
+  agent, an exhausted subscription now holds only that agent's lane through a
+  possible weekly reset while the other agent continues. This prevents a short
+  retry window from serially abandoning every already-queued block; it never
+  changes billing mode or invokes an API key. Tests require at least a full
+  seven-day horizon. This changes failure handling and elapsed time, not tasks,
+  treatments, outcomes, or inference. No confirmatory run had started.
+- R28 (2026-08-13): added the pre-freeze Claude resource-apparatus manifest
+  template. Its task, cell, seed, six-cycle horizon, images, credential-write
+  contract, archive, timeout, and quota handling are fixed; only the runtime
+  exact model and its official base input/output shadow rates remain explicit
+  placeholders. A test rejects any additional unresolved value and validates a
+  filled copy as apparatus-only. This changes preparation mechanics, not the
+  confirmatory sample, outcomes, or inference. No confirmatory run had started.
+- R29 (2026-08-13): closed the analysis-to-submission provenance chain before
+  freeze. The confirmatory analysis now reruns both replay integrity and the
+  nested reward-hacking audit on its input log, refuses either unclean result,
+  and records that log's SHA-256 with the complete audit. The manuscript
+  renderer and final submission manifest require and propagate this digest in
+  addition to the analysis and generated-output digests. This changes artifact
+  validation and provenance, not the design, sample, outcomes, or inference.
+  No confirmatory run had started.
+- R30 (2026-08-13): made the provenance chain use stable file snapshots before
+  freeze. Confirmatory inference hashes the cycle log before replay and audit,
+  hashes it again before producing output, and refuses a changed file. The
+  downstream renderer reads one immutable analysis byte snapshot for both JSON
+  interpretation and its recorded digest. This closes a concurrent-append race
+  without changing any design, outcome, or inferential rule. No confirmatory
+  run had started.
+- R31 (2026-08-13): corrected archive verification before freeze. A digest in a
+  cycle row previously proved that an archive had been written but replay did
+  not re-open the retained files, so later deletion or corruption could escape
+  the stated missing-archive gate. Confirmatory replay and inference now require
+  the archive root and verify each referenced canonical manifest plus every
+  content-addressed object's safe path, size, and SHA-256. This enforces the
+  already registered retention rule without changing the design, outcome, or
+  inference. No confirmatory run had started.
+- R32 (2026-08-13): made standalone replay and reward-hacking reports bind the
+  same stable raw-log snapshot as confirmatory inference. Each records the
+  source log SHA-256, rehashes after reading, and cannot report clean if the log
+  changed. Analysis schema 3 and the manuscript renderer require these newer
+  provenance fields. This changes report validation, not the design, outcome,
+  or inference. No confirmatory run had started.
+- R33 (2026-08-13): added deterministic final replication packaging before
+  freeze. The builder revalidates the preregistration tag, manifest, preflight,
+  stable raw log, standalone replay and audit, registered analysis, and all
+  referenced candidate bytes before emitting checksummed source and candidate
+  archives plus Zenodo metadata. It includes only objects referenced by the
+  append-only log and never overwrites an existing release directory. This
+  changes release mechanics, not the design, outcome, or inference. No
+  confirmatory run had started.
+- R34 (2026-08-14): made model-identity smoke evidence append-only before
+  freeze. The adapter CLI now creates its JSON output exclusively, fsyncs it,
+  and refuses an existing path, so a repeated alias or exact-ID probe cannot
+  silently replace the first runtime record. A retry must use a new explicit
+  filename. This changes evidence retention, not the design, outcome, or
+  inference. No confirmatory run had started.
+- R35 (2026-08-14): fixed the trajectory-level shadow-usage guard before the
+  Claude resource apparatus or any confirmatory outcome. A new preparation
+  tool accepts only successful, append-only alias and exact-model smoke
+  evidence for the same immutable model and an exact official pricing record.
+  After the registered six-cycle Claude apparatus, it deterministically sets
+  the guard to the ceiling of the largest of USD 20, four times the Claude
+  all-requests-long-context repricing, and four times a conservative
+  all-long-context transformation of the existing Codex six-cycle reference
+  whose log SHA-256 is
+  `7f53d641513bc17348780d65d70655f60d3bcb70e34627106ed18d79624b4934`.
+  It records every input digest, including a clean single-lane aggregate
+  resource observation that encloses the apparatus log, and refuses incomplete
+  token telemetry, mismatched pricing, invalid manifests, resource-monitor
+  failures, or existing outputs. This value is an
+  anomaly guard for API-equivalent shadow telemetry: subscription prompt mode
+  still records zero incremental billed cost and never converts to API billing.
+  This removes post-apparatus discretion over a safety threshold without
+  changing tasks, treatments, sample, outcomes, or inference. No confirmatory
+  run had started.
+- R36 (2026-08-14): added deterministic pre-outcome external-timestamp
+  packaging before freeze. After the annotated `prereg-v1` tag is created and
+  its commit is bound into the measurement manifest, a fail-closed builder
+  requires HEAD and every runtime input to match that tag. It rechecks the
+  runtime evidence digests, exact manifest binding, and isolation preflight,
+  then emits a single deterministic ZIP containing the tagged source, frozen
+  manifest, model and pricing probes, resource apparatus, and checksums. This
+  package must be published as a distinct public Zenodo record before the first
+  confirmatory cycle, giving the frozen design an external timestamp. The
+  post-outcome replication package remains a separate record. This changes
+  timestamp and release mechanics, not design, sample, outcomes, or inference.
+  No confirmatory run had started.
+- R37 (2026-08-14): made the external-timestamp publication path fail closed
+  before any confirmatory outcome. A dedicated Zenodo InvenioRDM client
+  converts the frozen metadata, reserves a version DOI, uploads exactly the
+  deterministic preregistration ZIP, and verifies its size and checksum. It
+  requires an explicit production confirmation to create a draft and requires
+  both the exact record ID and frozen ZIP SHA-256 before the irreversible
+  publish action. After publication it retrieves the public record and
+  redownloads the ZIP, emitting timestamp evidence only when the reserved DOI,
+  public status, file metadata, and SHA-256 all match. The first non-plan cycle
+  remains forbidden until this public verification succeeds. This changes
+  timestamp publication and verification mechanics, not design, sample,
+  outcomes, or inference. No confirmatory run had started.
+- R38 (2026-08-14): closed the runner-side enforcement gap in R37 before any
+  confirmatory outcome. A non-plan confirmatory command now refuses to create
+  a log unless it receives both the verified public-record evidence and the
+  exact preregistration ZIP. It checks the public DOI and URLs, evidence and
+  ZIP digests, verification UTC, and the ZIP-internal preregistration commit
+  and measurement-manifest digest. Schema-six cycle and abandonment rows carry
+  that external-record identity and provenance, replay rejects missing or
+  mixed publication fields, and the final replication builder revalidates and
+  includes the public evidence. This changes timestamp enforcement and
+  provenance, not design, sample, outcomes, or inference. No confirmatory run
+  had started.
+- R39 (2026-08-14): extended the same fail-closed release client to the
+  post-outcome replication record before any confirmatory outcome. The local
+  preparation selects a distinct record role, status, metadata, and final
+  confirmatory ZIP. Draft creation still requires explicit production
+  confirmation; publication still requires the exact reserved record ID and
+  final ZIP SHA-256, and succeeds only after the public file is redownloaded
+  and verified. This removes a manual upload gap while keeping preregistration,
+  preprint, and post-outcome records distinct. It changes release mechanics,
+  not design, sample, outcomes, or inference. No confirmatory run had started.
+- R40 (2026-08-14): removed a dormant API-budget option from every subscription
+  smoke path before any Claude resource apparatus or confirmatory outcome. The
+  containerized measurement path already omitted Claude CLI's API-only
+  `--max-budget-usd`; the local adapter path and README example now do the same
+  whenever `billing_mode=subscription`. Tests require both local and
+  containerized subscription commands to omit the option. This aligns command
+  construction with the registered zero-incremental-billing prompt mode and
+  changes neither the shadow-cost telemetry nor tasks, treatments, sample,
+  outcomes, or inference. No confirmatory run had started.
+- R41 (2026-08-14): automated the repeated public-history safety audit before
+  freeze. A clean-clone command now scans the current tree, commit metadata,
+  and every unique blob-path pair reachable from HEAD for the documented
+  organization/product names, local user paths, and credential formats. It
+  allows only the two previously reviewed provenance blobs, bound by exact Git
+  object ID, path, pattern, and occurrence count; reintroducing either blob in
+  the current tree still fails. A missing exception also fails so history
+  rewriting cannot silently invalidate the audit contract. This changes release
+  validation, not design, sample, outcomes, or inference. No confirmatory run
+  had started.
+- R42 (2026-08-14): bound the public-history audit into the externally
+  timestamped preregistration bundle before any Claude resource apparatus or
+  confirmatory outcome. The bundle builder reruns the audit at the annotated
+  tag target and includes a checksummed JSON report containing that commit,
+  scan counts, the exact reviewed exceptions, and zero unexpected findings.
+  The public-publication gate reopens the ZIP and verifies the report's bytes,
+  SHA-256, tagged commit, status, and zero-finding claim before allowing the
+  first confirmatory cycle. This changes provenance validation, not design,
+  sample, outcomes, or inference. No confirmatory run had started.
+- R43 (2026-08-14): corrected the pre-freeze Claude resource-apparatus archive
+  path before that apparatus or any confirmatory outcome. Its template had one
+  excess parent traversal, unlike the existing apparatus manifests, and would
+  have placed candidate snapshots outside the public repository. The path now
+  resolves to `artifacts/apparatus/claude-resource-20260815` inside the
+  repository. Runtime preparation also refuses to emit either apparatus or
+  confirmatory templates into a different directory from its source template,
+  preserving the frozen meaning of every relative archive and preflight path.
+  This changes storage safety, not design, sample, outcomes, or inference. No
+  Claude resource apparatus or confirmatory run had started.
+- R44 (2026-08-15): corrected model attribution before any confirmatory outcome.
+  The adapter recognized a served model only when the run reported exactly one
+  model-usage entry, but Claude Code always invokes an auxiliary model beside
+  the primary one, so `model_served` was permanently null and the exact-model
+  freeze gate could never pass. Attribution now selects the entry with the most
+  output tokens, refuses a tie, and records every model that ran in the cycle
+  log rather than discarding the auxiliary one. This changes runtime
+  identification and disclosure, not design, sample, outcomes, or inference.
+  No confirmatory run had started.
+- R45 (2026-08-15): masked operator host paths in abandonment records before
+  any confirmatory outcome. Abandonment is a registered, expected event, and
+  its records embedded absolute host paths containing the organization name,
+  which the public-history audit forbids. Emitting them would have made the
+  replication package unpublishable after a single interrupted trajectory. This
+  changes log redaction, not design, sample, outcomes, or inference. No
+  confirmatory run had started.
+- R46 (2026-08-15): registered the post-outcome title rule before the freeze tag
+  and before any confirmatory outcome. The registered title is "The Progress
+  Mirage in Agentic Software Engineering: Does Evaluator Grounding Change What a
+  Coding Agent's Completion Gate Accepts on Repository Tasks?". If and only if
+  both primary tests B-H1a and B-H1b reject under Holm correction, the
+  interrogative subtitle may be restated in declarative form, with every other
+  word and the scope qualifier "on Repository Tasks" unchanged. Under every
+  other outcome pattern the interrogative title stands as registered. No other
+  title change is permitted once the first confirmatory cycle has started. A
+  paper about self-scoring illusion cannot select its own title after seeing
+  which framing sells best, so the rule is fixed here rather than justified
+  afterwards. This changes reporting discipline, not design, sample, outcomes,
+  or inference. No confirmatory run had started.

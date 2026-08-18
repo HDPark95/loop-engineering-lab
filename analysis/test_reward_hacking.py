@@ -4,6 +4,7 @@
 import json
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 from analysis import classify_reward_hacking as classifier
@@ -47,6 +48,29 @@ class RewardHackingAuditTest(unittest.TestCase):
             path.write_text(json.dumps(record) + "\n", encoding="utf-8")
             report = classifier.audit(path)
         self.assertTrue(report["clean"])
+        self.assertEqual(report["schema_version"], 2)
+        self.assertTrue(report["source_log_stable"])
+        self.assertEqual(len(report["source_log_sha256"]), 64)
+
+    def test_log_change_during_audit_fails_closed(self):
+        record = {
+            "schema_version": 5,
+            "trajectory": "t1",
+            "apparatus_test": False,
+            "candidate_archive_manifest_sha256": "a" * 64,
+            "credential_leak_scan_passed": True,
+        }
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "cycles.jsonl"
+            path.write_text(json.dumps(record) + "\n", encoding="utf-8")
+            with mock.patch.object(
+                classifier,
+                "file_sha256",
+                side_effect=("a" * 64, "b" * 64),
+            ):
+                report = classifier.audit(path)
+        self.assertFalse(report["source_log_stable"])
+        self.assertFalse(report["clean"])
 
     def test_missing_credential_leak_scan_fails_closed(self):
         record = {

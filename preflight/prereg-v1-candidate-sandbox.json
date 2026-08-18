@@ -1,0 +1,28 @@
+{
+  "failures": [],
+  "generated_utc": "2026-08-13T13:14:27Z",
+  "host": {
+    "architecture": "x86_64",
+    "cpu_count": 8,
+    "docker_server_version": "29.1.3",
+    "memory_bytes": 33563029504
+  },
+  "passed": true,
+  "probe": {
+    "effective_capabilities_hex": "0000000000000000",
+    "effective_uid": 65534,
+    "network_connected": false,
+    "network_error": "OSError",
+    "network_interfaces": [
+      "lo"
+    ],
+    "readable_oracle_paths": [],
+    "root_mount_read_only": true,
+    "rootfs_write_error": "OSError",
+    "rootfs_write_succeeded": false
+  },
+  "sandbox_image_requested": "sha256:c9358340c5e8feb75f59d0f744abfde745a393a56ed8de73fb6142856c3c5180",
+  "sandbox_image_resolved": "sha256:c9358340c5e8feb75f59d0f744abfde745a393a56ed8de73fb6142856c3c5180",
+  "schema_version": 1,
+  "status": "candidate sandbox isolation preflight; not a research result"
+}

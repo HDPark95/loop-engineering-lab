@@ -1,0 +1,20 @@
+{
+  "alias_smoke_sha256": "4c6dc2433bdda5ca98e3a38c1702cae8b12be2d053047470c9bb3ac2169a47c5",
+  "claude_all_long_context_upper_usd": 0.851816,
+  "claude_apparatus_log_sha256": "e5f85723e5e775e82c39c09d630fb982212babe812ea48bf44d39b12651ad147",
+  "claude_apparatus_manifest_digest": "3605d625f797bb167826765b5d7cefe6ab71730cb565394f8a3ac734c8a43fd6",
+  "claude_apparatus_manifest_sha256": "b3274042f605e4ed8fc229b6bc0f3715d47319d95838b51cfcf7cfdaafe5f934",
+  "claude_apparatus_resources_sha256": "c5375332bfab1b111aef8e6da9b35ca1da3cfc15dd213ac22a5564ee17370f75",
+  "codex_all_long_context_upper_usd": 14.075928,
+  "codex_base_to_all_long_context_factor": 2.5,
+  "codex_reference_log_sha256": "7f53d641513bc17348780d65d70655f60d3bcb70e34627106ed18d79624b4934",
+  "estimated_api_equivalent_usd_per_trajectory": 57.0,
+  "exact_claude_model": "claude-sonnet-5",
+  "exact_smoke_sha256": "1e3603ca700eb1f006a9876e434a34e74d33372fec86bacc4c65639925f8cff2",
+  "filled_template_sha256": "2b64bfb8b4a84ec4f4b290ccd3e66fbdbcee8b8a461b72ea2cdb9bf5dcc3b764",
+  "formula": "ceil(max(minimum, safety*claude_all_long_upper, safety*codex_all_long_upper))",
+  "minimum_shadow_usd": 20.0,
+  "pricing_record_sha256": "f6021c1b9249d2705ffeaf68d644a40ce2d6519613f083ad1c9f0cfc2796159b",
+  "safety_factor": 4.0,
+  "schema_version": 1
+}

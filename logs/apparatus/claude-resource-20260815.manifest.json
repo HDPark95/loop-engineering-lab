@@ -1,0 +1,37 @@
+{
+  "agents": [
+    {
+      "adapter": "claude",
+      "auth_file_env": "LOOP_CLAUDE_AUTH_FILE",
+      "container_image": "sha256:f0c45bd79e2d84cad75ed512d95541d3b4ca2d88bbfe4d8e24aa4c09df8f175c",
+      "model": "claude-sonnet-5",
+      "name": "claude",
+      "persist_refreshed_credentials": true,
+      "timeout_seconds": 1200,
+      "usd_per_1k_input": 0.002,
+      "usd_per_1k_output": 0.01
+    }
+  ],
+  "apparatus_test": true,
+  "artifact_archive_dir": "../../artifacts/apparatus/claude-resource-20260815",
+  "billing_mode": "subscription",
+  "candidate_sandbox_image": "sha256:c9358340c5e8feb75f59d0f744abfde745a393a56ed8de73fb6142856c3c5180",
+  "cell_schedule_seed": "apparatus-claude-resource-20260815",
+  "cells": [
+    "grounded-numeric"
+  ],
+  "cycles": 6,
+  "estimated_api_equivalent_usd_per_trajectory": 20.0,
+  "execution_mode": "prompt",
+  "incremental_billed_usd": 0.0,
+  "max_concurrent_agents": 1,
+  "preregistration_commit": "879f3a5f4d50b29e4fb32d844f5c53f9f9778c96",
+  "quota_max_retries": 168,
+  "quota_wait_seconds": 3600,
+  "seeds": [
+    11
+  ],
+  "tasks": [
+    "s1_swebench"
+  ]
+}

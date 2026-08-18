@@ -10,7 +10,9 @@ smokes are apparatus checks, not confirmatory observations.
 from __future__ import annotations
 
 import argparse
+import base64
 from contextlib import nullcontext
+from datetime import datetime
 import hashlib
 import json
 import os
@@ -27,6 +29,7 @@ import se_experiment
 APP_SERVER_CLIENT_SOURCE = Path(__file__).resolve().parent / "codex_app_server_client.py"
 DOCKER_CLEANUP_TIMEOUT_SECONDS = 5
 CLAUDE_CREDENTIAL_LOCK = threading.Lock()
+CODEX_CREDENTIAL_LOCK = threading.Lock()
 SECRET_KEY_MARKERS = ("token", "api_key", "apikey", "secret")
 SANITIZED_CLAUDE_STATE = {
     "hasCompletedOnboarding": True,
@@ -124,6 +127,58 @@ def _claude_oauth(document: dict) -> dict:
             "authentication",
         )
     return oauth
+
+
+def _parse_utc_timestamp(value: object, field: str) -> datetime:
+    if not isinstance(value, str) or not value:
+        raise AgentInvocationError(f"authentication state has invalid {field}", "authentication")
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise AgentInvocationError(
+            f"authentication state has invalid {field}", "authentication"
+        ) from exc
+    if parsed.tzinfo is None:
+        raise AgentInvocationError(f"authentication state has invalid {field}", "authentication")
+    return parsed
+
+
+def _jwt_expiry(token: object) -> int:
+    if not isinstance(token, str) or token.count(".") != 2:
+        raise AgentInvocationError("Codex access token is not a JWT", "authentication")
+    payload = token.split(".")[1]
+    try:
+        decoded = base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4))
+        claims = json.loads(decoded)
+    except (ValueError, json.JSONDecodeError) as exc:
+        raise AgentInvocationError(
+            "Codex access token has invalid JWT claims", "authentication"
+        ) from exc
+    expiry = claims.get("exp") if isinstance(claims, dict) else None
+    if not isinstance(expiry, int) or isinstance(expiry, bool) or expiry <= 0:
+        raise AgentInvocationError(
+            "Codex access token has invalid expiry", "authentication"
+        )
+    return expiry
+
+
+def _codex_chatgpt(document: dict) -> dict:
+    if document.get("auth_mode") != "chatgpt":
+        raise AgentInvocationError(
+            "Codex authentication state is not ChatGPT subscription auth",
+            "authentication",
+        )
+    tokens = document.get("tokens")
+    if not isinstance(tokens, dict):
+        raise AgentInvocationError("Codex authentication state has no tokens", "authentication")
+    for field in ("access_token", "refresh_token", "id_token", "account_id"):
+        if not isinstance(tokens.get(field), str) or not tokens[field]:
+            raise AgentInvocationError(
+                f"Codex authentication state has invalid {field}", "authentication"
+            )
+    _jwt_expiry(tokens["access_token"])
+    _parse_utc_timestamp(document.get("last_refresh"), "last_refresh")
+    return tokens
 
 
 def credential_secret_values(document: dict) -> tuple[str, ...]:
@@ -277,6 +332,69 @@ def persist_refreshed_claude_credentials(
     return True
 
 
+def persist_refreshed_codex_credentials(
+    source: Path,
+    disposable_copy: Path,
+    before_document: dict,
+) -> bool:
+    """Persist only a structurally valid ChatGPT OAuth rotation from Codex."""
+    before = _codex_chatgpt(before_document)
+    after_document = _read_private_json(disposable_copy)
+    after = _codex_chatgpt(after_document)
+    if after_document == before_document:
+        return False
+
+    if set(after_document) != set(before_document) or any(
+        after_document[field] != before_document[field]
+        for field in set(before_document) - {"tokens", "last_refresh"}
+    ):
+        raise AgentInvocationError(
+            "Codex credential refresh changed account metadata or schema",
+            "authentication",
+        )
+    if set(after) != set(before) or after["account_id"] != before["account_id"]:
+        raise AgentInvocationError(
+            "Codex credential refresh changed account metadata or schema",
+            "authentication",
+        )
+    if after["access_token"] == before["access_token"]:
+        raise AgentInvocationError(
+            "Codex credential state changed without a new access token",
+            "authentication",
+        )
+    if _jwt_expiry(after["access_token"]) <= _jwt_expiry(before["access_token"]):
+        raise AgentInvocationError(
+            "Codex credential refresh did not advance token expiry",
+            "authentication",
+        )
+    if _parse_utc_timestamp(
+        after_document["last_refresh"], "last_refresh"
+    ) <= _parse_utc_timestamp(before_document["last_refresh"], "last_refresh"):
+        raise AgentInvocationError(
+            "Codex credential refresh did not advance refresh time",
+            "authentication",
+        )
+
+    current_document = _read_private_json(source)
+    current = _codex_chatgpt(current_document)
+    if current_document != before_document:
+        if current_document == after_document:
+            return True
+        raise AgentInvocationError(
+            "Codex credential source changed during a serialized invocation",
+            "authentication",
+        )
+    if current != before:
+        raise AgentInvocationError(
+            "Codex credential source changed during a serialized invocation",
+            "authentication",
+        )
+    current_document["tokens"] = after
+    current_document["last_refresh"] = after_document["last_refresh"]
+    _atomic_private_json_write(source, current_document)
+    return True
+
+
 def _bounded_docker_cleanup(container_name: str) -> None:
     """Best-effort cleanup that cannot replace or delay the timeout error."""
     try:
@@ -409,7 +527,14 @@ def parse_claude_usage(stdout: str) -> Usage:
     )
 
 
-def command_for(agent: str, workspace: Path, model: str | None, max_budget_usd: float) -> list[str]:
+def command_for(
+    agent: str,
+    workspace: Path,
+    model: str | None,
+    max_budget_usd: float,
+    billing_mode: str = "unknown",
+) -> list[str]:
+    validate_billing_mode(billing_mode)
     if agent == "codex":
         command = [
             "codex",
@@ -436,11 +561,11 @@ def command_for(agent: str, workspace: Path, model: str | None, max_budget_usd: 
             "acceptEdits",
             "--allowedTools",
             "Read,Edit,Write,Bash(python3 -m unittest*)",
-            "--max-budget-usd",
-            str(max_budget_usd),
             "--output-format",
             "json",
         ]
+        if billing_mode != "subscription":
+            command.extend(["--max-budget-usd", str(max_budget_usd)])
         if model:
             command.extend(["--model", model])
         return [*command, PROMPT]
@@ -580,6 +705,30 @@ def parse_claude_final_report(stdout: str) -> dict | None:
     return report if isinstance(report, dict) else None
 
 
+MODEL_ALIASES = {"sonnet", "opus", "haiku", "session-default", "default"}
+
+
+def claude_model_usage(stdout: str) -> dict[str, dict]:
+    """Return the full per-model usage map the Claude CLI reported.
+
+    The CLI bills auxiliary scaffolding calls to a second model, so this map
+    is the disclosure record: every model that ran, not only the one that did
+    the task. Callers must record it rather than collapse it.
+    """
+    try:
+        event = json.loads(stdout)
+    except json.JSONDecodeError:
+        return {}
+    model_usage = event.get("modelUsage")
+    if not isinstance(model_usage, dict):
+        return {}
+    return {
+        model: usage if isinstance(usage, dict) else {}
+        for model, usage in model_usage.items()
+        if isinstance(model, str)
+    }
+
+
 def reported_model(agent: str, stdout: str) -> str | None:
     """Return only a model identity explicitly reported by the CLI output."""
     if agent == "claude":
@@ -587,17 +736,30 @@ def reported_model(agent: str, stdout: str) -> str | None:
             event = json.loads(stdout)
         except json.JSONDecodeError:
             return None
-        model_usage = event.get("modelUsage") or {}
-        if isinstance(model_usage, dict) and len(model_usage) == 1:
-            model = next(iter(model_usage))
-            if isinstance(model, str) and model not in {
-                "sonnet", "opus", "haiku", "session-default", "default"
-            }:
-                return model
+        candidates = {
+            model: usage
+            for model, usage in claude_model_usage(stdout).items()
+            if model not in MODEL_ALIASES
+        }
+        if len(candidates) == 1:
+            return next(iter(candidates))
+        if candidates:
+            # The Claude CLI attributes auxiliary scaffolding calls to a
+            # helper model alongside the model that performed the task. The
+            # task model is the one that generated the completion, so attribute
+            # by generated output and refuse a tie.
+            ranked = sorted(
+                candidates.items(),
+                key=lambda item: int(item[1].get("outputTokens") or 0),
+                reverse=True,
+            )
+            top_tokens = int(ranked[0][1].get("outputTokens") or 0)
+            runner_up_tokens = int(ranked[1][1].get("outputTokens") or 0)
+            if top_tokens > runner_up_tokens:
+                return ranked[0][0]
+            return None
         direct = event.get("model")
-        if isinstance(direct, str) and direct not in {
-            "sonnet", "opus", "haiku", "session-default", "default"
-        }:
+        if isinstance(direct, str) and direct not in MODEL_ALIASES:
             return direct
         return None
 
@@ -654,9 +816,12 @@ def _run_measurement_cycle_unlocked(
     credential_document = _read_private_json(auth_file)
     credential_secrets = credential_secret_values(credential_document)
     credential_before = None
-    if agent == "claude" and persist_refreshed_credentials:
+    if persist_refreshed_credentials:
         credential_before = credential_document
-        _claude_oauth(credential_before)
+        if agent == "claude":
+            _claude_oauth(credential_before)
+        else:
+            _codex_chatgpt(credential_before)
 
     schema_path = workspace / ".loop-verdict-schema.json"
     schema_path.write_text(json.dumps(VERDICT_SCHEMA, separators=(",", ":")), encoding="utf-8")
@@ -707,10 +872,13 @@ def _run_measurement_cycle_unlocked(
                 timeout_error = exc
             finally:
                 if credential_before is not None:
-                    credential_refresh_persisted = persist_refreshed_claude_credentials(
-                        auth_file,
-                        auth_copy,
-                        credential_before,
+                    persister = (
+                        persist_refreshed_claude_credentials
+                        if agent == "claude"
+                        else persist_refreshed_codex_credentials
+                    )
+                    credential_refresh_persisted = persister(
+                        auth_file, auth_copy, credential_before
                     )
                 credential_after = _read_private_json(auth_copy)
                 credential_secrets = tuple(
@@ -809,6 +977,9 @@ def _run_measurement_cycle_unlocked(
         "self_report": report,
         "judge_verdict": None,
         "model_served": reported_model(agent, process.stdout),
+        "model_usage_breakdown": (
+            claude_model_usage(process.stdout) if agent == "claude" else {}
+        ),
         "model_identity_evidence": (
             protocol_event.get("model_identity_evidence")
             if protocol_event
@@ -850,12 +1021,12 @@ def run_measurement_cycle(
     reasoning_effort: str | None = None,
     persist_refreshed_credentials: bool = False,
 ) -> dict:
-    """Run one cycle, serializing Claude when OAuth writeback is enabled."""
-    lock = (
-        CLAUDE_CREDENTIAL_LOCK
-        if agent == "claude" and persist_refreshed_credentials
-        else nullcontext()
-    )
+    """Run one cycle with one refresh writer per subscription credential."""
+    credential_locks = {
+        "claude": CLAUDE_CREDENTIAL_LOCK,
+        "codex": CODEX_CREDENTIAL_LOCK,
+    }
+    lock = credential_locks[agent] if persist_refreshed_credentials else nullcontext()
     with lock:
         return _run_measurement_cycle_unlocked(
             agent=agent,
@@ -912,6 +1083,23 @@ def run_public_tests(workspace: Path) -> dict:
     return {"passed": process.returncode == 0, "returncode": process.returncode}
 
 
+def write_json_exclusive(path: Path, value: dict) -> None:
+    payload = (json.dumps(value, indent=2, sort_keys=True) + "\n").encode()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o444)
+    except FileExistsError as exc:
+        raise FileExistsError(f"refusing to overwrite adapter evidence: {path}") from exc
+    try:
+        with os.fdopen(descriptor, "wb") as output:
+            output.write(payload)
+            output.flush()
+            os.fsync(output.fileno())
+    except Exception:
+        path.unlink(missing_ok=True)
+        raise
+
+
 def _run_smoke_unlocked(
     agent: str,
     task: str,
@@ -949,13 +1137,16 @@ def _run_smoke_unlocked(
         else ()
     )
     credential_before = None
-    if agent == "claude" and persist_refreshed_credentials:
+    if persist_refreshed_credentials:
         if not container_image or auth_file is None:
             raise ValueError(
-                "--persist-refreshed-credentials requires containerized Claude and --auth-file"
+                "--persist-refreshed-credentials requires a containerized agent and --auth-file"
             )
         credential_before = credential_document
-        _claude_oauth(credential_before)
+        if agent == "claude":
+            _claude_oauth(credential_before)
+        else:
+            _codex_chatgpt(credential_before)
 
     with tempfile.TemporaryDirectory(prefix=f"loop-{agent}-{task}-") as temp_root:
         workspace = Path(temp_root) / "workspace"
@@ -986,6 +1177,11 @@ def _run_smoke_unlocked(
             docker_auth_env_file.chmod(0o600)
 
         started = time.perf_counter()
+        container_name = (
+            f"loop-smoke-{agent}-{os.getpid()}-{time.time_ns()}"
+            if container_image
+            else None
+        )
         command = (
             container_command_for(
                 agent,
@@ -998,11 +1194,19 @@ def _run_smoke_unlocked(
                 runtime_state_file,
                 docker_auth_env_file,
                 docker_auth_dir,
+                container_name=container_name,
             )
             if container_image
-            else command_for(agent, workspace, model, max_budget_usd)
+            else command_for(
+                agent,
+                workspace,
+                model,
+                max_budget_usd,
+                billing_mode=billing_mode,
+            )
         )
         credential_refresh_persisted = False
+        timeout_error = None
         try:
             process = subprocess.run(
                 command,
@@ -1011,12 +1215,19 @@ def _run_smoke_unlocked(
                 text=True,
                 timeout=timeout_seconds,
             )
+        except subprocess.TimeoutExpired as exc:
+            if container_name is not None:
+                _bounded_docker_cleanup(container_name)
+            timeout_error = exc
         finally:
             if credential_before is not None:
-                credential_refresh_persisted = persist_refreshed_claude_credentials(
-                    auth_file,
-                    auth_copy,
-                    credential_before,
+                persister = (
+                    persist_refreshed_claude_credentials
+                    if agent == "claude"
+                    else persist_refreshed_codex_credentials
+                )
+                credential_refresh_persisted = persister(
+                    auth_file, auth_copy, credential_before
                 )
             if docker_auth_dir is not None:
                 credential_after = _read_private_json(auth_copy)
@@ -1026,6 +1237,21 @@ def _run_smoke_unlocked(
                         | set(credential_secret_values(credential_after))
                     )
                 )
+        if timeout_error is not None:
+            timeout_stdout = timeout_error.stdout or ""
+            timeout_stderr = timeout_error.stderr or ""
+            if isinstance(timeout_stdout, bytes):
+                timeout_stdout = timeout_stdout.decode("utf-8", errors="replace")
+            if isinstance(timeout_stderr, bytes):
+                timeout_stderr = timeout_stderr.decode("utf-8", errors="replace")
+            if credential_secrets:
+                reject_credential_leak(
+                    workspace,
+                    timeout_stdout,
+                    timeout_stderr,
+                    credential_secrets,
+                )
+            raise AgentInvocationError("agent invocation timed out", "timeout") from timeout_error
         if credential_secrets:
             reject_credential_leak(
                 workspace,
@@ -1045,6 +1271,9 @@ def _run_smoke_unlocked(
             "agent": agent,
             "model_requested": model or "session-default",
             "model_served": model_served,
+            "model_usage_breakdown": (
+                claude_model_usage(process.stdout) if agent == "claude" else {}
+            ),
             "model_identity_evidence": (
                 "runtime_cli_output" if model_served else "unreported"
             ),
@@ -1081,12 +1310,12 @@ def run_smoke(
     billing_mode: str = "unknown",
     persist_refreshed_credentials: bool = False,
 ) -> dict:
-    """Run an adapter smoke, with the same serialized Claude refresh contract."""
-    lock = (
-        CLAUDE_CREDENTIAL_LOCK
-        if agent == "claude" and persist_refreshed_credentials
-        else nullcontext()
-    )
+    """Run an adapter smoke with one refresh writer per subscription credential."""
+    credential_locks = {
+        "claude": CLAUDE_CREDENTIAL_LOCK,
+        "codex": CODEX_CREDENTIAL_LOCK,
+    }
+    lock = credential_locks[agent] if persist_refreshed_credentials else nullcontext()
     with lock:
         return _run_smoke_unlocked(
             agent,
@@ -1133,8 +1362,7 @@ def main() -> None:
         billing_mode=args.billing_mode,
         persist_refreshed_credentials=args.persist_refreshed_credentials,
     )
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(output, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    write_json_exclusive(args.output, output)
     print(
         f"{args.agent}: returncode={output['process_returncode']} "
         f"public_tests={output['public_tests']['passed']} gain={output['real_gain']}"

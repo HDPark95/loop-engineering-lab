@@ -65,8 +65,8 @@ def manifest(**overrides) -> dict:
         "incremental_billed_usd": 0.0,
         "apparatus_test": True,
         "max_concurrent_agents": 3,
-        "quota_wait_seconds": 60,
-        "quota_max_retries": 4,
+        "quota_wait_seconds": 3600,
+        "quota_max_retries": 168,
         "cell_schedule_seed": "test-cell-order-v1",
         "estimated_api_equivalent_usd_per_trajectory": 0.01,
         "preregistration_commit": "0" * 40,
@@ -114,6 +114,56 @@ def run_cli(manifest_path: Path, log_path: Path, run_id: str, *extra) -> subproc
 
 
 class ManifestGateTest(unittest.TestCase):
+    def test_nonplan_confirmatory_run_requires_public_preregistration(self):
+        with self.assertRaisesRegex(
+            run_measurement.zenodo_preregistration.ZenodoError,
+            "public preregistration",
+        ):
+            run_measurement.enforce_external_preregistration_gate(
+                {"apparatus_test": False}, False, None
+            )
+        run_measurement.enforce_external_preregistration_gate(
+            {"apparatus_test": False}, True, None
+        )
+        run_measurement.enforce_external_preregistration_gate(
+            {"apparatus_test": True}, False, None
+        )
+        run_measurement.enforce_external_preregistration_gate(
+            {"apparatus_test": False}, False, {"verified": True}
+        )
+
+    def test_resume_refuses_different_external_preregistration(self):
+        publication = {
+            "external_preregistration_doi": "10.5281/zenodo.12345678",
+            "external_preregistration_evidence_sha256": "a" * 64,
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            log = Path(tmp) / "cycles.jsonl"
+            log.write_text(
+                json.dumps(
+                    {
+                        "schema_version": run_measurement.SCHEMA_VERSION,
+                        "manifest_digest": "manifest",
+                        **publication,
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            run_measurement.validate_existing_external_preregistration(
+                log, "manifest", publication
+            )
+            changed = publication | {
+                "external_preregistration_doi": "10.5281/zenodo.87654321"
+            }
+            with self.assertRaisesRegex(
+                run_measurement.zenodo_preregistration.ZenodoError,
+                "different external",
+            ):
+                run_measurement.validate_existing_external_preregistration(
+                    log, "manifest", changed
+                )
+
     def test_confirmatory_run_requires_candidate_archive(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = write_manifest(
@@ -206,6 +256,7 @@ class ManifestGateTest(unittest.TestCase):
                 "container_image": "agent-image:latest",
                 "timeout_seconds": 900,
                 "auth_file_env": "LOOP_CODEX_AUTH_FILE",
+                "persist_refreshed_credentials": True,
             }
             path = write_manifest(directory, manifest(agents=[entry]))
             with self.assertRaisesRegex(SystemExit, "sha256"):
@@ -226,6 +277,7 @@ class ManifestGateTest(unittest.TestCase):
                 "container_image": "sha256:" + "a" * 64,
                 "timeout_seconds": 900,
                 "auth_file_env": "LOOP_CODEX_AUTH_FILE",
+                "persist_refreshed_credentials": True,
             }
             data = manifest(
                 apparatus_test=False,
@@ -274,6 +326,7 @@ class ManifestGateTest(unittest.TestCase):
                     "container_image": "sha256:" + "a" * 64,
                     "timeout_seconds": 900,
                     "auth_file_env": "LOOP_CODEX_AUTH_FILE",
+                    "persist_refreshed_credentials": True,
                 },
                 {
                     "name": "claude",
@@ -299,11 +352,28 @@ class ManifestGateTest(unittest.TestCase):
             add_isolation_preflight(Path(tmp), frozen)
             self.assertEqual(run_measurement.load_manifest(write_manifest(Path(tmp), frozen)), frozen)
 
+            short_quota_horizon = json.loads(json.dumps(frozen))
+            short_quota_horizon["quota_wait_seconds"] = 300
+            short_quota_horizon["quota_max_retries"] = 2
+            with self.assertRaisesRegex(SystemExit, "at least seven days"):
+                run_measurement.load_manifest(
+                    write_manifest(Path(tmp), short_quota_horizon)
+                )
+
             no_refresh_persistence = json.loads(json.dumps(frozen))
             no_refresh_persistence["agents"][1].pop("persist_refreshed_credentials")
             with self.assertRaisesRegex(SystemExit, "serialized OAuth"):
                 run_measurement.load_manifest(
                     write_manifest(Path(tmp), no_refresh_persistence)
+                )
+
+            no_codex_refresh_persistence = json.loads(json.dumps(frozen))
+            no_codex_refresh_persistence["agents"][0].pop(
+                "persist_refreshed_credentials"
+            )
+            with self.assertRaisesRegex(SystemExit, "serialized OAuth"):
+                run_measurement.load_manifest(
+                    write_manifest(Path(tmp), no_codex_refresh_persistence)
                 )
 
             external_claude_state = json.loads(json.dumps(frozen))
@@ -333,7 +403,7 @@ class ManifestGateTest(unittest.TestCase):
 
 
 class RunnerTest(unittest.TestCase):
-    def test_serialized_claude_has_a_dedicated_worker_lane(self):
+    def test_serialized_subscription_agents_have_dedicated_worker_lanes(self):
         data = manifest(
             max_concurrent_agents=3,
             agents=[
@@ -342,9 +412,18 @@ class RunnerTest(unittest.TestCase):
                     "adapter": "claude",
                     "persist_refreshed_credentials": True,
                 },
-                {"name": "codex", "adapter": "codex"},
+                {
+                    "name": "codex",
+                    "adapter": "codex",
+                    "persist_refreshed_credentials": True,
+                },
             ],
         )
+        self.assertEqual(
+            run_measurement.worker_lane_limits(data),
+            {"claude": 1, "codex": 1},
+        )
+        data["agents"][1].pop("persist_refreshed_credentials")
         self.assertEqual(
             run_measurement.worker_lane_limits(data),
             {"claude": 1, "other": 2},
@@ -936,9 +1015,68 @@ class ArtifactArchiveTest(unittest.TestCase):
             self.assertEqual(files["source.py"]["size"], len("value = 1\n"))
             object_path = archive / "objects" / files["source.py"]["sha256"][:2] / files["source.py"]["sha256"]
             self.assertEqual(object_path.read_text(encoding="utf-8"), "value = 1\n")
+            cycle = {
+                "schema_version": 3,
+                "trajectory": "archive-test",
+                "attempt_id": "complete",
+                "cycle": 1,
+                "cycles_planned": 1,
+                "oracle_delta": 0.0,
+                "apparatus_test": False,
+                "model_served": "model-v1",
+                "model_identity_matches": True,
+                "manifest_digest": "manifest",
+                "preregistration_commit": "freeze",
+                "candidate_archive_manifest_sha256": first,
+            }
+            missing_root = replay.integrity(
+                [cycle], [], [], require_archive_files=True
+            )
+            self.assertTrue(missing_root["candidate_archive_root_missing"])
+            self.assertFalse(missing_root["clean"])
+
+            verified = replay.integrity(
+                [cycle],
+                [],
+                [],
+                archive_root=archive,
+                require_archive_files=True,
+            )
+            self.assertTrue(verified["candidate_archive_files_verified"])
+            self.assertEqual(verified["candidate_archive_manifests_verified"], 1)
+            self.assertTrue(verified["clean"])
+
+            noncanonical_payload = json.dumps(record, indent=2).encode()
+            noncanonical_id = hashlib.sha256(noncanonical_payload).hexdigest()
+            (archive / "manifests" / f"{noncanonical_id}.json").write_bytes(
+                noncanonical_payload + b"\n"
+            )
+            self.assertEqual(
+                replay.verify_candidate_archive(archive, noncanonical_id),
+                "manifest JSON is not canonical",
+            )
+
+            object_path.unlink()
+            corrupted = replay.integrity(
+                [cycle],
+                [],
+                [],
+                archive_root=archive,
+                require_archive_files=True,
+            )
+            self.assertEqual(
+                corrupted["invalid_candidate_archive_trajectories"],
+                ["archive-test"],
+            )
+            self.assertFalse(corrupted["clean"])
 
 
 class ReplayTest(unittest.TestCase):
+    def test_empty_replay_fails_closed(self):
+        report = replay.integrity([], [], [])
+        self.assertTrue(report["no_completed_cycle_records"])
+        self.assertFalse(report["clean"])
+
     def test_every_reported_number_comes_from_the_log(self):
         with tempfile.TemporaryDirectory() as tmp:
             directory = Path(tmp)
@@ -1209,6 +1347,37 @@ class ReplayTest(unittest.TestCase):
         report = replay.integrity([row], [], [])
         self.assertTrue(report["clean"])
 
+        schema_six = json.loads(json.dumps(row))
+        schema_six["schema_version"] = 6
+        missing_publication = replay.integrity([schema_six], [], [])
+        self.assertEqual(
+            missing_publication["invalid_measurement_contract_trajectories"],
+            ["t1"],
+        )
+        schema_six.update(
+            {
+                "external_preregistration_doi": "10.5281/zenodo.12345678",
+                "external_preregistration_record_id": "12345678",
+                "external_preregistration_evidence_sha256": "a" * 64,
+                "external_preregistration_bundle_sha256": "b" * 64,
+                "external_preregistration_verified_utc": "2026-08-13T00:00:00Z",
+                "wall_clock_utc": "2026-08-13T00:00:01Z",
+            }
+        )
+        valid_publication = replay.integrity([schema_six], [], [])
+        self.assertTrue(valid_publication["clean"])
+        self.assertFalse(
+            valid_publication[
+                "mixed_or_missing_external_preregistration_publication"
+            ]
+        )
+        schema_six["wall_clock_utc"] = "2026-08-12T23:59:59Z"
+        prepublication_row = replay.integrity([schema_six], [], [])
+        self.assertEqual(
+            prepublication_row["invalid_measurement_contract_trajectories"],
+            ["t1"],
+        )
+
         row["credential_leak_scan_passed"] = False
         report = replay.integrity([row], [], [])
         self.assertEqual(report["invalid_measurement_contract_trajectories"], ["t1"])
@@ -1253,3 +1422,28 @@ class ReplayTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class HostPathRedactionTest(unittest.TestCase):
+    def test_abandoned_error_text_carries_no_operator_path(self):
+        message = (
+            "CalledProcessError: Command '['/usr/bin/python3', "
+            f"'{run_measurement.ROOT}/se_tasks/s1_swebench/oracle.py', "
+            "'--candidate-dir', '/tmp/loop-eng-common-cycle-abc/baseline-def', "
+            "'--half', 'a']' returned non-zero exit status 1."
+        )
+        redacted = run_measurement.redact_host_paths(message)
+        self.assertNotIn(str(run_measurement.ROOT), redacted)
+        self.assertIn("<repo>/se_tasks/s1_swebench/oracle.py", redacted)
+        # The exception class and the failing arguments still identify the fault.
+        self.assertIn("CalledProcessError", redacted)
+        self.assertIn("non-zero exit status 1", redacted)
+        # A temp path is not operator-identifying and survives.
+        self.assertIn("/tmp/loop-eng-common-cycle-abc", redacted)
+
+    def test_home_paths_outside_the_repository_are_redacted(self):
+        for raw in ("/home/someone/checkout/file.py", "/Users/someone/checkout/file.py"):
+            self.assertEqual(
+                run_measurement.redact_host_paths(f"open {raw} failed"),
+                "open <redacted-path> failed",
+            )
