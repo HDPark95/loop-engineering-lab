@@ -341,6 +341,8 @@ def create_draft(request: dict, bundle: Path) -> dict:
     bearer = token()
     record = call_json("POST", f"{API}/records", bearer, request["record_payload"])
     record_id = record.get("id")
+    if isinstance(record_id, int):
+        record_id = str(record_id)
     if not isinstance(record_id, str) or not record_id:
         fail("Zenodo did not return a draft record id")
     try:

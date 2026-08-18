@@ -969,3 +969,13 @@ apparatus validation and not confirmatory evidence.
   which framing sells best, so the rule is fixed here rather than justified
   afterwards. This changes reporting discipline, not design, sample, outcomes,
   or inference. No confirmatory run had started.
+- R47 (2026-08-18): accepted an integer record identifier from the Zenodo API in
+  the preregistration publication client. The client required a string
+  identifier, so draft creation failed after Zenodo had already created the
+  record; that empty draft was deleted and no file was uploaded. The defect was
+  found after the `prereg-v1` tag was first created but before any confirmatory
+  cycle, any external timestamp, and any published record existed. Because
+  nothing had been published or measured, the freeze tag was recreated on the
+  corrected commit so the published preregistration source is the code that will
+  actually run. This changes release-client parsing, not design, sample,
+  outcomes, or inference. No confirmatory run had started.
